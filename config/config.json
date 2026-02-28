@@ -1,0 +1,38 @@
+{
+  "system": {
+    "num_workers": 4,
+    "max_flows": 10000,
+    "flow_idle_timeout_sec": 300,
+    "log_level": "INFO",
+    "log_file": "ids_system.log"
+  },
+  "capture": {
+    "interface": "eth0",
+    "bpf_filter": "tcp or udp",
+    "snaplen": 65535,
+    "promiscuous": true
+  },
+  "layer1": {
+    "thresholds": {
+      "syn_rate_per_10s": 100,
+      "udp_rate_pps": 1000,
+      "port_scan_unique_ports": 20,
+      "syn_rst_ratio": 0.8,
+      "http_header_timeout_sec": 30,
+      "min_bytes_per_sec": 10.0,
+      "max_concurrent_conn": 50
+    }
+  },
+  "layer2": {
+    "enabled": false,
+    "models": {
+      "isolation_forest": "models/isolation_forest.onnx",
+      "autoencoder": "models/autoencoder.onnx"
+    },
+    "thresholds": {
+      "anomaly_score": 0.6,
+      "reconstruction_error": 0.05
+    },
+    "queue_size": 4096
+  }
+}

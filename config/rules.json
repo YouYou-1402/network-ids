@@ -1,0 +1,62 @@
+{
+  "signatures": [
+    {
+      "id": "SIG_001",
+      "name": "Slowloris Header",
+      "pattern": "X-a: b\r\n",
+      "threat": "SLOW_DDOS",
+      "action": "ALERT"
+    },
+    {
+      "id": "SIG_002",
+      "name": "Slow POST",
+      "pattern": "Content-Length:",
+      "threat": "SLOW_DDOS",
+      "action": "ALERT"
+    }
+  ],
+  "rules": [
+    {
+      "id": "RULE_001",
+      "name": "SYN Flood",
+      "condition": "syn_no_ack > 100 in 10s",
+      "threat": "DDOS_VOLUMETRIC",
+      "action": "DROP"
+    },
+    {
+      "id": "RULE_002",
+      "name": "UDP Flood",
+      "condition": "udp_pps > 1000",
+      "threat": "DDOS_VOLUMETRIC",
+      "action": "DROP"
+    },
+    {
+      "id": "RULE_003",
+      "name": "Port Scan",
+      "condition": "unique_dst_ports > 20 in 10s",
+      "threat": "PORT_SCAN",
+      "action": "ALERT"
+    },
+    {
+      "id": "RULE_004",
+      "name": "XMAS Scan",
+      "condition": "tcp_flags == FIN|PSH|URG",
+      "threat": "PORT_SCAN",
+      "action": "ALERT"
+    },
+    {
+      "id": "RULE_005",
+      "name": "NULL Scan",
+      "condition": "tcp_flags == 0x00",
+      "threat": "PORT_SCAN",
+      "action": "ALERT"
+    },
+    {
+      "id": "RULE_006",
+      "name": "Slow DDoS Timeout",
+      "condition": "http_header_incomplete after 30s",
+      "threat": "SLOW_DDOS",
+      "action": "ALERT"
+    }
+  ]
+}

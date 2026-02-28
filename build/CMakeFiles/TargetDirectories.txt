@@ -1,0 +1,12 @@
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/network_ids.dir
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/network_ids_ui.dir
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/edit_cache.dir
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/rebuild_cache.dir
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/list_install_components.dir
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/install.dir
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/install/local.dir
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/install/strip.dir
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/network_ids_autogen_timestamp_deps.dir
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/network_ids_autogen.dir
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/network_ids_ui_autogen_timestamp_deps.dir
+/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles/network_ids_ui_autogen.dir
