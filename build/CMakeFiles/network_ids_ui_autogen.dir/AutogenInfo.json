@@ -411,9 +411,39 @@
 			null
 		],
 		[
+			"/media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.hpp",
+			"MU",
+			"ZXMRJ25WR6/moc_packet_ring_buffer.cpp",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.hpp",
+			"MU",
+			"ZXMRJ25WR6/moc_pcap_reader.cpp",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.hpp",
+			"MU",
+			"ZXMRJ25WR6/moc_pcap_writer.cpp",
+			null
+		],
+		[
 			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/alert_panel.hpp",
 			"MU",
 			"WLEM7A2TAU/moc_alert_panel.cpp",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/filter_bar.hpp",
+			"MU",
+			"WLEM7A2TAU/moc_filter_bar.cpp",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/hex_view.hpp",
+			"MU",
+			"WLEM7A2TAU/moc_hex_view.cpp",
 			null
 		],
 		[
@@ -426,6 +456,24 @@
 			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/metrics_widget.hpp",
 			"MU",
 			"WLEM7A2TAU/moc_metrics_widget.cpp",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_detail_tree.hpp",
+			"MU",
+			"WLEM7A2TAU/moc_packet_detail_tree.cpp",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_list_model.hpp",
+			"MU",
+			"WLEM7A2TAU/moc_packet_list_model.cpp",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/pcap_tab.hpp",
+			"MU",
+			"WLEM7A2TAU/moc_pcap_tab.cpp",
 			null
 		],
 		[
@@ -595,7 +643,32 @@
 			null
 		],
 		[
+			"/media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp",
+			"MU",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp",
+			"MU",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp",
+			"MU",
+			null
+		],
+		[
 			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/alert_panel.cpp",
+			"MU",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/filter_bar.cpp",
+			"MU",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/hex_view.cpp",
 			"MU",
 			null
 		],
@@ -606,6 +679,21 @@
 		],
 		[
 			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/metrics_widget.cpp",
+			"MU",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_detail_tree.cpp",
+			"MU",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_list_model.cpp",
+			"MU",
+			null
+		],
+		[
+			"/media/linhlinh/learn/nckh/network-ids/src/ui/qt/pcap_tab.cpp",
 			"MU",
 			null
 		],

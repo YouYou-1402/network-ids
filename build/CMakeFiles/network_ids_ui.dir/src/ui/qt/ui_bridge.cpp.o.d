@@ -339,14 +339,45 @@ CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o: \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qeventloop.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdeadlinetimer.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qelapsedtimer.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/QDateTime \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qdatetime.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qcalendar.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qlocale.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qvariant.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qdebug.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qtextstream.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qcontiguouscache.h \
+ /usr/include/c++/15/climits \
+ /usr/lib/gcc/x86_64-linux-gnu/15/include/limits.h \
+ /usr/lib/gcc/x86_64-linux-gnu/15/include/syslimits.h \
+ /usr/include/limits.h /usr/include/x86_64-linux-gnu/bits/posix1_lim.h \
+ /usr/include/x86_64-linux-gnu/bits/local_lim.h \
+ /usr/include/linux/limits.h \
+ /usr/include/x86_64-linux-gnu/bits/posix2_lim.h \
+ /usr/include/x86_64-linux-gnu/bits/xopen_lim.h \
+ /usr/include/x86_64-linux-gnu/bits/uio_lim.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qsharedpointer.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qshareddata.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qsharedpointer_impl.h \
+ /usr/include/c++/15/set /usr/include/c++/15/bits/stl_set.h \
+ /usr/include/c++/15/bits/stl_multiset.h \
+ /usr/include/c++/15/unordered_set \
+ /usr/include/c++/15/bits/unordered_set.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qmap.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qshareddata_impl.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qset.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qhash.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qvarlengtharray.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/q23utility.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/q20utility.h \
+ /usr/include/c++/15/deque /usr/include/c++/15/bits/stl_deque.h \
+ /usr/include/c++/15/bits/deque.tcc \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/alert_manager.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/../common/threat_types.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/../layer2/ml_engine.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/../layer2/data_queue.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/../layer2/feature_extractor.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/../layer2/../layer1/flow_state.hpp \
- /usr/include/c++/15/set /usr/include/c++/15/bits/stl_set.h \
- /usr/include/c++/15/bits/stl_multiset.h \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/../layer2/../common/packet_info.hpp \
  /usr/include/x86_64-linux-gnu/sys/time.h /usr/include/c++/15/mutex \
  /usr/include/c++/15/bits/std_mutex.h \
@@ -354,12 +385,12 @@ CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o: \
  /usr/include/c++/15/condition_variable \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/../layer2/onnx_model.hpp \
  /usr/include/c++/15/thread /usr/include/c++/15/bits/std_thread.h \
- /usr/include/c++/15/bits/this_thread_sleep.h /usr/include/c++/15/deque \
- /usr/include/c++/15/bits/stl_deque.h /usr/include/c++/15/bits/deque.tcc \
+ /usr/include/c++/15/bits/this_thread_sleep.h \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../common/metrics.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../layer1/dispatcher.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../layer1/worker_thread.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../layer1/flow_table.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../layer1/signature_engine.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../layer1/protocol_anomaly.hpp \
- /usr/include/c++/15/queue /usr/include/c++/15/bits/stl_queue.h
+ /usr/include/c++/15/queue /usr/include/c++/15/bits/stl_queue.h \
+ /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../pcap_io/packet_ring_buffer.hpp

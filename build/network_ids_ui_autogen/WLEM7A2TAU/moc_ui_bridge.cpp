@@ -51,6 +51,9 @@ template <> constexpr inline auto UiBridge::qt_create_metaobjectdata<qt_meta_tag
         "point",
         "systemStatusChanged",
         "running",
+        "newPacketRecords",
+        "std::vector<PacketRecord>",
+        "records",
         "onTimer"
     };
 
@@ -71,8 +74,12 @@ template <> constexpr inline auto UiBridge::qt_create_metaobjectdata<qt_meta_tag
         QtMocHelpers::SignalData<void(bool)>(11, 2, QMC::AccessPublic, QMetaType::Void, {{
             { QMetaType::Bool, 12 },
         }}),
+        // Signal 'newPacketRecords'
+        QtMocHelpers::SignalData<void(std::vector<PacketRecord>)>(13, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { 0x80000000 | 14, 15 },
+        }}),
         // Slot 'onTimer'
-        QtMocHelpers::SlotData<void()>(13, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(16, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -100,7 +107,8 @@ void UiBridge::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, vo
         case 1: _t->newAlerts((*reinterpret_cast< std::add_pointer_t<std::vector<UnifiedAlert>>>(_a[1]))); break;
         case 2: _t->trafficUpdated((*reinterpret_cast< std::add_pointer_t<TrafficPoint>>(_a[1]))); break;
         case 3: _t->systemStatusChanged((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 4: _t->onTimer(); break;
+        case 4: _t->newPacketRecords((*reinterpret_cast< std::add_pointer_t<std::vector<PacketRecord>>>(_a[1]))); break;
+        case 5: _t->onTimer(); break;
         default: ;
         }
     }
@@ -112,6 +120,8 @@ void UiBridge::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, vo
         if (QtMocHelpers::indexOfMethod<void (UiBridge::*)(TrafficPoint )>(_a, &UiBridge::trafficUpdated, 2))
             return;
         if (QtMocHelpers::indexOfMethod<void (UiBridge::*)(bool )>(_a, &UiBridge::systemStatusChanged, 3))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (UiBridge::*)(std::vector<PacketRecord> )>(_a, &UiBridge::newPacketRecords, 4))
             return;
     }
 }
@@ -135,14 +145,14 @@ int UiBridge::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 5)
+        if (_id < 6)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 5;
+        _id -= 6;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 5)
+        if (_id < 6)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 5;
+        _id -= 6;
     }
     return _id;
 }
@@ -169,5 +179,11 @@ void UiBridge::trafficUpdated(TrafficPoint _t1)
 void UiBridge::systemStatusChanged(bool _t1)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 3, nullptr, _t1);
+}
+
+// SIGNAL 4
+void UiBridge::newPacketRecords(std::vector<PacketRecord> _t1)
+{
+    QMetaObject::activate<void>(this, &staticMetaObject, 4, nullptr, _t1);
 }
 QT_WARNING_POP

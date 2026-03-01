@@ -317,10 +317,52 @@ CMakeFiles/network_ids_ui.dir/src/dashboard/stats_collector.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids_ui.dir/src/dashboard/stats_collector.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/dashboard/stats_collector.cpp -o CMakeFiles/network_ids_ui.dir/src/dashboard/stats_collector.cpp.s
 
+CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
+CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp
+CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Building CXX object CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp
+
+CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp > CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.i
+
+CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp -o CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.s
+
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_20) "Building CXX object CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp
+
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp > CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.i
+
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp -o CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.s
+
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_21) "Building CXX object CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp
+
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp > CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.i
+
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp -o CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.s
+
 CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
 CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/ui/qt/ui_bridge.cpp
 CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_22) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/ui/qt/ui_bridge.cpp
 
 CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.i: cmake_force
@@ -334,7 +376,7 @@ CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.s: cmake_force
 CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
 CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/ui/qt/metrics_widget.cpp
 CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_20) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_23) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/ui/qt/metrics_widget.cpp
 
 CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.i: cmake_force
@@ -348,7 +390,7 @@ CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.s: cmake_force
 CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
 CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/ui/qt/alert_panel.cpp
 CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_21) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_24) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/ui/qt/alert_panel.cpp
 
 CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.i: cmake_force
@@ -362,7 +404,7 @@ CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.s: cmake_force
 CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
 CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/ui/qt/traffic_chart.cpp
 CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_22) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_25) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/ui/qt/traffic_chart.cpp
 
 CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.i: cmake_force
@@ -373,10 +415,80 @@ CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/ui/qt/traffic_chart.cpp -o CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.s
 
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_detail_tree.cpp
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_26) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_detail_tree.cpp
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_detail_tree.cpp > CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.i
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_detail_tree.cpp -o CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.s
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
+CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/ui/qt/pcap_tab.cpp
+CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_27) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/ui/qt/pcap_tab.cpp
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/linhlinh/learn/nckh/network-ids/src/ui/qt/pcap_tab.cpp > CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.i
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/ui/qt/pcap_tab.cpp -o CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.s
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_list_model.cpp
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_28) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_list_model.cpp
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_list_model.cpp > CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.i
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_list_model.cpp -o CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.s
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
+CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/ui/qt/hex_view.cpp
+CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_29) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/ui/qt/hex_view.cpp
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/linhlinh/learn/nckh/network-ids/src/ui/qt/hex_view.cpp > CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.i
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/ui/qt/hex_view.cpp -o CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.s
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
+CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/ui/qt/filter_bar.cpp
+CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_30) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/ui/qt/filter_bar.cpp
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/linhlinh/learn/nckh/network-ids/src/ui/qt/filter_bar.cpp > CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.i
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/ui/qt/filter_bar.cpp -o CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.s
+
 CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o: CMakeFiles/network_ids_ui.dir/flags.make
 CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/ui/qt/main_window.cpp
 CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_23) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_31) "Building CXX object CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o -MF CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o.d -o CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/ui/qt/main_window.cpp
 
 CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.i: cmake_force
@@ -406,10 +518,18 @@ network_ids_ui_OBJECTS = \
 "CMakeFiles/network_ids_ui.dir/src/layer2/feedback_loop.cpp.o" \
 "CMakeFiles/network_ids_ui.dir/src/dashboard/alert_manager.cpp.o" \
 "CMakeFiles/network_ids_ui.dir/src/dashboard/stats_collector.cpp.o" \
+"CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o" \
+"CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o" \
+"CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o" \
 "CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o" \
 "CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o" \
 "CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o" \
 "CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o" \
+"CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o" \
+"CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o" \
+"CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o" \
+"CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o" \
+"CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o" \
 "CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o"
 
 # External object files for target network_ids_ui
@@ -432,10 +552,18 @@ network_ids_ui: CMakeFiles/network_ids_ui.dir/src/layer2/ml_engine.cpp.o
 network_ids_ui: CMakeFiles/network_ids_ui.dir/src/layer2/feedback_loop.cpp.o
 network_ids_ui: CMakeFiles/network_ids_ui.dir/src/dashboard/alert_manager.cpp.o
 network_ids_ui: CMakeFiles/network_ids_ui.dir/src/dashboard/stats_collector.cpp.o
+network_ids_ui: CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o
+network_ids_ui: CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o
+network_ids_ui: CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o
 network_ids_ui: CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o
 network_ids_ui: CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o
 network_ids_ui: CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o
 network_ids_ui: CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o
+network_ids_ui: CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o
+network_ids_ui: CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o
+network_ids_ui: CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o
+network_ids_ui: CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o
+network_ids_ui: CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o
 network_ids_ui: CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o
 network_ids_ui: CMakeFiles/network_ids_ui.dir/build.make
 network_ids_ui: CMakeFiles/network_ids_ui.dir/compiler_depend.ts
@@ -449,7 +577,7 @@ network_ids_ui: /usr/lib/x86_64-linux-gnu/libGLX.so
 network_ids_ui: /usr/lib/x86_64-linux-gnu/libOpenGL.so
 network_ids_ui: /usr/lib/x86_64-linux-gnu/libQt6Core.so.6.9.2
 network_ids_ui: CMakeFiles/network_ids_ui.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_24) "Linking CXX executable network_ids_ui"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_32) "Linking CXX executable network_ids_ui"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/network_ids_ui.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

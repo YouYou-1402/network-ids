@@ -484,14 +484,15 @@ CMakeFiles/network_ids_ui.dir/src/ui_main.cpp.o: \
  /usr/include/c++/15/bits/quoted_string.h /usr/include/c++/15/sstream \
  /usr/include/c++/15/bits/sstream.tcc \
  /media/linhlinh/learn/nckh/network-ids/src/common/metrics.hpp \
+ /media/linhlinh/learn/nckh/network-ids/src/common/packet_info.hpp \
+ /usr/include/x86_64-linux-gnu/sys/time.h \
  /media/linhlinh/learn/nckh/network-ids/src/capture/packet_capture.hpp \
- /media/linhlinh/learn/nckh/network-ids/src/capture/../common/packet_info.hpp \
- /usr/include/x86_64-linux-gnu/sys/time.h /usr/include/pcap.h \
- /usr/include/pcap/pcap.h /usr/include/pcap/funcattrs.h \
- /usr/include/pcap/compiler-tests.h /usr/include/pcap/pcap-inttypes.h \
- /usr/include/inttypes.h /usr/include/pcap/socket.h /usr/include/netdb.h \
- /usr/include/rpc/netdb.h /usr/include/x86_64-linux-gnu/bits/netdb.h \
- /usr/include/pcap/bpf.h /usr/include/pcap/dlt.h \
+ /usr/include/pcap.h /usr/include/pcap/pcap.h \
+ /usr/include/pcap/funcattrs.h /usr/include/pcap/compiler-tests.h \
+ /usr/include/pcap/pcap-inttypes.h /usr/include/inttypes.h \
+ /usr/include/pcap/socket.h /usr/include/netdb.h /usr/include/rpc/netdb.h \
+ /usr/include/x86_64-linux-gnu/bits/netdb.h /usr/include/pcap/bpf.h \
+ /usr/include/pcap/dlt.h \
  /media/linhlinh/learn/nckh/network-ids/src/layer1/dispatcher.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/layer1/worker_thread.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/layer1/../common/threat_types.hpp \
@@ -527,12 +528,19 @@ CMakeFiles/network_ids_ui.dir/src/ui_main.cpp.o: \
  /usr/include/x86_64-linux-gnu/qt6/QtGui/qaction.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/QTimer \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qtimer.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTabWidget \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabwidget.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QPushButton \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qpushbutton.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractbutton.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/QTime \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdatetime.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qcalendar.h \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/ui_bridge.hpp \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/QObject \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qobject.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/QDateTime \
+ /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../pcap_io/packet_ring_buffer.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/metrics_widget.hpp \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QWidget \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qwidget.h \
@@ -568,9 +576,6 @@ CMakeFiles/network_ids_ui.dir/src/ui_main.cpp.o: \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qrubberband.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QComboBox \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qcombobox.h \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QPushButton \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qpushbutton.h \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractbutton.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QHBoxLayout \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/traffic_chart.hpp \
  /usr/include/x86_64-linux-gnu/qt6/QtCharts/QChart \
@@ -634,4 +639,51 @@ CMakeFiles/network_ids_ui.dir/src/ui_main.cpp.o: \
  /usr/include/x86_64-linux-gnu/qt6/QtGui/QImage \
  /usr/include/x86_64-linux-gnu/qt6/QtGui/qimage.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCharts/QValueAxis \
- /usr/include/x86_64-linux-gnu/qt6/QtCharts/qvalueaxis.h
+ /usr/include/x86_64-linux-gnu/qt6/QtCharts/qvalueaxis.h \
+ /media/linhlinh/learn/nckh/network-ids/src/ui/qt/pcap_tab.hpp \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTableView \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtableview.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QToolBar \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtoolbar.h \
+ /media/linhlinh/learn/nckh/network-ids/src/ui/qt/filter_bar.hpp \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QLineEdit \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qlineedit.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextcursor.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtGui/qtextformat.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QCompleter \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qcompleter.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/QStringListModel \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qstringlistmodel.h \
+ /media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_list_model.hpp \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/QAbstractTableModel \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qabstractitemmodel.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtGui/QColor \
+ /usr/include/x86_64-linux-gnu/qt6/QtGui/qcolor.h \
+ /media/linhlinh/learn/nckh/network-ids/src/ui/qt/packet_detail_tree.hpp \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTreeWidget \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreewidget.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreeview.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreewidgetitemiterator.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTreeWidgetItem \
+ /media/linhlinh/learn/nckh/network-ids/src/ui/qt/hex_view.hpp \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QAbstractScrollArea \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qabstractscrollarea.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtGui/QFont \
+ /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../pcap_io/pcap_reader.hpp \
+ /usr/include/x86_64-linux-gnu/sys/mman.h \
+ /usr/include/x86_64-linux-gnu/bits/mman.h \
+ /usr/include/x86_64-linux-gnu/bits/mman-map-flags-generic.h \
+ /usr/include/x86_64-linux-gnu/bits/mman-linux.h \
+ /usr/include/x86_64-linux-gnu/bits/mman-shared.h \
+ /usr/include/x86_64-linux-gnu/bits/mman_ext.h \
+ /usr/include/x86_64-linux-gnu/sys/stat.h \
+ /usr/include/x86_64-linux-gnu/bits/stat.h \
+ /usr/include/x86_64-linux-gnu/bits/struct_stat.h \
+ /usr/include/x86_64-linux-gnu/bits/statx.h /usr/include/linux/stat.h \
+ /usr/include/x86_64-linux-gnu/bits/statx-generic.h \
+ /usr/include/x86_64-linux-gnu/bits/types/struct_statx_timestamp.h \
+ /usr/include/x86_64-linux-gnu/bits/types/struct_statx.h \
+ /usr/include/fcntl.h /usr/include/x86_64-linux-gnu/bits/fcntl.h \
+ /usr/include/x86_64-linux-gnu/bits/fcntl-linux.h \
+ /usr/include/linux/falloc.h \
+ /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../pcap_io/pcap_writer.hpp

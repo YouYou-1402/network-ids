@@ -9,6 +9,7 @@
 
 #include "common/logger.hpp"
 #include "common/metrics.hpp"
+#include "common/packet_info.hpp"
 #include "capture/packet_capture.hpp"
 #include "layer1/dispatcher.hpp"
 #include "layer2/feature_extractor.hpp"
@@ -17,6 +18,7 @@
 #include "layer2/feedback_loop.hpp"
 #include "dashboard/alert_manager.hpp"
 #include "ui/qt/main_window.hpp"
+#include "pcap_io/packet_ring_buffer.hpp"
 
 // ─── Global state ─────────────────────────────────────────────────────────────
 std::atomic<bool>  g_running{true};
@@ -33,7 +35,8 @@ void engineThread(const std::string& mode,
                   const std::string& target,
                   Dispatcher&        dispatcher,
                   MLJobQueue&        ml_queue,
-                  AlertManager&      alert_manager) {
+                  AlertManager&      alert_manager,
+                  PacketRingBuffer&  ring_buf) {
 
     FeatureExtractor extractor;
     PacketCapture    capture;
@@ -87,8 +90,23 @@ void engineThread(const std::string& mode,
 
     // Blocking capture loop
     capture.startCapture([&](PacketInfo pkt) {
-        if (g_running)
-            dispatcher.dispatch(std::move(pkt));
+        if (!g_running) return;
+
+        dispatcher.dispatch(pkt);
+
+        PacketRecord rec;
+        rec.src_ip      = pkt.src_ip;
+        rec.dst_ip      = pkt.dst_ip;
+        rec.src_port    = pkt.src_port;
+        rec.dst_port    = pkt.dst_port;
+        rec.protocol    = pkt.protocol;
+        rec.tcp_flags   = pkt.tcp_flags;
+        rec.payload_len = pkt.payload_len;
+        rec.cap_len     = pkt.pkt_len; 
+        rec.timestamp = static_cast<double>(pkt.timestamp.tv_sec)
+                      + static_cast<double>(pkt.timestamp.tv_usec) * 1e-6;
+        rec.raw_data    = std::make_shared<std::vector<uint8_t>>(pkt.raw_data);
+        ring_buf.push(std::move(rec));
     });
 
     g_running = false;
@@ -128,6 +146,7 @@ int main(int argc, char* argv[]) {
     // ── Shared components ─────────────────────────────────────────────────────
     MLJobQueue   ml_queue;
     AlertManager alert_manager(1000);
+    PacketRingBuffer ring_buf(100'000, 65535);
 
     // ── Layer 1 ───────────────────────────────────────────────────────────────
     Dispatcher dispatcher(4);
@@ -151,10 +170,11 @@ int main(int argc, char* argv[]) {
                        mode, target,
                        std::ref(dispatcher),
                        std::ref(ml_queue),
-                       std::ref(alert_manager));
+                       std::ref(alert_manager),
+                       std::ref(ring_buf));
 
     // ── Qt Main Window ────────────────────────────────────────────────────────
-    MainWindow window(alert_manager, dispatcher, ml_engine);
+    MainWindow window(alert_manager, dispatcher, ml_engine, ring_buf);
     window.show();
 
     // Khi Qt app thoát → dừng engine

@@ -716,6 +716,87 @@ src/main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids.dir/build.make CMakeFiles/network_ids.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
 
+src/pcap_io/packet_ring_buffer.o: src/pcap_io/packet_ring_buffer.cpp.o
+.PHONY : src/pcap_io/packet_ring_buffer.o
+
+# target to build an object file
+src/pcap_io/packet_ring_buffer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids.dir/build.make CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o
+.PHONY : src/pcap_io/packet_ring_buffer.cpp.o
+
+src/pcap_io/packet_ring_buffer.i: src/pcap_io/packet_ring_buffer.cpp.i
+.PHONY : src/pcap_io/packet_ring_buffer.i
+
+# target to preprocess a source file
+src/pcap_io/packet_ring_buffer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids.dir/build.make CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.i
+.PHONY : src/pcap_io/packet_ring_buffer.cpp.i
+
+src/pcap_io/packet_ring_buffer.s: src/pcap_io/packet_ring_buffer.cpp.s
+.PHONY : src/pcap_io/packet_ring_buffer.s
+
+# target to generate assembly for a file
+src/pcap_io/packet_ring_buffer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids.dir/build.make CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.s
+.PHONY : src/pcap_io/packet_ring_buffer.cpp.s
+
+src/pcap_io/pcap_reader.o: src/pcap_io/pcap_reader.cpp.o
+.PHONY : src/pcap_io/pcap_reader.o
+
+# target to build an object file
+src/pcap_io/pcap_reader.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids.dir/build.make CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o
+.PHONY : src/pcap_io/pcap_reader.cpp.o
+
+src/pcap_io/pcap_reader.i: src/pcap_io/pcap_reader.cpp.i
+.PHONY : src/pcap_io/pcap_reader.i
+
+# target to preprocess a source file
+src/pcap_io/pcap_reader.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids.dir/build.make CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.i
+.PHONY : src/pcap_io/pcap_reader.cpp.i
+
+src/pcap_io/pcap_reader.s: src/pcap_io/pcap_reader.cpp.s
+.PHONY : src/pcap_io/pcap_reader.s
+
+# target to generate assembly for a file
+src/pcap_io/pcap_reader.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids.dir/build.make CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.s
+.PHONY : src/pcap_io/pcap_reader.cpp.s
+
+src/pcap_io/pcap_writer.o: src/pcap_io/pcap_writer.cpp.o
+.PHONY : src/pcap_io/pcap_writer.o
+
+# target to build an object file
+src/pcap_io/pcap_writer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids.dir/build.make CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o
+.PHONY : src/pcap_io/pcap_writer.cpp.o
+
+src/pcap_io/pcap_writer.i: src/pcap_io/pcap_writer.cpp.i
+.PHONY : src/pcap_io/pcap_writer.i
+
+# target to preprocess a source file
+src/pcap_io/pcap_writer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids.dir/build.make CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.i
+.PHONY : src/pcap_io/pcap_writer.cpp.i
+
+src/pcap_io/pcap_writer.s: src/pcap_io/pcap_writer.cpp.s
+.PHONY : src/pcap_io/pcap_writer.s
+
+# target to generate assembly for a file
+src/pcap_io/pcap_writer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids.dir/build.make CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.s
+.PHONY : src/pcap_io/pcap_writer.cpp.s
+
 src/ui/qt/alert_panel.o: src/ui/qt/alert_panel.cpp.o
 .PHONY : src/ui/qt/alert_panel.o
 
@@ -739,6 +820,54 @@ src/ui/qt/alert_panel.s: src/ui/qt/alert_panel.cpp.s
 src/ui/qt/alert_panel.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.s
 .PHONY : src/ui/qt/alert_panel.cpp.s
+
+src/ui/qt/filter_bar.o: src/ui/qt/filter_bar.cpp.o
+.PHONY : src/ui/qt/filter_bar.o
+
+# target to build an object file
+src/ui/qt/filter_bar.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o
+.PHONY : src/ui/qt/filter_bar.cpp.o
+
+src/ui/qt/filter_bar.i: src/ui/qt/filter_bar.cpp.i
+.PHONY : src/ui/qt/filter_bar.i
+
+# target to preprocess a source file
+src/ui/qt/filter_bar.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.i
+.PHONY : src/ui/qt/filter_bar.cpp.i
+
+src/ui/qt/filter_bar.s: src/ui/qt/filter_bar.cpp.s
+.PHONY : src/ui/qt/filter_bar.s
+
+# target to generate assembly for a file
+src/ui/qt/filter_bar.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.s
+.PHONY : src/ui/qt/filter_bar.cpp.s
+
+src/ui/qt/hex_view.o: src/ui/qt/hex_view.cpp.o
+.PHONY : src/ui/qt/hex_view.o
+
+# target to build an object file
+src/ui/qt/hex_view.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o
+.PHONY : src/ui/qt/hex_view.cpp.o
+
+src/ui/qt/hex_view.i: src/ui/qt/hex_view.cpp.i
+.PHONY : src/ui/qt/hex_view.i
+
+# target to preprocess a source file
+src/ui/qt/hex_view.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.i
+.PHONY : src/ui/qt/hex_view.cpp.i
+
+src/ui/qt/hex_view.s: src/ui/qt/hex_view.cpp.s
+.PHONY : src/ui/qt/hex_view.s
+
+# target to generate assembly for a file
+src/ui/qt/hex_view.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.s
+.PHONY : src/ui/qt/hex_view.cpp.s
 
 src/ui/qt/main_window.o: src/ui/qt/main_window.cpp.o
 .PHONY : src/ui/qt/main_window.o
@@ -787,6 +916,78 @@ src/ui/qt/metrics_widget.s: src/ui/qt/metrics_widget.cpp.s
 src/ui/qt/metrics_widget.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.s
 .PHONY : src/ui/qt/metrics_widget.cpp.s
+
+src/ui/qt/packet_detail_tree.o: src/ui/qt/packet_detail_tree.cpp.o
+.PHONY : src/ui/qt/packet_detail_tree.o
+
+# target to build an object file
+src/ui/qt/packet_detail_tree.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o
+.PHONY : src/ui/qt/packet_detail_tree.cpp.o
+
+src/ui/qt/packet_detail_tree.i: src/ui/qt/packet_detail_tree.cpp.i
+.PHONY : src/ui/qt/packet_detail_tree.i
+
+# target to preprocess a source file
+src/ui/qt/packet_detail_tree.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.i
+.PHONY : src/ui/qt/packet_detail_tree.cpp.i
+
+src/ui/qt/packet_detail_tree.s: src/ui/qt/packet_detail_tree.cpp.s
+.PHONY : src/ui/qt/packet_detail_tree.s
+
+# target to generate assembly for a file
+src/ui/qt/packet_detail_tree.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.s
+.PHONY : src/ui/qt/packet_detail_tree.cpp.s
+
+src/ui/qt/packet_list_model.o: src/ui/qt/packet_list_model.cpp.o
+.PHONY : src/ui/qt/packet_list_model.o
+
+# target to build an object file
+src/ui/qt/packet_list_model.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o
+.PHONY : src/ui/qt/packet_list_model.cpp.o
+
+src/ui/qt/packet_list_model.i: src/ui/qt/packet_list_model.cpp.i
+.PHONY : src/ui/qt/packet_list_model.i
+
+# target to preprocess a source file
+src/ui/qt/packet_list_model.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.i
+.PHONY : src/ui/qt/packet_list_model.cpp.i
+
+src/ui/qt/packet_list_model.s: src/ui/qt/packet_list_model.cpp.s
+.PHONY : src/ui/qt/packet_list_model.s
+
+# target to generate assembly for a file
+src/ui/qt/packet_list_model.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.s
+.PHONY : src/ui/qt/packet_list_model.cpp.s
+
+src/ui/qt/pcap_tab.o: src/ui/qt/pcap_tab.cpp.o
+.PHONY : src/ui/qt/pcap_tab.o
+
+# target to build an object file
+src/ui/qt/pcap_tab.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o
+.PHONY : src/ui/qt/pcap_tab.cpp.o
+
+src/ui/qt/pcap_tab.i: src/ui/qt/pcap_tab.cpp.i
+.PHONY : src/ui/qt/pcap_tab.i
+
+# target to preprocess a source file
+src/ui/qt/pcap_tab.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.i
+.PHONY : src/ui/qt/pcap_tab.cpp.i
+
+src/ui/qt/pcap_tab.s: src/ui/qt/pcap_tab.cpp.s
+.PHONY : src/ui/qt/pcap_tab.s
+
+# target to generate assembly for a file
+src/ui/qt/pcap_tab.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/network_ids_ui.dir/build.make CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.s
+.PHONY : src/ui/qt/pcap_tab.cpp.s
 
 src/ui/qt/traffic_chart.o: src/ui/qt/traffic_chart.cpp.o
 .PHONY : src/ui/qt/traffic_chart.o
@@ -932,15 +1133,39 @@ help:
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... src/pcap_io/packet_ring_buffer.o"
+	@echo "... src/pcap_io/packet_ring_buffer.i"
+	@echo "... src/pcap_io/packet_ring_buffer.s"
+	@echo "... src/pcap_io/pcap_reader.o"
+	@echo "... src/pcap_io/pcap_reader.i"
+	@echo "... src/pcap_io/pcap_reader.s"
+	@echo "... src/pcap_io/pcap_writer.o"
+	@echo "... src/pcap_io/pcap_writer.i"
+	@echo "... src/pcap_io/pcap_writer.s"
 	@echo "... src/ui/qt/alert_panel.o"
 	@echo "... src/ui/qt/alert_panel.i"
 	@echo "... src/ui/qt/alert_panel.s"
+	@echo "... src/ui/qt/filter_bar.o"
+	@echo "... src/ui/qt/filter_bar.i"
+	@echo "... src/ui/qt/filter_bar.s"
+	@echo "... src/ui/qt/hex_view.o"
+	@echo "... src/ui/qt/hex_view.i"
+	@echo "... src/ui/qt/hex_view.s"
 	@echo "... src/ui/qt/main_window.o"
 	@echo "... src/ui/qt/main_window.i"
 	@echo "... src/ui/qt/main_window.s"
 	@echo "... src/ui/qt/metrics_widget.o"
 	@echo "... src/ui/qt/metrics_widget.i"
 	@echo "... src/ui/qt/metrics_widget.s"
+	@echo "... src/ui/qt/packet_detail_tree.o"
+	@echo "... src/ui/qt/packet_detail_tree.i"
+	@echo "... src/ui/qt/packet_detail_tree.s"
+	@echo "... src/ui/qt/packet_list_model.o"
+	@echo "... src/ui/qt/packet_list_model.i"
+	@echo "... src/ui/qt/packet_list_model.s"
+	@echo "... src/ui/qt/pcap_tab.o"
+	@echo "... src/ui/qt/pcap_tab.i"
+	@echo "... src/ui/qt/pcap_tab.s"
 	@echo "... src/ui/qt/traffic_chart.o"
 	@echo "... src/ui/qt/traffic_chart.i"
 	@echo "... src/ui/qt/traffic_chart.s"

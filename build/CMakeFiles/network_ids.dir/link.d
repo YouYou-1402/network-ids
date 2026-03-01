@@ -19,6 +19,9 @@ network_ids: \
   CMakeFiles/network_ids.dir/src/layer2/feedback_loop.cpp.o \
   CMakeFiles/network_ids.dir/src/dashboard/alert_manager.cpp.o \
   CMakeFiles/network_ids.dir/src/dashboard/stats_collector.cpp.o \
+  CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o \
+  CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o \
+  CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o \
   /usr/lib/x86_64-linux-gnu/libpcap.so \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libpthread.a \
   /usr/lib/gcc/x86_64-linux-gnu/15/libstdc++.so \
@@ -91,6 +94,12 @@ CMakeFiles/network_ids.dir/src/layer2/feedback_loop.cpp.o:
 CMakeFiles/network_ids.dir/src/dashboard/alert_manager.cpp.o:
 
 CMakeFiles/network_ids.dir/src/dashboard/stats_collector.cpp.o:
+
+CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o:
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o:
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o:
 
 /usr/lib/x86_64-linux-gnu/libpcap.so:
 

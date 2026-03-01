@@ -33,10 +33,10 @@ endif()
 # ─────────────────────────────────────────────────────────────────────────────
 # Options
 # ─────────────────────────────────────────────────────────────────────────────
-option(BUILD_UI    "Build Qt6 GUI target"    ON)
-option(BUILD_CLI   "Build headless CLI target" ON)
-option(BUILD_TESTS "Build unit tests"        OFF)
-option(USE_ONNX    "Enable ONNX Runtime"     OFF)
+option(BUILD_UI    "Build Qt6 GUI target"       ON)
+option(BUILD_CLI   "Build headless CLI target"  ON)
+option(BUILD_TESTS "Build unit tests"           OFF)
+option(USE_ONNX    "Enable ONNX Runtime"        OFF)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Find libpcap
@@ -109,12 +109,9 @@ if(BUILD_UI)
     message(STATUS "Qt6 version : ${Qt6_VERSION}")
     message(STATUS "Qt6 Core    : ${Qt6Core_VERSION}")
 
-    # Qt6 MOC / RCC / UIC auto-processing
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTORCC ON)
     set(CMAKE_AUTOUIC ON)
-
-    # Qt6 requires position-independent code
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
@@ -190,12 +187,31 @@ set(DASHBOARD_HEADERS
     src/dashboard/stats_collector.hpp
 )
 
+# ── Pcap IO ───────────────────────────────────────────────────────────────────
+# FIX: định nghĩa PCAP_IO_SOURCES (trước đây bị thiếu hoàn toàn)
+set(PCAP_IO_SOURCES
+    src/pcap_io/packet_ring_buffer.cpp
+    src/pcap_io/pcap_reader.cpp
+    src/pcap_io/pcap_writer.cpp
+)
+
+set(PCAP_IO_HEADERS
+    src/pcap_io/packet_ring_buffer.hpp
+    src/pcap_io/pcap_reader.hpp
+    src/pcap_io/pcap_writer.hpp
+)
+
 # ── UI (Qt6) ──────────────────────────────────────────────────────────────────
 set(UI_SOURCES
     src/ui/qt/ui_bridge.cpp
     src/ui/qt/metrics_widget.cpp
     src/ui/qt/alert_panel.cpp
     src/ui/qt/traffic_chart.cpp
+    src/ui/qt/packet_detail_tree.cpp
+    src/ui/qt/pcap_tab.cpp
+    src/ui/qt/packet_list_model.cpp
+    src/ui/qt/hex_view.cpp
+    src/ui/qt/filter_bar.cpp
     src/ui/qt/main_window.cpp
 )
 
@@ -204,6 +220,11 @@ set(UI_HEADERS
     src/ui/qt/metrics_widget.hpp
     src/ui/qt/alert_panel.hpp
     src/ui/qt/traffic_chart.hpp
+    src/ui/qt/packet_detail_tree.hpp
+    src/ui/qt/pcap_tab.hpp
+    src/ui/qt/packet_list_model.hpp
+    src/ui/qt/hex_view.hpp
+    src/ui/qt/filter_bar.hpp
     src/ui/qt/main_window.hpp
 )
 
@@ -214,6 +235,7 @@ set(ENGINE_SOURCES
     ${LAYER1_SOURCES}
     ${LAYER2_SOURCES}
     ${DASHBOARD_SOURCES}
+    ${PCAP_IO_SOURCES}      # FIX: đã có định nghĩa, giờ expand đúng
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -230,7 +252,6 @@ function(apply_common_settings TARGET_NAME)
         pthread
     )
 
-    # ONNX Runtime (optional)
     if(USE_ONNX AND ONNX_LIB)
         target_include_directories(${TARGET_NAME} PRIVATE
             ${ONNX_INCLUDE_DIR}
@@ -240,12 +261,10 @@ function(apply_common_settings TARGET_NAME)
         )
     endif()
 
-    # Compile definitions
     target_compile_definitions(${TARGET_NAME} PRIVATE
         PROJECT_VERSION="${PROJECT_VERSION}"
     )
 
-    # Warnings
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(${TARGET_NAME} PRIVATE
             -Wall -Wextra
@@ -277,37 +296,27 @@ if(BUILD_UI)
         src/ui_main.cpp
         ${ENGINE_SOURCES}
         ${UI_SOURCES}
-        ${UI_HEADERS}   # MOC cần thấy headers có Q_OBJECT
+        ${UI_HEADERS}       # MOC cần thấy headers có Q_OBJECT
     )
 
     apply_common_settings(network_ids_ui)
 
-    # Qt6 modules
     target_link_libraries(network_ids_ui PRIVATE
         Qt6::Core
         Qt6::Widgets
         Qt6::Charts
     )
 
-    # Qt6 cần include path riêng
     target_include_directories(network_ids_ui PRIVATE
         ${Qt6Core_INCLUDE_DIRS}
         ${Qt6Widgets_INCLUDE_DIRS}
         ${Qt6Charts_INCLUDE_DIRS}
     )
 
-    # Qt6: disable deprecated warnings
     target_compile_definitions(network_ids_ui PRIVATE
         QT_NO_DEPRECATED_WARNINGS
         QT_DISABLE_DEPRECATED_BEFORE=0x060000
     )
-
-    # Linux: không cần console window
-    if(UNIX AND NOT APPLE)
-        # Giữ console để xem log (bỏ dòng này nếu muốn silent)
-        # set_target_properties(network_ids_ui PROPERTIES
-        #     WIN32_EXECUTABLE TRUE)
-    endif()
 
     message(STATUS "UI target   : network_ids_ui (Qt ${Qt6_VERSION})")
 endif()
@@ -367,11 +376,8 @@ message(STATUS "║ Build type  : ${CMAKE_BUILD_TYPE}")
 message(STATUS "║ C++ std     : ${CMAKE_CXX_STANDARD}")
 message(STATUS "║ CLI target  : ${BUILD_CLI}")
 message(STATUS "║ UI target   : ${BUILD_UI}")
-message(STATUS "║ ONNX Runtime: ${USE_ONNX}")
 message(STATUS "║ Tests       : ${BUILD_TESTS}")
+message(STATUS "║ ONNX Runtime: ${USE_ONNX}")
 message(STATUS "║ libpcap     : ${PCAP_LIB}")
-if(BUILD_UI AND Qt6_FOUND)
-message(STATUS "║ Qt version  : ${Qt6_VERSION}")
-endif()
 message(STATUS "╚══════════════════════════════════════╝")
 message(STATUS "")

@@ -19,10 +19,18 @@ network_ids_ui: \
   CMakeFiles/network_ids_ui.dir/src/layer2/feedback_loop.cpp.o \
   CMakeFiles/network_ids_ui.dir/src/dashboard/alert_manager.cpp.o \
   CMakeFiles/network_ids_ui.dir/src/dashboard/stats_collector.cpp.o \
+  CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o \
+  CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o \
+  CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o \
   CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o \
   CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o \
   CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o \
   CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o \
+  CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o \
+  CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o \
+  CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o \
+  CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o \
+  CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o \
   CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o \
   /usr/lib/x86_64-linux-gnu/libpcap.so \
   /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libpthread.a \
@@ -139,6 +147,12 @@ CMakeFiles/network_ids_ui.dir/src/dashboard/alert_manager.cpp.o:
 
 CMakeFiles/network_ids_ui.dir/src/dashboard/stats_collector.cpp.o:
 
+CMakeFiles/network_ids_ui.dir/src/pcap_io/packet_ring_buffer.cpp.o:
+
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_reader.cpp.o:
+
+CMakeFiles/network_ids_ui.dir/src/pcap_io/pcap_writer.cpp.o:
+
 CMakeFiles/network_ids_ui.dir/src/ui/qt/ui_bridge.cpp.o:
 
 CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o:
@@ -146,6 +160,16 @@ CMakeFiles/network_ids_ui.dir/src/ui/qt/metrics_widget.cpp.o:
 CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o:
 
 CMakeFiles/network_ids_ui.dir/src/ui/qt/traffic_chart.cpp.o:
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_detail_tree.cpp.o:
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/pcap_tab.cpp.o:
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/packet_list_model.cpp.o:
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/hex_view.cpp.o:
+
+CMakeFiles/network_ids_ui.dir/src/ui/qt/filter_bar.cpp.o:
 
 CMakeFiles/network_ids_ui.dir/src/ui/qt/main_window.cpp.o:
 

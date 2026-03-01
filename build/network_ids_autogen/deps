@@ -33,6 +33,12 @@ network_ids_autogen/timestamp: \
 	/media/linhlinh/learn/nckh/network-ids/src/layer2/onnx_model.cpp \
 	/media/linhlinh/learn/nckh/network-ids/src/layer2/onnx_model.hpp \
 	/media/linhlinh/learn/nckh/network-ids/src/main.cpp \
+	/media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp \
+	/media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.hpp \
+	/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp \
+	/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.hpp \
+	/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp \
+	/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.hpp \
 	/usr/lib/x86_64-linux-gnu/cmake/Qt6/3rdparty/kwin/FindXKB.cmake \
 	/usr/lib/x86_64-linux-gnu/cmake/Qt6/FindWrapAtomic.cmake \
 	/usr/lib/x86_64-linux-gnu/cmake/Qt6/FindWrapOpenGL.cmake \

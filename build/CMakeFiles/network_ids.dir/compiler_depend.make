@@ -35,6 +35,12 @@ network_ids_autogen/timestamp: /media/linhlinh/learn/nckh/network-ids/CMakeLists
   /media/linhlinh/learn/nckh/network-ids/src/layer2/onnx_model.cpp \
   /media/linhlinh/learn/nckh/network-ids/src/layer2/onnx_model.hpp \
   /media/linhlinh/learn/nckh/network-ids/src/main.cpp \
+  /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp \
+  /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.hpp \
+  /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp \
+  /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.hpp \
+  /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp \
+  /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.hpp \
   /usr/bin/cmake \
   /usr/lib/x86_64-linux-gnu/cmake/Qt6/3rdparty/kwin/FindXKB.cmake \
   /usr/lib/x86_64-linux-gnu/cmake/Qt6/FindWrapAtomic.cmake \
@@ -4467,6 +4473,912 @@ CMakeFiles/network_ids.dir/src/main.cpp.o: /media/linhlinh/learn/nckh/network-id
   /usr/lib/linux/uapi/x86/asm/sockios.h \
   /usr/lib/linux/uapi/x86/asm/types.h
 
+CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp \
+  /media/linhlinh/learn/nckh/network-ids/src/common/logger.hpp \
+  /media/linhlinh/learn/nckh/network-ids/src/common/packet_info.hpp \
+  /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.hpp \
+  /usr/include/alloca.h \
+  /usr/include/asm-generic/bitsperlong.h \
+  /usr/include/asm-generic/errno-base.h \
+  /usr/include/asm-generic/errno.h \
+  /usr/include/asm-generic/int-ll64.h \
+  /usr/include/asm-generic/posix_types.h \
+  /usr/include/asm-generic/types.h \
+  /usr/include/c++/15/array \
+  /usr/include/c++/15/atomic \
+  /usr/include/c++/15/backward/auto_ptr.h \
+  /usr/include/c++/15/backward/binders.h \
+  /usr/include/c++/15/bit \
+  /usr/include/c++/15/bits/align.h \
+  /usr/include/c++/15/bits/alloc_traits.h \
+  /usr/include/c++/15/bits/allocated_ptr.h \
+  /usr/include/c++/15/bits/allocator.h \
+  /usr/include/c++/15/bits/atomic_base.h \
+  /usr/include/c++/15/bits/atomic_lockfree_defines.h \
+  /usr/include/c++/15/bits/basic_ios.h \
+  /usr/include/c++/15/bits/basic_ios.tcc \
+  /usr/include/c++/15/bits/basic_string.h \
+  /usr/include/c++/15/bits/basic_string.tcc \
+  /usr/include/c++/15/bits/char_traits.h \
+  /usr/include/c++/15/bits/charconv.h \
+  /usr/include/c++/15/bits/chrono.h \
+  /usr/include/c++/15/bits/codecvt.h \
+  /usr/include/c++/15/bits/concept_check.h \
+  /usr/include/c++/15/bits/cpp_type_traits.h \
+  /usr/include/c++/15/bits/cxxabi_forced.h \
+  /usr/include/c++/15/bits/cxxabi_init_exception.h \
+  /usr/include/c++/15/bits/enable_special_members.h \
+  /usr/include/c++/15/bits/erase_if.h \
+  /usr/include/c++/15/bits/exception.h \
+  /usr/include/c++/15/bits/exception_defines.h \
+  /usr/include/c++/15/bits/exception_ptr.h \
+  /usr/include/c++/15/bits/fstream.tcc \
+  /usr/include/c++/15/bits/functexcept.h \
+  /usr/include/c++/15/bits/functional_hash.h \
+  /usr/include/c++/15/bits/hash_bytes.h \
+  /usr/include/c++/15/bits/hashtable.h \
+  /usr/include/c++/15/bits/hashtable_policy.h \
+  /usr/include/c++/15/bits/invoke.h \
+  /usr/include/c++/15/bits/ios_base.h \
+  /usr/include/c++/15/bits/istream.tcc \
+  /usr/include/c++/15/bits/locale_classes.h \
+  /usr/include/c++/15/bits/locale_classes.tcc \
+  /usr/include/c++/15/bits/locale_conv.h \
+  /usr/include/c++/15/bits/locale_facets.h \
+  /usr/include/c++/15/bits/locale_facets.tcc \
+  /usr/include/c++/15/bits/locale_facets_nonio.h \
+  /usr/include/c++/15/bits/locale_facets_nonio.tcc \
+  /usr/include/c++/15/bits/localefwd.h \
+  /usr/include/c++/15/bits/memory_resource.h \
+  /usr/include/c++/15/bits/memoryfwd.h \
+  /usr/include/c++/15/bits/move.h \
+  /usr/include/c++/15/bits/nested_exception.h \
+  /usr/include/c++/15/bits/new_allocator.h \
+  /usr/include/c++/15/bits/node_handle.h \
+  /usr/include/c++/15/bits/ostream.h \
+  /usr/include/c++/15/bits/ostream.tcc \
+  /usr/include/c++/15/bits/ostream_insert.h \
+  /usr/include/c++/15/bits/parse_numbers.h \
+  /usr/include/c++/15/bits/postypes.h \
+  /usr/include/c++/15/bits/predefined_ops.h \
+  /usr/include/c++/15/bits/ptr_traits.h \
+  /usr/include/c++/15/bits/quoted_string.h \
+  /usr/include/c++/15/bits/range_access.h \
+  /usr/include/c++/15/bits/refwrap.h \
+  /usr/include/c++/15/bits/requires_hosted.h \
+  /usr/include/c++/15/bits/shared_ptr.h \
+  /usr/include/c++/15/bits/shared_ptr_atomic.h \
+  /usr/include/c++/15/bits/shared_ptr_base.h \
+  /usr/include/c++/15/bits/sstream.tcc \
+  /usr/include/c++/15/bits/std_abs.h \
+  /usr/include/c++/15/bits/std_function.h \
+  /usr/include/c++/15/bits/std_mutex.h \
+  /usr/include/c++/15/bits/stl_algobase.h \
+  /usr/include/c++/15/bits/stl_bvector.h \
+  /usr/include/c++/15/bits/stl_construct.h \
+  /usr/include/c++/15/bits/stl_function.h \
+  /usr/include/c++/15/bits/stl_iterator.h \
+  /usr/include/c++/15/bits/stl_iterator_base_funcs.h \
+  /usr/include/c++/15/bits/stl_iterator_base_types.h \
+  /usr/include/c++/15/bits/stl_pair.h \
+  /usr/include/c++/15/bits/stl_raw_storage_iter.h \
+  /usr/include/c++/15/bits/stl_tempbuf.h \
+  /usr/include/c++/15/bits/stl_uninitialized.h \
+  /usr/include/c++/15/bits/stl_vector.h \
+  /usr/include/c++/15/bits/streambuf.tcc \
+  /usr/include/c++/15/bits/streambuf_iterator.h \
+  /usr/include/c++/15/bits/string_view.tcc \
+  /usr/include/c++/15/bits/stringfwd.h \
+  /usr/include/c++/15/bits/unique_lock.h \
+  /usr/include/c++/15/bits/unique_ptr.h \
+  /usr/include/c++/15/bits/unordered_map.h \
+  /usr/include/c++/15/bits/uses_allocator.h \
+  /usr/include/c++/15/bits/uses_allocator_args.h \
+  /usr/include/c++/15/bits/utility.h \
+  /usr/include/c++/15/bits/vector.tcc \
+  /usr/include/c++/15/bits/version.h \
+  /usr/include/c++/15/cctype \
+  /usr/include/c++/15/cerrno \
+  /usr/include/c++/15/chrono \
+  /usr/include/c++/15/clocale \
+  /usr/include/c++/15/compare \
+  /usr/include/c++/15/concepts \
+  /usr/include/c++/15/cstddef \
+  /usr/include/c++/15/cstdint \
+  /usr/include/c++/15/cstdio \
+  /usr/include/c++/15/cstdlib \
+  /usr/include/c++/15/ctime \
+  /usr/include/c++/15/cwchar \
+  /usr/include/c++/15/cwctype \
+  /usr/include/c++/15/debug/assertions.h \
+  /usr/include/c++/15/debug/debug.h \
+  /usr/include/c++/15/exception \
+  /usr/include/c++/15/ext/aligned_buffer.h \
+  /usr/include/c++/15/ext/alloc_traits.h \
+  /usr/include/c++/15/ext/atomicity.h \
+  /usr/include/c++/15/ext/concurrence.h \
+  /usr/include/c++/15/ext/numeric_traits.h \
+  /usr/include/c++/15/ext/string_conversions.h \
+  /usr/include/c++/15/ext/type_traits.h \
+  /usr/include/c++/15/fstream \
+  /usr/include/c++/15/functional \
+  /usr/include/c++/15/initializer_list \
+  /usr/include/c++/15/iomanip \
+  /usr/include/c++/15/ios \
+  /usr/include/c++/15/iosfwd \
+  /usr/include/c++/15/iostream \
+  /usr/include/c++/15/istream \
+  /usr/include/c++/15/limits \
+  /usr/include/c++/15/locale \
+  /usr/include/c++/15/memory \
+  /usr/include/c++/15/mutex \
+  /usr/include/c++/15/new \
+  /usr/include/c++/15/ostream \
+  /usr/include/c++/15/pstl/execution_defs.h \
+  /usr/include/c++/15/pstl/glue_memory_defs.h \
+  /usr/include/c++/15/pstl/pstl_config.h \
+  /usr/include/c++/15/ratio \
+  /usr/include/c++/15/sstream \
+  /usr/include/c++/15/stdexcept \
+  /usr/include/c++/15/streambuf \
+  /usr/include/c++/15/string \
+  /usr/include/c++/15/string_view \
+  /usr/include/c++/15/system_error \
+  /usr/include/c++/15/tuple \
+  /usr/include/c++/15/type_traits \
+  /usr/include/c++/15/typeinfo \
+  /usr/include/c++/15/unordered_map \
+  /usr/include/c++/15/vector \
+  /usr/include/ctype.h \
+  /usr/include/endian.h \
+  /usr/include/errno.h \
+  /usr/include/features-time64.h \
+  /usr/include/features.h \
+  /usr/include/libintl.h \
+  /usr/include/linux/errno.h \
+  /usr/include/linux/posix_types.h \
+  /usr/include/linux/sched/types.h \
+  /usr/include/linux/stddef.h \
+  /usr/include/linux/types.h \
+  /usr/include/locale.h \
+  /usr/include/pthread.h \
+  /usr/include/sched.h \
+  /usr/include/stdc-predef.h \
+  /usr/include/stdint.h \
+  /usr/include/stdio.h \
+  /usr/include/stdlib.h \
+  /usr/include/time.h \
+  /usr/include/wchar.h \
+  /usr/include/wctype.h \
+  /usr/include/x86_64-linux-gnu/bits/atomic_wide_counter.h \
+  /usr/include/x86_64-linux-gnu/bits/byteswap.h \
+  /usr/include/x86_64-linux-gnu/bits/cpu-set.h \
+  /usr/include/x86_64-linux-gnu/bits/endian.h \
+  /usr/include/x86_64-linux-gnu/bits/endianness.h \
+  /usr/include/x86_64-linux-gnu/bits/errno.h \
+  /usr/include/x86_64-linux-gnu/bits/floatn-common.h \
+  /usr/include/x86_64-linux-gnu/bits/floatn.h \
+  /usr/include/x86_64-linux-gnu/bits/libc-header-start.h \
+  /usr/include/x86_64-linux-gnu/bits/locale.h \
+  /usr/include/x86_64-linux-gnu/bits/long-double.h \
+  /usr/include/x86_64-linux-gnu/bits/pthread_stack_min-dynamic.h \
+  /usr/include/x86_64-linux-gnu/bits/pthreadtypes-arch.h \
+  /usr/include/x86_64-linux-gnu/bits/pthreadtypes.h \
+  /usr/include/x86_64-linux-gnu/bits/sched.h \
+  /usr/include/x86_64-linux-gnu/bits/select.h \
+  /usr/include/x86_64-linux-gnu/bits/setjmp.h \
+  /usr/include/x86_64-linux-gnu/bits/stdint-intn.h \
+  /usr/include/x86_64-linux-gnu/bits/stdint-least.h \
+  /usr/include/x86_64-linux-gnu/bits/stdint-uintn.h \
+  /usr/include/x86_64-linux-gnu/bits/stdio_lim.h \
+  /usr/include/x86_64-linux-gnu/bits/stdlib-float.h \
+  /usr/include/x86_64-linux-gnu/bits/struct_mutex.h \
+  /usr/include/x86_64-linux-gnu/bits/struct_rwlock.h \
+  /usr/include/x86_64-linux-gnu/bits/thread-shared-types.h \
+  /usr/include/x86_64-linux-gnu/bits/time.h \
+  /usr/include/x86_64-linux-gnu/bits/time64.h \
+  /usr/include/x86_64-linux-gnu/bits/timesize.h \
+  /usr/include/x86_64-linux-gnu/bits/timex.h \
+  /usr/include/x86_64-linux-gnu/bits/types.h \
+  /usr/include/x86_64-linux-gnu/bits/types/FILE.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__FILE.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__fpos64_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__fpos_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__locale_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__mbstate_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__sigset_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/clock_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/clockid_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/cookie_io_functions_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/error_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/locale_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/mbstate_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/sigset_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_FILE.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct___jmp_buf_tag.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_itimerspec.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_sched_param.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_timespec.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_timeval.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_tm.h \
+  /usr/include/x86_64-linux-gnu/bits/types/time_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/timer_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/wint_t.h \
+  /usr/include/x86_64-linux-gnu/bits/typesizes.h \
+  /usr/include/x86_64-linux-gnu/bits/uintn-identity.h \
+  /usr/include/x86_64-linux-gnu/bits/waitflags.h \
+  /usr/include/x86_64-linux-gnu/bits/waitstatus.h \
+  /usr/include/x86_64-linux-gnu/bits/wchar.h \
+  /usr/include/x86_64-linux-gnu/bits/wctype-wchar.h \
+  /usr/include/x86_64-linux-gnu/bits/wordsize.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/atomic_word.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/basic_file.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++allocator.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++config.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++io.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++locale.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/cpu_defines.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/ctype_base.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/ctype_inline.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/error_constants.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/gthr-default.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/gthr.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/messages_members.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/os_defines.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/time_members.h \
+  /usr/include/x86_64-linux-gnu/gnu/stubs-64.h \
+  /usr/include/x86_64-linux-gnu/gnu/stubs.h \
+  /usr/include/x86_64-linux-gnu/sys/cdefs.h \
+  /usr/include/x86_64-linux-gnu/sys/select.h \
+  /usr/include/x86_64-linux-gnu/sys/single_threaded.h \
+  /usr/include/x86_64-linux-gnu/sys/time.h \
+  /usr/include/x86_64-linux-gnu/sys/types.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/include/stdarg.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/include/stddef.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/include/stdint.h \
+  /usr/lib/linux/uapi/x86/asm/bitsperlong.h \
+  /usr/lib/linux/uapi/x86/asm/errno.h \
+  /usr/lib/linux/uapi/x86/asm/posix_types.h \
+  /usr/lib/linux/uapi/x86/asm/posix_types_64.h \
+  /usr/lib/linux/uapi/x86/asm/types.h
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp \
+  /media/linhlinh/learn/nckh/network-ids/src/common/logger.hpp \
+  /media/linhlinh/learn/nckh/network-ids/src/common/packet_info.hpp \
+  /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.hpp \
+  /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.hpp \
+  /usr/include/alloca.h \
+  /usr/include/arpa/inet.h \
+  /usr/include/asm-generic/bitsperlong.h \
+  /usr/include/asm-generic/errno-base.h \
+  /usr/include/asm-generic/errno.h \
+  /usr/include/asm-generic/int-ll64.h \
+  /usr/include/asm-generic/posix_types.h \
+  /usr/include/asm-generic/socket.h \
+  /usr/include/asm-generic/sockios.h \
+  /usr/include/asm-generic/types.h \
+  /usr/include/c++/15/array \
+  /usr/include/c++/15/atomic \
+  /usr/include/c++/15/backward/auto_ptr.h \
+  /usr/include/c++/15/backward/binders.h \
+  /usr/include/c++/15/bit \
+  /usr/include/c++/15/bits/align.h \
+  /usr/include/c++/15/bits/alloc_traits.h \
+  /usr/include/c++/15/bits/allocated_ptr.h \
+  /usr/include/c++/15/bits/allocator.h \
+  /usr/include/c++/15/bits/atomic_base.h \
+  /usr/include/c++/15/bits/atomic_lockfree_defines.h \
+  /usr/include/c++/15/bits/basic_ios.h \
+  /usr/include/c++/15/bits/basic_ios.tcc \
+  /usr/include/c++/15/bits/basic_string.h \
+  /usr/include/c++/15/bits/basic_string.tcc \
+  /usr/include/c++/15/bits/char_traits.h \
+  /usr/include/c++/15/bits/charconv.h \
+  /usr/include/c++/15/bits/chrono.h \
+  /usr/include/c++/15/bits/codecvt.h \
+  /usr/include/c++/15/bits/concept_check.h \
+  /usr/include/c++/15/bits/cpp_type_traits.h \
+  /usr/include/c++/15/bits/cxxabi_forced.h \
+  /usr/include/c++/15/bits/cxxabi_init_exception.h \
+  /usr/include/c++/15/bits/enable_special_members.h \
+  /usr/include/c++/15/bits/erase_if.h \
+  /usr/include/c++/15/bits/exception.h \
+  /usr/include/c++/15/bits/exception_defines.h \
+  /usr/include/c++/15/bits/exception_ptr.h \
+  /usr/include/c++/15/bits/fstream.tcc \
+  /usr/include/c++/15/bits/functexcept.h \
+  /usr/include/c++/15/bits/functional_hash.h \
+  /usr/include/c++/15/bits/hash_bytes.h \
+  /usr/include/c++/15/bits/hashtable.h \
+  /usr/include/c++/15/bits/hashtable_policy.h \
+  /usr/include/c++/15/bits/invoke.h \
+  /usr/include/c++/15/bits/ios_base.h \
+  /usr/include/c++/15/bits/istream.tcc \
+  /usr/include/c++/15/bits/locale_classes.h \
+  /usr/include/c++/15/bits/locale_classes.tcc \
+  /usr/include/c++/15/bits/locale_conv.h \
+  /usr/include/c++/15/bits/locale_facets.h \
+  /usr/include/c++/15/bits/locale_facets.tcc \
+  /usr/include/c++/15/bits/locale_facets_nonio.h \
+  /usr/include/c++/15/bits/locale_facets_nonio.tcc \
+  /usr/include/c++/15/bits/localefwd.h \
+  /usr/include/c++/15/bits/memory_resource.h \
+  /usr/include/c++/15/bits/memoryfwd.h \
+  /usr/include/c++/15/bits/move.h \
+  /usr/include/c++/15/bits/nested_exception.h \
+  /usr/include/c++/15/bits/new_allocator.h \
+  /usr/include/c++/15/bits/node_handle.h \
+  /usr/include/c++/15/bits/ostream.h \
+  /usr/include/c++/15/bits/ostream.tcc \
+  /usr/include/c++/15/bits/ostream_insert.h \
+  /usr/include/c++/15/bits/parse_numbers.h \
+  /usr/include/c++/15/bits/postypes.h \
+  /usr/include/c++/15/bits/predefined_ops.h \
+  /usr/include/c++/15/bits/ptr_traits.h \
+  /usr/include/c++/15/bits/quoted_string.h \
+  /usr/include/c++/15/bits/range_access.h \
+  /usr/include/c++/15/bits/refwrap.h \
+  /usr/include/c++/15/bits/requires_hosted.h \
+  /usr/include/c++/15/bits/shared_ptr.h \
+  /usr/include/c++/15/bits/shared_ptr_atomic.h \
+  /usr/include/c++/15/bits/shared_ptr_base.h \
+  /usr/include/c++/15/bits/sstream.tcc \
+  /usr/include/c++/15/bits/std_abs.h \
+  /usr/include/c++/15/bits/std_function.h \
+  /usr/include/c++/15/bits/std_mutex.h \
+  /usr/include/c++/15/bits/std_thread.h \
+  /usr/include/c++/15/bits/stl_algobase.h \
+  /usr/include/c++/15/bits/stl_bvector.h \
+  /usr/include/c++/15/bits/stl_construct.h \
+  /usr/include/c++/15/bits/stl_function.h \
+  /usr/include/c++/15/bits/stl_iterator.h \
+  /usr/include/c++/15/bits/stl_iterator_base_funcs.h \
+  /usr/include/c++/15/bits/stl_iterator_base_types.h \
+  /usr/include/c++/15/bits/stl_pair.h \
+  /usr/include/c++/15/bits/stl_raw_storage_iter.h \
+  /usr/include/c++/15/bits/stl_tempbuf.h \
+  /usr/include/c++/15/bits/stl_uninitialized.h \
+  /usr/include/c++/15/bits/stl_vector.h \
+  /usr/include/c++/15/bits/streambuf.tcc \
+  /usr/include/c++/15/bits/streambuf_iterator.h \
+  /usr/include/c++/15/bits/string_view.tcc \
+  /usr/include/c++/15/bits/stringfwd.h \
+  /usr/include/c++/15/bits/this_thread_sleep.h \
+  /usr/include/c++/15/bits/unique_lock.h \
+  /usr/include/c++/15/bits/unique_ptr.h \
+  /usr/include/c++/15/bits/unordered_map.h \
+  /usr/include/c++/15/bits/uses_allocator.h \
+  /usr/include/c++/15/bits/uses_allocator_args.h \
+  /usr/include/c++/15/bits/utility.h \
+  /usr/include/c++/15/bits/vector.tcc \
+  /usr/include/c++/15/bits/version.h \
+  /usr/include/c++/15/cctype \
+  /usr/include/c++/15/cerrno \
+  /usr/include/c++/15/chrono \
+  /usr/include/c++/15/clocale \
+  /usr/include/c++/15/compare \
+  /usr/include/c++/15/concepts \
+  /usr/include/c++/15/cstddef \
+  /usr/include/c++/15/cstdint \
+  /usr/include/c++/15/cstdio \
+  /usr/include/c++/15/cstdlib \
+  /usr/include/c++/15/cstring \
+  /usr/include/c++/15/ctime \
+  /usr/include/c++/15/cwchar \
+  /usr/include/c++/15/cwctype \
+  /usr/include/c++/15/debug/assertions.h \
+  /usr/include/c++/15/debug/debug.h \
+  /usr/include/c++/15/exception \
+  /usr/include/c++/15/ext/aligned_buffer.h \
+  /usr/include/c++/15/ext/alloc_traits.h \
+  /usr/include/c++/15/ext/atomicity.h \
+  /usr/include/c++/15/ext/concurrence.h \
+  /usr/include/c++/15/ext/numeric_traits.h \
+  /usr/include/c++/15/ext/string_conversions.h \
+  /usr/include/c++/15/ext/type_traits.h \
+  /usr/include/c++/15/fstream \
+  /usr/include/c++/15/functional \
+  /usr/include/c++/15/initializer_list \
+  /usr/include/c++/15/iomanip \
+  /usr/include/c++/15/ios \
+  /usr/include/c++/15/iosfwd \
+  /usr/include/c++/15/iostream \
+  /usr/include/c++/15/istream \
+  /usr/include/c++/15/limits \
+  /usr/include/c++/15/locale \
+  /usr/include/c++/15/memory \
+  /usr/include/c++/15/mutex \
+  /usr/include/c++/15/new \
+  /usr/include/c++/15/ostream \
+  /usr/include/c++/15/pstl/execution_defs.h \
+  /usr/include/c++/15/pstl/glue_memory_defs.h \
+  /usr/include/c++/15/pstl/pstl_config.h \
+  /usr/include/c++/15/ratio \
+  /usr/include/c++/15/sstream \
+  /usr/include/c++/15/stdexcept \
+  /usr/include/c++/15/streambuf \
+  /usr/include/c++/15/string \
+  /usr/include/c++/15/string_view \
+  /usr/include/c++/15/system_error \
+  /usr/include/c++/15/thread \
+  /usr/include/c++/15/tuple \
+  /usr/include/c++/15/type_traits \
+  /usr/include/c++/15/typeinfo \
+  /usr/include/c++/15/unordered_map \
+  /usr/include/c++/15/vector \
+  /usr/include/ctype.h \
+  /usr/include/endian.h \
+  /usr/include/errno.h \
+  /usr/include/fcntl.h \
+  /usr/include/features-time64.h \
+  /usr/include/features.h \
+  /usr/include/inttypes.h \
+  /usr/include/libintl.h \
+  /usr/include/linux/close_range.h \
+  /usr/include/linux/errno.h \
+  /usr/include/linux/falloc.h \
+  /usr/include/linux/if_ether.h \
+  /usr/include/linux/posix_types.h \
+  /usr/include/linux/sched/types.h \
+  /usr/include/linux/stat.h \
+  /usr/include/linux/stddef.h \
+  /usr/include/linux/types.h \
+  /usr/include/locale.h \
+  /usr/include/net/ethernet.h \
+  /usr/include/net/if_arp.h \
+  /usr/include/netdb.h \
+  /usr/include/netinet/ether.h \
+  /usr/include/netinet/if_ether.h \
+  /usr/include/netinet/in.h \
+  /usr/include/netinet/ip.h \
+  /usr/include/netinet/ip_icmp.h \
+  /usr/include/netinet/tcp.h \
+  /usr/include/netinet/udp.h \
+  /usr/include/pcap/bpf.h \
+  /usr/include/pcap/compiler-tests.h \
+  /usr/include/pcap/dlt.h \
+  /usr/include/pcap/funcattrs.h \
+  /usr/include/pcap/pcap-inttypes.h \
+  /usr/include/pcap/pcap.h \
+  /usr/include/pcap/socket.h \
+  /usr/include/pthread.h \
+  /usr/include/rpc/netdb.h \
+  /usr/include/sched.h \
+  /usr/include/stdc-predef.h \
+  /usr/include/stdint.h \
+  /usr/include/stdio.h \
+  /usr/include/stdlib.h \
+  /usr/include/string.h \
+  /usr/include/strings.h \
+  /usr/include/time.h \
+  /usr/include/unistd.h \
+  /usr/include/wchar.h \
+  /usr/include/wctype.h \
+  /usr/include/x86_64-linux-gnu/bits/atomic_wide_counter.h \
+  /usr/include/x86_64-linux-gnu/bits/byteswap.h \
+  /usr/include/x86_64-linux-gnu/bits/confname.h \
+  /usr/include/x86_64-linux-gnu/bits/cpu-set.h \
+  /usr/include/x86_64-linux-gnu/bits/endian.h \
+  /usr/include/x86_64-linux-gnu/bits/endianness.h \
+  /usr/include/x86_64-linux-gnu/bits/environments.h \
+  /usr/include/x86_64-linux-gnu/bits/errno.h \
+  /usr/include/x86_64-linux-gnu/bits/fcntl-linux.h \
+  /usr/include/x86_64-linux-gnu/bits/fcntl.h \
+  /usr/include/x86_64-linux-gnu/bits/floatn-common.h \
+  /usr/include/x86_64-linux-gnu/bits/floatn.h \
+  /usr/include/x86_64-linux-gnu/bits/getopt_core.h \
+  /usr/include/x86_64-linux-gnu/bits/getopt_posix.h \
+  /usr/include/x86_64-linux-gnu/bits/in.h \
+  /usr/include/x86_64-linux-gnu/bits/libc-header-start.h \
+  /usr/include/x86_64-linux-gnu/bits/locale.h \
+  /usr/include/x86_64-linux-gnu/bits/long-double.h \
+  /usr/include/x86_64-linux-gnu/bits/mman-linux.h \
+  /usr/include/x86_64-linux-gnu/bits/mman-map-flags-generic.h \
+  /usr/include/x86_64-linux-gnu/bits/mman-shared.h \
+  /usr/include/x86_64-linux-gnu/bits/mman.h \
+  /usr/include/x86_64-linux-gnu/bits/mman_ext.h \
+  /usr/include/x86_64-linux-gnu/bits/netdb.h \
+  /usr/include/x86_64-linux-gnu/bits/posix_opt.h \
+  /usr/include/x86_64-linux-gnu/bits/pthread_stack_min-dynamic.h \
+  /usr/include/x86_64-linux-gnu/bits/pthreadtypes-arch.h \
+  /usr/include/x86_64-linux-gnu/bits/pthreadtypes.h \
+  /usr/include/x86_64-linux-gnu/bits/sched.h \
+  /usr/include/x86_64-linux-gnu/bits/select.h \
+  /usr/include/x86_64-linux-gnu/bits/setjmp.h \
+  /usr/include/x86_64-linux-gnu/bits/sockaddr.h \
+  /usr/include/x86_64-linux-gnu/bits/socket.h \
+  /usr/include/x86_64-linux-gnu/bits/socket_type.h \
+  /usr/include/x86_64-linux-gnu/bits/stat.h \
+  /usr/include/x86_64-linux-gnu/bits/statx-generic.h \
+  /usr/include/x86_64-linux-gnu/bits/statx.h \
+  /usr/include/x86_64-linux-gnu/bits/stdint-intn.h \
+  /usr/include/x86_64-linux-gnu/bits/stdint-least.h \
+  /usr/include/x86_64-linux-gnu/bits/stdint-uintn.h \
+  /usr/include/x86_64-linux-gnu/bits/stdio_lim.h \
+  /usr/include/x86_64-linux-gnu/bits/stdlib-float.h \
+  /usr/include/x86_64-linux-gnu/bits/struct_mutex.h \
+  /usr/include/x86_64-linux-gnu/bits/struct_rwlock.h \
+  /usr/include/x86_64-linux-gnu/bits/struct_stat.h \
+  /usr/include/x86_64-linux-gnu/bits/thread-shared-types.h \
+  /usr/include/x86_64-linux-gnu/bits/time.h \
+  /usr/include/x86_64-linux-gnu/bits/time64.h \
+  /usr/include/x86_64-linux-gnu/bits/timesize.h \
+  /usr/include/x86_64-linux-gnu/bits/timex.h \
+  /usr/include/x86_64-linux-gnu/bits/types.h \
+  /usr/include/x86_64-linux-gnu/bits/types/FILE.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__FILE.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__fpos64_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__fpos_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__locale_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__mbstate_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__sigset_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__sigval_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/clock_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/clockid_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/cookie_io_functions_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/error_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/locale_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/mbstate_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/sigevent_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/sigset_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_FILE.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct___jmp_buf_tag.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_iovec.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_itimerspec.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_sched_param.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_statx.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_statx_timestamp.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_timespec.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_timeval.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_tm.h \
+  /usr/include/x86_64-linux-gnu/bits/types/time_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/timer_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/wint_t.h \
+  /usr/include/x86_64-linux-gnu/bits/typesizes.h \
+  /usr/include/x86_64-linux-gnu/bits/uintn-identity.h \
+  /usr/include/x86_64-linux-gnu/bits/unistd_ext.h \
+  /usr/include/x86_64-linux-gnu/bits/waitflags.h \
+  /usr/include/x86_64-linux-gnu/bits/waitstatus.h \
+  /usr/include/x86_64-linux-gnu/bits/wchar.h \
+  /usr/include/x86_64-linux-gnu/bits/wctype-wchar.h \
+  /usr/include/x86_64-linux-gnu/bits/wordsize.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/atomic_word.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/basic_file.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++allocator.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++config.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++io.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++locale.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/cpu_defines.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/ctype_base.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/ctype_inline.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/error_constants.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/gthr-default.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/gthr.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/messages_members.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/os_defines.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/time_members.h \
+  /usr/include/x86_64-linux-gnu/gnu/stubs-64.h \
+  /usr/include/x86_64-linux-gnu/gnu/stubs.h \
+  /usr/include/x86_64-linux-gnu/sys/cdefs.h \
+  /usr/include/x86_64-linux-gnu/sys/mman.h \
+  /usr/include/x86_64-linux-gnu/sys/select.h \
+  /usr/include/x86_64-linux-gnu/sys/single_threaded.h \
+  /usr/include/x86_64-linux-gnu/sys/socket.h \
+  /usr/include/x86_64-linux-gnu/sys/stat.h \
+  /usr/include/x86_64-linux-gnu/sys/time.h \
+  /usr/include/x86_64-linux-gnu/sys/types.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/include/stdarg.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/include/stddef.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/include/stdint.h \
+  /usr/lib/linux/uapi/x86/asm/bitsperlong.h \
+  /usr/lib/linux/uapi/x86/asm/errno.h \
+  /usr/lib/linux/uapi/x86/asm/posix_types.h \
+  /usr/lib/linux/uapi/x86/asm/posix_types_64.h \
+  /usr/lib/linux/uapi/x86/asm/socket.h \
+  /usr/lib/linux/uapi/x86/asm/sockios.h \
+  /usr/lib/linux/uapi/x86/asm/types.h
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp \
+  /media/linhlinh/learn/nckh/network-ids/src/common/logger.hpp \
+  /media/linhlinh/learn/nckh/network-ids/src/common/packet_info.hpp \
+  /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.hpp \
+  /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.hpp \
+  /usr/include/alloca.h \
+  /usr/include/arpa/inet.h \
+  /usr/include/asm-generic/bitsperlong.h \
+  /usr/include/asm-generic/errno-base.h \
+  /usr/include/asm-generic/errno.h \
+  /usr/include/asm-generic/int-ll64.h \
+  /usr/include/asm-generic/posix_types.h \
+  /usr/include/asm-generic/socket.h \
+  /usr/include/asm-generic/sockios.h \
+  /usr/include/asm-generic/types.h \
+  /usr/include/c++/15/array \
+  /usr/include/c++/15/atomic \
+  /usr/include/c++/15/backward/auto_ptr.h \
+  /usr/include/c++/15/backward/binders.h \
+  /usr/include/c++/15/bit \
+  /usr/include/c++/15/bits/align.h \
+  /usr/include/c++/15/bits/alloc_traits.h \
+  /usr/include/c++/15/bits/allocated_ptr.h \
+  /usr/include/c++/15/bits/allocator.h \
+  /usr/include/c++/15/bits/atomic_base.h \
+  /usr/include/c++/15/bits/atomic_lockfree_defines.h \
+  /usr/include/c++/15/bits/basic_ios.h \
+  /usr/include/c++/15/bits/basic_ios.tcc \
+  /usr/include/c++/15/bits/basic_string.h \
+  /usr/include/c++/15/bits/basic_string.tcc \
+  /usr/include/c++/15/bits/char_traits.h \
+  /usr/include/c++/15/bits/charconv.h \
+  /usr/include/c++/15/bits/chrono.h \
+  /usr/include/c++/15/bits/codecvt.h \
+  /usr/include/c++/15/bits/concept_check.h \
+  /usr/include/c++/15/bits/cpp_type_traits.h \
+  /usr/include/c++/15/bits/cxxabi_forced.h \
+  /usr/include/c++/15/bits/cxxabi_init_exception.h \
+  /usr/include/c++/15/bits/enable_special_members.h \
+  /usr/include/c++/15/bits/erase_if.h \
+  /usr/include/c++/15/bits/exception.h \
+  /usr/include/c++/15/bits/exception_defines.h \
+  /usr/include/c++/15/bits/exception_ptr.h \
+  /usr/include/c++/15/bits/fstream.tcc \
+  /usr/include/c++/15/bits/functexcept.h \
+  /usr/include/c++/15/bits/functional_hash.h \
+  /usr/include/c++/15/bits/hash_bytes.h \
+  /usr/include/c++/15/bits/hashtable.h \
+  /usr/include/c++/15/bits/hashtable_policy.h \
+  /usr/include/c++/15/bits/invoke.h \
+  /usr/include/c++/15/bits/ios_base.h \
+  /usr/include/c++/15/bits/istream.tcc \
+  /usr/include/c++/15/bits/locale_classes.h \
+  /usr/include/c++/15/bits/locale_classes.tcc \
+  /usr/include/c++/15/bits/locale_conv.h \
+  /usr/include/c++/15/bits/locale_facets.h \
+  /usr/include/c++/15/bits/locale_facets.tcc \
+  /usr/include/c++/15/bits/locale_facets_nonio.h \
+  /usr/include/c++/15/bits/locale_facets_nonio.tcc \
+  /usr/include/c++/15/bits/localefwd.h \
+  /usr/include/c++/15/bits/memory_resource.h \
+  /usr/include/c++/15/bits/memoryfwd.h \
+  /usr/include/c++/15/bits/move.h \
+  /usr/include/c++/15/bits/nested_exception.h \
+  /usr/include/c++/15/bits/new_allocator.h \
+  /usr/include/c++/15/bits/node_handle.h \
+  /usr/include/c++/15/bits/ostream.h \
+  /usr/include/c++/15/bits/ostream.tcc \
+  /usr/include/c++/15/bits/ostream_insert.h \
+  /usr/include/c++/15/bits/parse_numbers.h \
+  /usr/include/c++/15/bits/postypes.h \
+  /usr/include/c++/15/bits/predefined_ops.h \
+  /usr/include/c++/15/bits/ptr_traits.h \
+  /usr/include/c++/15/bits/quoted_string.h \
+  /usr/include/c++/15/bits/range_access.h \
+  /usr/include/c++/15/bits/refwrap.h \
+  /usr/include/c++/15/bits/requires_hosted.h \
+  /usr/include/c++/15/bits/shared_ptr.h \
+  /usr/include/c++/15/bits/shared_ptr_atomic.h \
+  /usr/include/c++/15/bits/shared_ptr_base.h \
+  /usr/include/c++/15/bits/sstream.tcc \
+  /usr/include/c++/15/bits/std_abs.h \
+  /usr/include/c++/15/bits/std_function.h \
+  /usr/include/c++/15/bits/std_mutex.h \
+  /usr/include/c++/15/bits/stl_algobase.h \
+  /usr/include/c++/15/bits/stl_bvector.h \
+  /usr/include/c++/15/bits/stl_construct.h \
+  /usr/include/c++/15/bits/stl_function.h \
+  /usr/include/c++/15/bits/stl_iterator.h \
+  /usr/include/c++/15/bits/stl_iterator_base_funcs.h \
+  /usr/include/c++/15/bits/stl_iterator_base_types.h \
+  /usr/include/c++/15/bits/stl_pair.h \
+  /usr/include/c++/15/bits/stl_raw_storage_iter.h \
+  /usr/include/c++/15/bits/stl_tempbuf.h \
+  /usr/include/c++/15/bits/stl_uninitialized.h \
+  /usr/include/c++/15/bits/stl_vector.h \
+  /usr/include/c++/15/bits/streambuf.tcc \
+  /usr/include/c++/15/bits/streambuf_iterator.h \
+  /usr/include/c++/15/bits/string_view.tcc \
+  /usr/include/c++/15/bits/stringfwd.h \
+  /usr/include/c++/15/bits/unique_lock.h \
+  /usr/include/c++/15/bits/unique_ptr.h \
+  /usr/include/c++/15/bits/unordered_map.h \
+  /usr/include/c++/15/bits/uses_allocator.h \
+  /usr/include/c++/15/bits/uses_allocator_args.h \
+  /usr/include/c++/15/bits/utility.h \
+  /usr/include/c++/15/bits/vector.tcc \
+  /usr/include/c++/15/bits/version.h \
+  /usr/include/c++/15/cctype \
+  /usr/include/c++/15/cerrno \
+  /usr/include/c++/15/chrono \
+  /usr/include/c++/15/clocale \
+  /usr/include/c++/15/compare \
+  /usr/include/c++/15/concepts \
+  /usr/include/c++/15/cstddef \
+  /usr/include/c++/15/cstdint \
+  /usr/include/c++/15/cstdio \
+  /usr/include/c++/15/cstdlib \
+  /usr/include/c++/15/cstring \
+  /usr/include/c++/15/ctime \
+  /usr/include/c++/15/cwchar \
+  /usr/include/c++/15/cwctype \
+  /usr/include/c++/15/debug/assertions.h \
+  /usr/include/c++/15/debug/debug.h \
+  /usr/include/c++/15/exception \
+  /usr/include/c++/15/ext/aligned_buffer.h \
+  /usr/include/c++/15/ext/alloc_traits.h \
+  /usr/include/c++/15/ext/atomicity.h \
+  /usr/include/c++/15/ext/concurrence.h \
+  /usr/include/c++/15/ext/numeric_traits.h \
+  /usr/include/c++/15/ext/string_conversions.h \
+  /usr/include/c++/15/ext/type_traits.h \
+  /usr/include/c++/15/fstream \
+  /usr/include/c++/15/functional \
+  /usr/include/c++/15/initializer_list \
+  /usr/include/c++/15/iomanip \
+  /usr/include/c++/15/ios \
+  /usr/include/c++/15/iosfwd \
+  /usr/include/c++/15/iostream \
+  /usr/include/c++/15/istream \
+  /usr/include/c++/15/limits \
+  /usr/include/c++/15/locale \
+  /usr/include/c++/15/memory \
+  /usr/include/c++/15/mutex \
+  /usr/include/c++/15/new \
+  /usr/include/c++/15/ostream \
+  /usr/include/c++/15/pstl/execution_defs.h \
+  /usr/include/c++/15/pstl/glue_memory_defs.h \
+  /usr/include/c++/15/pstl/pstl_config.h \
+  /usr/include/c++/15/ratio \
+  /usr/include/c++/15/sstream \
+  /usr/include/c++/15/stdexcept \
+  /usr/include/c++/15/streambuf \
+  /usr/include/c++/15/string \
+  /usr/include/c++/15/string_view \
+  /usr/include/c++/15/system_error \
+  /usr/include/c++/15/tuple \
+  /usr/include/c++/15/type_traits \
+  /usr/include/c++/15/typeinfo \
+  /usr/include/c++/15/unordered_map \
+  /usr/include/c++/15/vector \
+  /usr/include/ctype.h \
+  /usr/include/endian.h \
+  /usr/include/errno.h \
+  /usr/include/features-time64.h \
+  /usr/include/features.h \
+  /usr/include/inttypes.h \
+  /usr/include/libintl.h \
+  /usr/include/linux/errno.h \
+  /usr/include/linux/posix_types.h \
+  /usr/include/linux/sched/types.h \
+  /usr/include/linux/stddef.h \
+  /usr/include/linux/types.h \
+  /usr/include/locale.h \
+  /usr/include/netdb.h \
+  /usr/include/netinet/in.h \
+  /usr/include/pcap.h \
+  /usr/include/pcap/bpf.h \
+  /usr/include/pcap/compiler-tests.h \
+  /usr/include/pcap/dlt.h \
+  /usr/include/pcap/funcattrs.h \
+  /usr/include/pcap/pcap-inttypes.h \
+  /usr/include/pcap/pcap.h \
+  /usr/include/pcap/socket.h \
+  /usr/include/pthread.h \
+  /usr/include/rpc/netdb.h \
+  /usr/include/sched.h \
+  /usr/include/stdc-predef.h \
+  /usr/include/stdint.h \
+  /usr/include/stdio.h \
+  /usr/include/stdlib.h \
+  /usr/include/string.h \
+  /usr/include/strings.h \
+  /usr/include/time.h \
+  /usr/include/wchar.h \
+  /usr/include/wctype.h \
+  /usr/include/x86_64-linux-gnu/bits/atomic_wide_counter.h \
+  /usr/include/x86_64-linux-gnu/bits/byteswap.h \
+  /usr/include/x86_64-linux-gnu/bits/cpu-set.h \
+  /usr/include/x86_64-linux-gnu/bits/endian.h \
+  /usr/include/x86_64-linux-gnu/bits/endianness.h \
+  /usr/include/x86_64-linux-gnu/bits/errno.h \
+  /usr/include/x86_64-linux-gnu/bits/floatn-common.h \
+  /usr/include/x86_64-linux-gnu/bits/floatn.h \
+  /usr/include/x86_64-linux-gnu/bits/in.h \
+  /usr/include/x86_64-linux-gnu/bits/libc-header-start.h \
+  /usr/include/x86_64-linux-gnu/bits/locale.h \
+  /usr/include/x86_64-linux-gnu/bits/long-double.h \
+  /usr/include/x86_64-linux-gnu/bits/netdb.h \
+  /usr/include/x86_64-linux-gnu/bits/pthread_stack_min-dynamic.h \
+  /usr/include/x86_64-linux-gnu/bits/pthreadtypes-arch.h \
+  /usr/include/x86_64-linux-gnu/bits/pthreadtypes.h \
+  /usr/include/x86_64-linux-gnu/bits/sched.h \
+  /usr/include/x86_64-linux-gnu/bits/select.h \
+  /usr/include/x86_64-linux-gnu/bits/setjmp.h \
+  /usr/include/x86_64-linux-gnu/bits/sockaddr.h \
+  /usr/include/x86_64-linux-gnu/bits/socket.h \
+  /usr/include/x86_64-linux-gnu/bits/socket_type.h \
+  /usr/include/x86_64-linux-gnu/bits/stdint-intn.h \
+  /usr/include/x86_64-linux-gnu/bits/stdint-least.h \
+  /usr/include/x86_64-linux-gnu/bits/stdint-uintn.h \
+  /usr/include/x86_64-linux-gnu/bits/stdio_lim.h \
+  /usr/include/x86_64-linux-gnu/bits/stdlib-float.h \
+  /usr/include/x86_64-linux-gnu/bits/struct_mutex.h \
+  /usr/include/x86_64-linux-gnu/bits/struct_rwlock.h \
+  /usr/include/x86_64-linux-gnu/bits/thread-shared-types.h \
+  /usr/include/x86_64-linux-gnu/bits/time.h \
+  /usr/include/x86_64-linux-gnu/bits/time64.h \
+  /usr/include/x86_64-linux-gnu/bits/timesize.h \
+  /usr/include/x86_64-linux-gnu/bits/timex.h \
+  /usr/include/x86_64-linux-gnu/bits/types.h \
+  /usr/include/x86_64-linux-gnu/bits/types/FILE.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__FILE.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__fpos64_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__fpos_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__locale_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__mbstate_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__sigset_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/__sigval_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/clock_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/clockid_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/cookie_io_functions_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/error_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/locale_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/mbstate_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/sigevent_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/sigset_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_FILE.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct___jmp_buf_tag.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_iovec.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_itimerspec.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_sched_param.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_timespec.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_timeval.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_tm.h \
+  /usr/include/x86_64-linux-gnu/bits/types/time_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/timer_t.h \
+  /usr/include/x86_64-linux-gnu/bits/types/wint_t.h \
+  /usr/include/x86_64-linux-gnu/bits/typesizes.h \
+  /usr/include/x86_64-linux-gnu/bits/uintn-identity.h \
+  /usr/include/x86_64-linux-gnu/bits/waitflags.h \
+  /usr/include/x86_64-linux-gnu/bits/waitstatus.h \
+  /usr/include/x86_64-linux-gnu/bits/wchar.h \
+  /usr/include/x86_64-linux-gnu/bits/wctype-wchar.h \
+  /usr/include/x86_64-linux-gnu/bits/wordsize.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/atomic_word.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/basic_file.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++allocator.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++config.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++io.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/c++locale.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/cpu_defines.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/ctype_base.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/ctype_inline.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/error_constants.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/gthr-default.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/gthr.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/messages_members.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/os_defines.h \
+  /usr/include/x86_64-linux-gnu/c++/15/bits/time_members.h \
+  /usr/include/x86_64-linux-gnu/gnu/stubs-64.h \
+  /usr/include/x86_64-linux-gnu/gnu/stubs.h \
+  /usr/include/x86_64-linux-gnu/sys/cdefs.h \
+  /usr/include/x86_64-linux-gnu/sys/select.h \
+  /usr/include/x86_64-linux-gnu/sys/single_threaded.h \
+  /usr/include/x86_64-linux-gnu/sys/socket.h \
+  /usr/include/x86_64-linux-gnu/sys/time.h \
+  /usr/include/x86_64-linux-gnu/sys/types.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/include/stdarg.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/include/stddef.h \
+  /usr/lib/gcc/x86_64-linux-gnu/15/include/stdint.h \
+  /usr/lib/linux/uapi/x86/asm/bitsperlong.h \
+  /usr/lib/linux/uapi/x86/asm/errno.h \
+  /usr/lib/linux/uapi/x86/asm/posix_types.h \
+  /usr/lib/linux/uapi/x86/asm/posix_types_64.h \
+  /usr/lib/linux/uapi/x86/asm/socket.h \
+  /usr/lib/linux/uapi/x86/asm/sockios.h \
+  /usr/lib/linux/uapi/x86/asm/types.h
+
 network_ids: /lib/x86_64-linux-gnu/libc.so.6 \
   /lib/x86_64-linux-gnu/libdbus-1.so.3 \
   /lib/x86_64-linux-gnu/libm.so.6 \
@@ -4503,8 +5415,13 @@ network_ids: /lib/x86_64-linux-gnu/libc.so.6 \
   CMakeFiles/network_ids.dir/src/layer2/feedback_loop.cpp.o \
   CMakeFiles/network_ids.dir/src/layer2/ml_engine.cpp.o \
   CMakeFiles/network_ids.dir/src/layer2/onnx_model.cpp.o \
-  CMakeFiles/network_ids.dir/src/main.cpp.o
+  CMakeFiles/network_ids.dir/src/main.cpp.o \
+  CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o \
+  CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o \
+  CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o
 
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o:
 
 CMakeFiles/network_ids.dir/src/layer2/onnx_model.cpp.o:
 
@@ -4529,6 +5446,20 @@ CMakeFiles/network_ids.dir/src/common/metrics.cpp.o:
 /usr/lib/x86_64-linux-gnu/crti.o:
 
 /lib/x86_64-linux-gnu/libsystemd.so.0:
+
+/usr/include/x86_64-linux-gnu/bits/types/struct_statx_timestamp.h:
+
+/usr/include/x86_64-linux-gnu/bits/types/struct_statx.h:
+
+/usr/include/x86_64-linux-gnu/bits/statx.h:
+
+/usr/include/x86_64-linux-gnu/bits/mman_ext.h:
+
+/usr/include/x86_64-linux-gnu/bits/mman.h:
+
+/usr/include/x86_64-linux-gnu/bits/mman-linux.h:
+
+/usr/include/x86_64-linux-gnu/bits/fcntl.h:
 
 /usr/include/x86_64-linux-gnu/bits/types/siginfo_t.h:
 
@@ -4632,8 +5563,6 @@ CMakeFiles/network_ids.dir/src/layer2/feature_extractor.cpp.o:
 
 /usr/include/c++/15/bits/deque.tcc:
 
-/usr/lib/linux/uapi/x86/asm/sockios.h:
-
 /usr/lib/linux/uapi/x86/asm/socket.h:
 
 /usr/lib/linux/uapi/x86/asm/posix_types.h:
@@ -4644,15 +5573,11 @@ CMakeFiles/network_ids.dir/src/layer2/feature_extractor.cpp.o:
 
 /usr/lib/gcc/x86_64-linux-gnu/15/include/stddef.h:
 
-/usr/include/c++/15/bits/stl_raw_storage_iter.h:
+/usr/include/x86_64-linux-gnu/sys/socket.h:
 
-/usr/include/c++/15/bits/ostream.h:
+/usr/include/x86_64-linux-gnu/sys/single_threaded.h:
 
-/usr/share/cmake-3.31/Modules/MacroAddFileDependencies.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6DBusTools/Qt6DBusToolsTargets-none.cmake:
-
-/usr/include/wctype.h:
+/usr/include/x86_64-linux-gnu/sys/select.h:
 
 /usr/lib/x86_64-linux-gnu/libpcap.so:
 
@@ -4694,9 +5619,9 @@ CMakeFiles/network_ids.dir/src/layer2/feature_extractor.cpp.o:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGL/Qt6OpenGLTargets-none.cmake:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfigVersion.cmake:
-
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicToolHelpers.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfigVersion.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsTools/Qt6WidgetsToolsVersionlessTargets.cmake:
 
@@ -4706,17 +5631,13 @@ CMakeFiles/network_ids.dir/src/layer2/feature_extractor.cpp.o:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsTools/Qt6WidgetsToolsTargets-none.cmake:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsTools/Qt6WidgetsToolsAdditionalTargetInfo.cmake:
-
-/usr/include/c++/15/tr1/bessel_function.tcc:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfig.cmake:
-
 /usr/include/x86_64-linux-gnu/c++/15/bits/messages_members.h:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateDependencies.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateAdditionalTargetInfo.cmake:
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgets/Qt6OpenGLWidgetsConfigVersion.cmake:
 
@@ -4724,7 +5645,11 @@ CMakeFiles/network_ids.dir/src/layer2/feature_extractor.cpp.o:
 
 /usr/include/x86_64-linux-gnu/c++/15/bits/error_constants.h:
 
+/usr/include/x86_64-linux-gnu/bits/mman-shared.h:
+
 /usr/lib/x86_64-linux-gnu/cmake/Qt6Widgets/Qt6WidgetsConfigVersion.cmake:
+
+/usr/include/netinet/ip_icmp.h:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgetsPrivate/Qt6OpenGLWidgetsPrivateAdditionalTargetInfo.cmake:
 
@@ -4738,21 +5663,15 @@ CMakeFiles/network_ids.dir/src/layer2/feature_extractor.cpp.o:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgets/Qt6OpenGLWidgetsConfig.cmake:
 
-/usr/include/x86_64-linux-gnu/bits/sigcontext.h:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6Charts/Qt6ChartsConfigVersion.cmake:
-
-/usr/include/pcap/pcap-inttypes.h:
-
-/usr/share/cmake-3.31/Modules/CMakeLanguageInformation.cmake:
-
-CMakeFiles/3.31.6/CMakeSystem.cmake:
-
 /usr/share/cmake-3.31/Modules/CheckIncludeFileCXX.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLPrivate/Qt6OpenGLPrivateAdditionalTargetInfo.cmake:
 
 /usr/include/x86_64-linux-gnu/sys/cdefs.h:
+
+/usr/share/cmake-3.31/Modules/CMakeLanguageInformation.cmake:
+
+CMakeFiles/3.31.6/CMakeSystem.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgets/Qt6OpenGLWidgetsVersionlessAliasTargets.cmake:
 
@@ -4775,6 +5694,8 @@ CMakeFiles/3.31.6/CMakeSystem.cmake:
 network_ids_autogen/mocs_compilation.cpp:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6GuiTools/Qt6GuiToolsConfigVersionImpl.cmake:
+
+/usr/include/x86_64-linux-gnu/sys/stat.h:
 
 /usr/include/c++/15/debug/assertions.h:
 
@@ -4814,6 +5735,12 @@ network_ids_autogen/mocs_compilation.cpp:
 
 /usr/include/c++/15/bits/atomic_base.h:
 
+/usr/lib/x86_64-linux-gnu/cmake/Qt6DBusTools/Qt6DBusToolsTargets-none.cmake:
+
+/usr/share/cmake-3.31/Modules/MacroAddFileDependencies.cmake:
+
+/usr/include/wctype.h:
+
 /usr/lib/x86_64-linux-gnu/cmake/Qt6DBusTools/Qt6DBusToolsDependencies.cmake:
 
 /usr/include/x86_64-linux-gnu/bits/byteswap.h:
@@ -4844,39 +5771,17 @@ network_ids_autogen/mocs_compilation.cpp:
 
 /usr/include/pcap/dlt.h:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicExternalProjectHelpers.cmake:
+/usr/lib/x86_64-linux-gnu/cmake/Qt6DBus/Qt6DBusMacros.cmake:
 
-/media/linhlinh/learn/nckh/network-ids/src/common/metrics.cpp:
+/usr/lib/x86_64-linux-gnu/cmake/Qt6DBus/Qt6DBusDependencies.cmake:
 
-CMakeFiles/network_ids.dir/src/dashboard/stats_collector.cpp.o:
+/usr/include/x86_64-linux-gnu/bits/types/sigevent_t.h:
 
-/usr/include/x86_64-linux-gnu/bits/waitflags.h:
+/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGL/Qt6OpenGLConfigVersion.cmake:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6DBusPrivate/Qt6DBusPrivateVersionlessAliasTargets.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsTools/Qt6WidgetsToolsTargets.cmake:
-
-/media/linhlinh/learn/nckh/network-ids/src/common/packet_info.cpp:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6GuiPrivate/Qt6GuiPrivateTargets.cmake:
-
-/usr/include/x86_64-linux-gnu/bits/siginfo-arch.h:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6ChartsPrivate/Qt6ChartsPrivateDependencies.cmake:
-
-/usr/include/c++/15/bits/codecvt.h:
-
-/usr/share/cmake-3.31/Modules/GNUInstallDirs.cmake:
+/usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/QtFeature.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicDependencyHelpers.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6Charts/Qt6ChartsConfig.cmake:
-
-/usr/lib/x86_64-linux-gnu/libm.so:
-
-/usr/share/cmake-3.31/Modules/FindThreads.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsTools/Qt6WidgetsToolsConfigVersionImpl.cmake:
 
@@ -4887,18 +5792,6 @@ CMakeFiles/network_ids.dir/src/dashboard/stats_collector.cpp.o:
 /usr/include/asm-generic/types.h:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/Qt6Targets.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicFindPackageHelpers.cmake:
-
-/usr/include/c++/15/bits/predefined_ops.h:
-
-/usr/include/x86_64-linux-gnu/bits/stdint-intn.h:
-
-CMakeFiles/network_ids.dir/src/dashboard/alert_manager.cpp.o:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgetsPrivate/Qt6OpenGLWidgetsPrivateConfigVersionImpl.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgets/Qt6OpenGLWidgetsTargets.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicAndroidHelpers.cmake:
 
@@ -4912,13 +5805,45 @@ CMakeFiles/network_ids.dir/src/dashboard/alert_manager.cpp.o:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6CoreTools/Qt6CoreToolsAdditionalTargetInfo.cmake:
 
+/usr/lib/x86_64-linux-gnu/libm.so:
+
+/usr/share/cmake-3.31/Modules/FindThreads.cmake:
+
 /usr/include/c++/15/bits/version.h:
+
+/usr/include/x86_64-linux-gnu/bits/sigcontext.h:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6Charts/Qt6ChartsConfigVersion.cmake:
+
+/usr/include/pcap/pcap-inttypes.h:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/libgcc.a:
+
+/usr/include/c++/15/bits/stl_deque.h:
+
+/usr/share/cmake-3.31/Modules/Linker/GNU.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicDependencyHelpers.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsTools/Qt6WidgetsToolsAdditionalTargetInfo.cmake:
+
+/usr/include/c++/15/tr1/bessel_function.tcc:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfig.cmake:
+
+/media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.hpp:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreMacros.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6CoreTools/Qt6CoreToolsDependencies.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLPrivate/Qt6OpenGLPrivateConfig.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicWindowsHelpers.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6Charts/Qt6ChartsConfig.cmake:
+
+/usr/include/c++/15/cstddef:
 
 /media/linhlinh/learn/nckh/network-ids/src/layer2/ml_engine.cpp:
 
@@ -4929,6 +5854,14 @@ CMakeFiles/network_ids.dir/src/dashboard/alert_manager.cpp.o:
 /usr/include/c++/15/bits/erase_if.h:
 
 /usr/include/c++/15/bits/stringfwd.h:
+
+/media/linhlinh/learn/nckh/network-ids/src/common/metrics.cpp:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicExternalProjectHelpers.cmake:
+
+CMakeFiles/network_ids.dir/src/dashboard/stats_collector.cpp.o:
+
+/usr/include/x86_64-linux-gnu/bits/waitflags.h:
 
 /media/linhlinh/learn/nckh/network-ids/src/layer2/feedback_loop.cpp:
 
@@ -4948,13 +5881,15 @@ CMakeFiles/network_ids.dir/src/dashboard/alert_manager.cpp.o:
 
 /usr/include/c++/15/ext/string_conversions.h:
 
-/usr/include/c++/15/backward/auto_ptr.h:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgetsPrivate/Qt6OpenGLWidgetsPrivateDependencies.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfig.cmake:
+/usr/share/cmake-3.31/Modules/GNUInstallDirs.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/3rdparty/kwin/FindXKB.cmake:
+
+/usr/lib/linux/uapi/x86/asm/sockios.h:
+
+/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.hpp:
+
+/usr/include/x86_64-linux-gnu/bits/mman-map-flags-generic.h:
 
 /media/linhlinh/learn/nckh/network-ids/src/layer1/flow_table.cpp:
 
@@ -4970,21 +5905,45 @@ CMakeFiles/network_ids.dir/src/dashboard/alert_manager.cpp.o:
 
 /usr/include/x86_64-linux-gnu/bits/sched.h:
 
-/usr/lib/gcc/x86_64-linux-gnu/15/libgcc.a:
-
-/usr/include/c++/15/bits/stl_deque.h:
-
-/usr/share/cmake-3.31/Modules/Linker/GNU.cmake:
-
 /media/linhlinh/learn/nckh/network-ids/src/layer2/feedback_loop.hpp:
 
 /media/linhlinh/learn/nckh/network-ids/src/common/logger.cpp:
+
+CMakeFiles/network_ids.dir/src/dashboard/alert_manager.cpp.o:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgets/Qt6OpenGLWidgetsTargets.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgetsPrivate/Qt6OpenGLWidgetsPrivateConfigVersionImpl.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6DBusPrivate/Qt6DBusPrivateVersionlessAliasTargets.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsTools/Qt6WidgetsToolsTargets.cmake:
+
+/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp:
+
+/media/linhlinh/learn/nckh/network-ids/src/common/packet_info.cpp:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6GuiPrivate/Qt6GuiPrivateTargets.cmake:
+
+/usr/include/x86_64-linux-gnu/bits/siginfo-arch.h:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6ChartsPrivate/Qt6ChartsPrivateDependencies.cmake:
+
+/usr/include/c++/15/bits/codecvt.h:
 
 /media/linhlinh/learn/nckh/network-ids/src/layer2/feature_extractor.hpp:
 
 /usr/share/cmake-3.31/Modules/FindPackageHandleStandardArgs.cmake:
 
 /usr/include/x86_64-linux-gnu/bits/types/clock_t.h:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6DBus/Qt6DBusTargets.cmake:
+
+/usr/include/c++/15/bits/parse_numbers.h:
+
+/usr/include/sched.h:
+
+/usr/include/netdb.h:
 
 /usr/share/cmake-3.31/Modules/Compiler/GNU.cmake:
 
@@ -4994,19 +5953,9 @@ CMakeFiles/network_ids.dir/src/common/logger.cpp.o:
 
 CMakeFiles/3.31.6/CMakeCXXCompiler.cmake:
 
-/usr/include/x86_64-linux-gnu/bits/types/struct_sigstack.h:
-
-/usr/include/c++/15/functional:
-
-/usr/share/cmake-3.31/Modules/Platform/Linux-GNU-CXX.cmake:
-
-/usr/include/c++/15/bits/ostream_insert.h:
-
-/usr/share/cmake-3.31/Modules/Platform/Linux-GNU.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreVersionlessAliasTargets.cmake:
-
 /usr/include/c++/15/bits/locale_facets_nonio.tcc:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6DBus/Qt6DBusTargets-none.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6Widgets/Qt6WidgetsMacros.cmake:
 
@@ -5038,21 +5987,27 @@ CMakeFiles/3.31.6/CMakeCXXCompiler.cmake:
 
 /media/linhlinh/learn/nckh/network-ids/src/capture/packet_capture.hpp:
 
+/usr/lib/x86_64-linux-gnu/cmake/Qt6CoreTools/Qt6CoreToolsVersionlessTargets.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6/FindWrapAtomic.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicCMakeHelpers.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgetsPrivate/Qt6OpenGLWidgetsPrivateConfigVersion.cmake:
+
 /usr/lib/x86_64-linux-gnu/cmake/Qt6DBusTools/Qt6DBusToolsTargets.cmake:
 
 /usr/include/pcap/funcattrs.h:
 
 /media/linhlinh/learn/nckh/network-ids/src/layer1/protocol_anomaly.cpp:
 
+/usr/lib/x86_64-linux-gnu/cmake/Qt6DBus/Qt6DBusConfigVersionImpl.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6ChartsPrivate/Qt6ChartsPrivateAdditionalTargetInfo.cmake:
+
 /usr/include/math.h:
 
 /usr/include/x86_64-linux-gnu/bits/types/__mbstate_t.h:
-
-/usr/include/x86_64-linux-gnu/bits/types/sigval_t.h:
-
-/usr/include/pcap.h:
-
-/usr/include/x86_64-linux-gnu/bits/types/struct_timeval.h:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/Qt6Config.cmake:
 
@@ -5064,7 +6019,23 @@ CMakeFiles/3.31.6/CMakeCXXCompiler.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicSbomQtEntityHelpers.cmake:
 
+/usr/include/c++/15/pstl/pstl_config.h:
+
+/usr/include/c++/15/bits/basic_ios.tcc:
+
+/usr/share/cmake-3.31/Modules/CMakeGenericSystem.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfigExtras.cmake:
+
+/lib/x86_64-linux-gnu/libm.so.6:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgets/Qt6OpenGLWidgetsConfigVersionImpl.cmake:
+
+/usr/include/c++/15/bits/localefwd.h:
+
 /usr/lib/x86_64-linux-gnu/cmake/Qt6GuiPrivate/Qt6GuiPrivateConfigVersionImpl.cmake:
+
+/usr/include/x86_64-linux-gnu/bits/fcntl-linux.h:
 
 /media/linhlinh/learn/nckh/network-ids/src/layer1/protocol_anomaly.hpp:
 
@@ -5102,6 +6073,12 @@ CMakeFiles/3.31.6/CMakeCXXCompiler.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/Qt6VersionlessAliasTargets.cmake:
 
+/usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateTargets.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6/FindWrapOpenGL.cmake:
+
+/media/linhlinh/learn/nckh/network-ids/src/dashboard/stats_collector.hpp:
+
 /usr/lib/x86_64-linux-gnu/cmake/Qt6DBus/Qt6DBusConfig.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsTools/Qt6WidgetsToolsDependencies.cmake:
@@ -5116,14 +6093,6 @@ CMakeFiles/3.31.6/CMakeCXXCompiler.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6Charts/Qt6ChartsTargets-none.cmake:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6CorePrivate/Qt6CorePrivateConfig.cmake:
-
-/usr/include/c++/15/bits/std_function.h:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtFeatureCommon.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6ChartsPrivate/Qt6ChartsPrivateVersionlessAliasTargets.cmake:
-
 /usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgetsPrivate/Qt6OpenGLWidgetsPrivateConfig.cmake:
 
 /media/linhlinh/learn/nckh/network-ids/src/layer1/dispatcher.hpp:
@@ -5132,19 +6101,49 @@ CMakeFiles/3.31.6/CMakeCXXCompiler.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6Widgets/Qt6WidgetsTargets.cmake:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicCMakeVersionHelpers.cmake:
+/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicAppleHelpers.cmake:
 
-/lib/x86_64-linux-gnu/libc.so.6:
+/usr/include/c++/15/ratio:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfigVersion.cmake:
+/media/linhlinh/learn/nckh/network-ids/src/layer2/feature_extractor.cpp:
 
 /usr/share/cmake-3.31/Modules/FindVulkan.cmake:
 
 /usr/include/c++/15/ext/numeric_traits.h:
 
+/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.hpp:
+
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicPluginHelpers.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6CorePrivate/Qt6CorePrivateConfigVersion.cmake:
+
+/lib/x86_64-linux-gnu/libc.so.6:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfigVersion.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicCMakeVersionHelpers.cmake:
+
+/media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp:
+
+/usr/include/x86_64-linux-gnu/bits/stdint-intn.h:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicFindPackageHelpers.cmake:
+
+/usr/include/c++/15/bits/predefined_ops.h:
+
+/usr/include/c++/15/backward/auto_ptr.h:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgetsPrivate/Qt6OpenGLWidgetsPrivateDependencies.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfig.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtFeatureCommon.cmake:
+
+/usr/include/c++/15/bits/std_function.h:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6ChartsPrivate/Qt6ChartsPrivateVersionlessAliasTargets.cmake:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6CorePrivate/Qt6CorePrivateConfig.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicPluginHelpers_v2.cmake:
 
@@ -5160,12 +6159,6 @@ CMakeFiles/3.31.6/CMakeCXXCompiler.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicSbomAttributionHelpers.cmake:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6/FindWrapAtomic.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicCMakeHelpers.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6CoreTools/Qt6CoreToolsVersionlessTargets.cmake:
-
 /usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateConfigVersionImpl.cmake:
 
 /usr/include/x86_64-linux-gnu/sys/ucontext.h:
@@ -5175,8 +6168,6 @@ CMakeFiles/3.31.6/CMakeCXXCompiler.cmake:
 /usr/share/cmake-3.31/Modules/CMakeCheckCompilerFlagCommonPatterns.cmake:
 
 /usr/include/x86_64-linux-gnu/bits/types/struct_iovec.h:
-
-/usr/include/x86_64-linux-gnu/sys/socket.h:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicSbomDepHelpers.cmake:
 
@@ -5193,24 +6184,6 @@ CMakeFiles/3.31.6/CMakeCXXCompiler.cmake:
 /usr/include/x86_64-linux-gnu/c++/15/bits/ctype_inline.h:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfigVersionImpl.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgetsPrivate/Qt6OpenGLWidgetsPrivateConfigVersion.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicAppleHelpers.cmake:
-
-/usr/include/c++/15/ratio:
-
-/media/linhlinh/learn/nckh/network-ids/src/layer2/feature_extractor.cpp:
-
-/usr/share/cmake-3.31/Modules/CMakeGenericSystem.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreConfigExtras.cmake:
-
-/lib/x86_64-linux-gnu/libm.so.6:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGLWidgets/Qt6OpenGLWidgetsConfigVersionImpl.cmake:
-
-/usr/include/c++/15/bits/localefwd.h:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicSbomPythonHelpers.cmake:
 
@@ -5236,15 +6209,17 @@ CMakeFiles/3.31.6/CMakeCXXCompiler.cmake:
 
 /usr/include/c++/15/bits/stl_algobase.h:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6DBus/Qt6DBusDependencies.cmake:
+/usr/lib/x86_64-linux-gnu/cmake/Qt6GuiPrivate/Qt6GuiPrivateConfig.cmake:
+
+/usr/include/errno.h:
+
+/usr/lib/x86_64-linux-gnu/cmake/Qt6GuiTools/Qt6GuiToolsTargets-none.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicWalkLibsHelpers.cmake:
 
 /usr/include/x86_64-linux-gnu/bits/environments.h:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6Charts/Qt6ChartsAdditionalTargetInfo.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6DBus/Qt6DBusMacros.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6Charts/Qt6ChartsConfigVersionImpl.cmake:
 
@@ -5262,25 +6237,19 @@ CMakeFiles/network_ids.dir/network_ids_autogen/mocs_compilation.cpp.o:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6ChartsPrivate/Qt6ChartsPrivateConfig.cmake:
 
-/usr/share/cmake-3.31/Modules/Platform/Linker/Linux-GNU.cmake:
-
-/usr/include/x86_64-linux-gnu/bits/types/struct_tm.h:
-
-/usr/share/cmake-3.31/Modules/CMakeFindDependencyMacro.cmake:
-
 /usr/include/x86_64-linux-gnu/bits/signum-generic.h:
 
 /media/linhlinh/learn/nckh/network-ids/CMakeLists.txt:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6Charts/Qt6ChartsVersionlessAliasTargets.cmake:
 
+/usr/include/fcntl.h:
+
 /usr/include/c++/15/tr1/modified_bessel_func.tcc:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6ChartsPrivate/Qt6ChartsPrivateConfigVersionImpl.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreAdditionalTargetInfo.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreMacros.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6CorePrivate/Qt6CorePrivateVersionlessAliasTargets.cmake:
 
@@ -5289,6 +6258,8 @@ CMakeFiles/network_ids.dir/network_ids_autogen/mocs_compilation.cpp.o:
 /usr/lib/x86_64-linux-gnu/cmake/Qt6/Qt6ConfigVersion.cmake:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6CoreTools/Qt6CoreToolsConfig.cmake:
+
+/usr/include/linux/stat.h:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt6CoreTools/Qt6CoreToolsConfigVersion.cmake:
 
@@ -5299,6 +6270,8 @@ CMakeFiles/network_ids.dir/network_ids_autogen/mocs_compilation.cpp.o:
 /usr/include/x86_64-linux-gnu/bits/fp-logb.h:
 
 /usr/include/c++/15/array:
+
+CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o:
 
 /media/linhlinh/learn/nckh/network-ids/src/layer1/signature_engine.hpp:
 
@@ -5312,31 +6285,33 @@ CMakeFiles/network_ids.dir/network_ids_autogen/mocs_compilation.cpp.o:
 
 /usr/share/cmake-3.31/Modules/Internal/CheckFlagCommonConfig.cmake:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6ChartsPrivate/Qt6ChartsPrivateAdditionalTargetInfo.cmake:
+/usr/include/x86_64-linux-gnu/bits/types/sigval_t.h:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6DBus/Qt6DBusConfigVersionImpl.cmake:
+/usr/include/pcap.h:
 
-/usr/include/x86_64-linux-gnu/bits/types/sigevent_t.h:
+/usr/include/x86_64-linux-gnu/bits/types/struct_timeval.h:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6OpenGL/Qt6OpenGLConfigVersion.cmake:
+/usr/include/x86_64-linux-gnu/bits/types/struct_tm.h:
 
-/usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h:
+/usr/share/cmake-3.31/Modules/CMakeFindDependencyMacro.cmake:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6WidgetsPrivate/Qt6WidgetsPrivateTargets.cmake:
+/usr/share/cmake-3.31/Modules/Platform/Linker/Linux-GNU.cmake:
 
-/media/linhlinh/learn/nckh/network-ids/src/dashboard/stats_collector.hpp:
+/usr/include/x86_64-linux-gnu/bits/types/struct_sigstack.h:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6/FindWrapOpenGL.cmake:
+/usr/include/c++/15/functional:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6DBus/Qt6DBusTargets-none.cmake:
+/usr/share/cmake-3.31/Modules/Platform/Linux-GNU-CXX.cmake:
 
-/usr/lib/x86_64-linux-gnu/cmake/Qt6DBus/Qt6DBusTargets.cmake:
+/usr/include/c++/15/bits/ostream_insert.h:
 
-/usr/include/c++/15/bits/parse_numbers.h:
+/usr/lib/x86_64-linux-gnu/cmake/Qt6Core/Qt6CoreVersionlessAliasTargets.cmake:
 
-/usr/include/sched.h:
+/usr/share/cmake-3.31/Modules/Platform/Linux-GNU.cmake:
 
-/usr/include/netdb.h:
+/usr/include/c++/15/bits/stl_raw_storage_iter.h:
+
+/usr/include/c++/15/bits/ostream.h:
 
 /usr/include/x86_64-linux-gnu/bits/types/stack_t.h:
 
@@ -5400,13 +6375,11 @@ CMakeFiles/network_ids.dir/src/common/packet_info.cpp.o:
 
 /usr/include/c++/15/bits/atomic_lockfree_defines.h:
 
-/usr/include/c++/15/pstl/pstl_config.h:
-
-/usr/include/c++/15/bits/basic_ios.tcc:
-
 /usr/include/c++/15/bits/basic_string.tcc:
 
 /usr/include/c++/15/bits/streambuf.tcc:
+
+/media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp:
 
 /usr/include/c++/15/bits/charconv.h:
 
@@ -5417,6 +6390,8 @@ CMakeFiles/network_ids.dir/src/common/packet_info.cpp.o:
 /usr/include/c++/15/bits/cxxabi_forced.h:
 
 /usr/include/c++/15/compare:
+
+/usr/include/x86_64-linux-gnu/sys/mman.h:
 
 /usr/include/c++/15/bits/cxxabi_init_exception.h:
 
@@ -5510,11 +6485,17 @@ CMakeFiles/network_ids.dir/src/common/packet_info.cpp.o:
 
 /usr/include/c++/15/bits/stl_bvector.h:
 
-/usr/include/c++/15/bits/memory_resource.h:
-
 /usr/include/x86_64-linux-gnu/sys/time.h:
 
+/usr/include/c++/15/bits/memory_resource.h:
+
 /usr/include/c++/15/bits/stl_function.h:
+
+CMakeFiles/network_ids.dir/src/layer1/dispatcher.cpp.o:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/include/stdarg.h:
+
+/usr/include/c++/15/bits/stl_iterator.h:
 
 /usr/include/c++/15/bits/stl_iterator_base_types.h:
 
@@ -5564,14 +6545,6 @@ CMakeFiles/network_ids.dir/src/common/packet_info.cpp.o:
 
 /usr/include/c++/15/unordered_map:
 
-/usr/include/c++/15/cstddef:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6GuiPrivate/Qt6GuiPrivateConfig.cmake:
-
-/usr/lib/x86_64-linux-gnu/cmake/Qt6GuiTools/Qt6GuiToolsTargets-none.cmake:
-
-/usr/include/errno.h:
-
 /usr/lib/x86_64-linux-gnu/cmake/Qt6ChartsPrivate/Qt6ChartsPrivateConfigVersion.cmake:
 
 /usr/include/c++/15/bits/stl_pair.h:
@@ -5595,8 +6568,6 @@ CMakeFiles/network_ids.dir/src/common/packet_info.cpp.o:
 /usr/include/c++/15/bits/shared_ptr.h:
 
 /usr/include/c++/15/iomanip:
-
-/usr/include/x86_64-linux-gnu/sys/single_threaded.h:
 
 /usr/include/c++/15/iosfwd:
 
@@ -5770,6 +6741,8 @@ CMakeFiles/network_ids.dir/src/layer1/signature_engine.cpp.o:
 
 /usr/include/x86_64-linux-gnu/bits/timex.h:
 
+/usr/include/x86_64-linux-gnu/bits/statx-generic.h:
+
 /usr/include/wchar.h:
 
 /usr/include/x86_64-linux-gnu/bits/stdlib-float.h:
@@ -5796,6 +6769,8 @@ CMakeFiles/network_ids.dir/src/layer1/signature_engine.cpp.o:
 
 /usr/include/x86_64-linux-gnu/bits/types/locale_t.h:
 
+/usr/include/linux/falloc.h:
+
 /usr/include/c++/15/condition_variable:
 
 /usr/bin/cmake:
@@ -5812,11 +6787,15 @@ CMakeFiles/network_ids.dir/src/layer1/signature_engine.cpp.o:
 
 /usr/include/x86_64-linux-gnu/bits/types/timer_t.h:
 
+/usr/include/x86_64-linux-gnu/bits/struct_stat.h:
+
 /usr/include/signal.h:
 
 /usr/include/x86_64-linux-gnu/bits/types/wint_t.h:
 
 /usr/include/x86_64-linux-gnu/bits/uintn-identity.h:
+
+/usr/include/x86_64-linux-gnu/bits/stat.h:
 
 /usr/include/x86_64-linux-gnu/bits/waitstatus.h:
 
@@ -5857,11 +6836,3 @@ CMakeFiles/network_ids.dir/src/layer1/signature_engine.cpp.o:
 /usr/lib/x86_64-linux-gnu/libgcc_s.so.1:
 
 /usr/include/x86_64-linux-gnu/gnu/stubs.h:
-
-/usr/include/x86_64-linux-gnu/sys/select.h:
-
-CMakeFiles/network_ids.dir/src/layer1/dispatcher.cpp.o:
-
-/usr/include/c++/15/bits/stl_iterator.h:
-
-/usr/lib/gcc/x86_64-linux-gnu/15/include/stdarg.h:

@@ -317,6 +317,48 @@ CMakeFiles/network_ids.dir/src/dashboard/stats_collector.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids.dir/src/dashboard/stats_collector.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/dashboard/stats_collector.cpp -o CMakeFiles/network_ids.dir/src/dashboard/stats_collector.cpp.s
 
+CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o: CMakeFiles/network_ids.dir/flags.make
+CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp
+CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o: CMakeFiles/network_ids.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Building CXX object CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o -MF CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o.d -o CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp
+
+CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp > CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.i
+
+CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/pcap_io/packet_ring_buffer.cpp -o CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.s
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o: CMakeFiles/network_ids.dir/flags.make
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o: CMakeFiles/network_ids.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_20) "Building CXX object CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o -MF CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o.d -o CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp > CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.i
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_reader.cpp -o CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.s
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o: CMakeFiles/network_ids.dir/flags.make
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o: /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o: CMakeFiles/network_ids.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_21) "Building CXX object CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o -MF CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o.d -o CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o -c /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp > CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.i
+
+CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/linhlinh/learn/nckh/network-ids/src/pcap_io/pcap_writer.cpp -o CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.s
+
 # Object files for target network_ids
 network_ids_OBJECTS = \
 "CMakeFiles/network_ids.dir/network_ids_autogen/mocs_compilation.cpp.o" \
@@ -335,7 +377,10 @@ network_ids_OBJECTS = \
 "CMakeFiles/network_ids.dir/src/layer2/ml_engine.cpp.o" \
 "CMakeFiles/network_ids.dir/src/layer2/feedback_loop.cpp.o" \
 "CMakeFiles/network_ids.dir/src/dashboard/alert_manager.cpp.o" \
-"CMakeFiles/network_ids.dir/src/dashboard/stats_collector.cpp.o"
+"CMakeFiles/network_ids.dir/src/dashboard/stats_collector.cpp.o" \
+"CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o" \
+"CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o" \
+"CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o"
 
 # External object files for target network_ids
 network_ids_EXTERNAL_OBJECTS =
@@ -357,11 +402,14 @@ network_ids: CMakeFiles/network_ids.dir/src/layer2/ml_engine.cpp.o
 network_ids: CMakeFiles/network_ids.dir/src/layer2/feedback_loop.cpp.o
 network_ids: CMakeFiles/network_ids.dir/src/dashboard/alert_manager.cpp.o
 network_ids: CMakeFiles/network_ids.dir/src/dashboard/stats_collector.cpp.o
+network_ids: CMakeFiles/network_ids.dir/src/pcap_io/packet_ring_buffer.cpp.o
+network_ids: CMakeFiles/network_ids.dir/src/pcap_io/pcap_reader.cpp.o
+network_ids: CMakeFiles/network_ids.dir/src/pcap_io/pcap_writer.cpp.o
 network_ids: CMakeFiles/network_ids.dir/build.make
 network_ids: CMakeFiles/network_ids.dir/compiler_depend.ts
 network_ids: /usr/lib/x86_64-linux-gnu/libpcap.so
 network_ids: CMakeFiles/network_ids.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Linking CXX executable network_ids"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/media/linhlinh/learn/nckh/network-ids/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_22) "Linking CXX executable network_ids"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/network_ids.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

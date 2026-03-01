@@ -446,6 +446,11 @@ CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o: \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qeventloop.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qdeadlinetimer.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/qelapsedtimer.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/QDateTime \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qdatetime.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qcalendar.h \
+ /usr/include/c++/15/deque /usr/include/c++/15/bits/stl_deque.h \
+ /usr/include/c++/15/bits/deque.tcc \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/alert_manager.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/../common/threat_types.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/../layer2/ml_engine.hpp \
@@ -459,8 +464,7 @@ CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o: \
  /usr/include/c++/15/condition_variable \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../dashboard/../layer2/onnx_model.hpp \
  /usr/include/c++/15/thread /usr/include/c++/15/bits/std_thread.h \
- /usr/include/c++/15/bits/this_thread_sleep.h /usr/include/c++/15/deque \
- /usr/include/c++/15/bits/stl_deque.h /usr/include/c++/15/bits/deque.tcc \
+ /usr/include/c++/15/bits/this_thread_sleep.h \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../common/metrics.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../layer1/dispatcher.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../layer1/worker_thread.hpp \
@@ -468,6 +472,7 @@ CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o: \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../layer1/signature_engine.hpp \
  /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../layer1/protocol_anomaly.hpp \
  /usr/include/c++/15/queue /usr/include/c++/15/bits/stl_queue.h \
+ /media/linhlinh/learn/nckh/network-ids/src/ui/qt/../../pcap_io/packet_ring_buffer.hpp \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QHeaderView \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qheaderview.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QDialog \
@@ -480,9 +485,6 @@ CMakeFiles/network_ids_ui.dir/src/ui/qt/alert_panel.cpp.o: \
  /usr/include/x86_64-linux-gnu/qt6/QtGui/qpen.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QDialogButtonBox \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qdialogbuttonbox.h \
- /usr/include/x86_64-linux-gnu/qt6/QtCore/QDateTime \
- /usr/include/x86_64-linux-gnu/qt6/QtCore/qdatetime.h \
- /usr/include/x86_64-linux-gnu/qt6/QtCore/qcalendar.h \
  /usr/include/arpa/inet.h /usr/include/netinet/in.h \
  /usr/include/x86_64-linux-gnu/sys/socket.h \
  /usr/include/x86_64-linux-gnu/bits/types/struct_iovec.h \
