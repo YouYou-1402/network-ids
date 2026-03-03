@@ -1607,3 +1607,64 @@
 2026-02-28 22:45:54.614 [INFO ] Dispatcher stopped
 2026-02-28 22:45:54.615 [INFO ] === System stopped cleanly ===
 2026-02-28 22:45:54.672 [INFO ] MLEngine stopped. Jobs processed: 120, Anomalies: 50
+2026-03-02 14:59:14.261 [INFO ] System starting...
+2026-03-02 14:59:14.262 [INFO ] SignatureEngine initialized with 4 signature groups
+2026-03-02 14:59:14.262 [INFO ] WorkerThread 0 started
+2026-03-02 14:59:14.262 [INFO ] WorkerThread 0 running
+2026-03-02 14:59:14.262 [INFO ] SignatureEngine initialized with 4 signature groups
+2026-03-02 14:59:14.262 [INFO ] WorkerThread 1 started
+2026-03-02 14:59:14.262 [INFO ] SignatureEngine initialized with 4 signature groups
+2026-03-02 14:59:14.262 [INFO ] WorkerThread 2 started
+2026-03-02 14:59:14.262 [INFO ] WorkerThread 1 running
+2026-03-02 14:59:14.262 [INFO ] WorkerThread 2 running
+2026-03-02 14:59:14.262 [INFO ] SignatureEngine initialized with 4 signature groups
+2026-03-02 14:59:14.262 [INFO ] WorkerThread 3 started
+2026-03-02 14:59:14.262 [INFO ] Dispatcher started with 4 workers
+2026-03-02 14:59:14.262 [INFO ] Layer 1 IPS engine started (4 workers)
+2026-03-02 14:59:14.262 [INFO ] MLEngine: Using MOCK models (no ONNX Runtime)
+2026-03-02 14:59:14.262 [INFO ] MLEngine started
+2026-03-02 14:59:14.262 [INFO ] Layer 2 ML engine started
+2026-03-02 14:59:14.262 [INFO ] WorkerThread 3 running
+2026-03-02 14:59:14.262 [INFO ] MLEngine inference loop running
+2026-03-02 14:59:14.289 [INFO ] Live capture opened on interface: wlan0
+2026-03-02 14:59:14.289 [INFO ] Live capture on interface: wlan0
+2026-03-02 14:59:14.289 [INFO ] Capture loop started. Press Ctrl+C to stop.
+2026-03-02 14:59:14.289 [INFO ] Capture started
+2026-03-02 14:59:15.281 [WARN ] Slow DDoS (Slowloris): HTTP header incomplete after 1817.948215s from 192.168.138.79:39262-20.42.65.93:443-6
+2026-03-02 14:59:15.281 [WARN ] Slow DDoS (Slowloris): HTTP header incomplete after 1817.948208s from 192.168.138.79:60938-98.85.139.67:443-6
+2026-03-02 14:59:15.281 [INFO ] [33m[ALERT] SLOW_DDOS | 192.168.138.79:39262 | [L1] SLOW_DDOS from flow 192.168.138.79:39262-20.42.65.93:443-6[0m
+2026-03-02 14:59:15.281 [INFO ] [33m[ALERT] SLOW_DDOS | 192.168.138.79:60938 | [L1] SLOW_DDOS from flow 192.168.138.79:60938-98.85.139.67:443-6[0m
+2026-03-02 14:59:15.281 [WARN ] Slow DDoS (Slowloris): HTTP header incomplete after 1817.948319s from 192.168.138.79:39262-20.42.65.93:443-6
+2026-03-02 14:59:15.281 [INFO ] [33m[ALERT] SLOW_DDOS | 192.168.138.79:39262 | [L1] SLOW_DDOS from flow 192.168.138.79:39262-20.42.65.93:443-6[0m
+2026-03-02 14:59:16.309 [WARN ] Slow DDoS (Slowloris): HTTP header incomplete after 1818.976155s from 192.168.138.79:51088-23.96.124.68:443-6
+2026-03-02 14:59:16.309 [INFO ] [33m[ALERT] SLOW_DDOS | 192.168.138.79:51088 | [L1] SLOW_DDOS from flow 192.168.138.79:51088-23.96.124.68:443-6[0m
+2026-03-02 14:59:16.309 [WARN ] Slow DDoS (Slowloris): HTTP header incomplete after 1818.976248s from 192.168.138.79:51088-23.96.124.68:443-6
+2026-03-02 14:59:16.309 [INFO ] [33m[ALERT] SLOW_DDOS | 192.168.138.79:51088 | [L1] SLOW_DDOS from flow 192.168.138.79:51088-23.96.124.68:443-6[0m
+2026-03-02 14:59:16.309 [WARN ] Slow DDoS (Slowloris): HTTP header incomplete after 1818.976309s from 192.168.138.79:36368-163.70.159.7:443-6
+2026-03-02 14:59:16.309 [INFO ] [33m[ALERT] SLOW_DDOS | 192.168.138.79:36368 | [L1] SLOW_DDOS from flow 192.168.138.79:36368-163.70.159.7:443-6[0m
+2026-03-02 14:59:17.333 [WARN ] Slow DDoS (Slowloris): HTTP header incomplete after 1820.000160s from 192.168.138.79:36368-163.70.159.7:443-6
+2026-03-02 14:59:17.333 [INFO ] [33m[ALERT] SLOW_DDOS | 192.168.138.79:36368 | [L1] SLOW_DDOS from flow 192.168.138.79:36368-163.70.159.7:443-6[0m
+2026-03-02 14:59:18.357 [WARN ] Slow DDoS (Slowloris): HTTP header incomplete after 1821.024138s from 192.168.138.79:42796-163.70.159.6:443-6
+2026-03-02 14:59:18.357 [INFO ] [33m[ALERT] SLOW_DDOS | 192.168.138.79:42796 | [L1] SLOW_DDOS from flow 192.168.138.79:42796-163.70.159.6:443-6[0m
+2026-03-02 14:59:18.357 [WARN ] Slow DDoS (Slowloris): HTTP header incomplete after 1821.024284s from 192.168.138.79:42796-163.70.159.6:443-6
+2026-03-02 14:59:18.357 [INFO ] [33m[ALERT] SLOW_DDOS | 192.168.138.79:42796 | [L1] SLOW_DDOS from flow 192.168.138.79:42796-163.70.159.6:443-6[0m
+2026-03-02 14:59:20.401 [WARN ] Slow DDoS (Slowloris): HTTP header incomplete after 1823.068195s from 192.168.138.79:52320-23.96.124.68:443-6
+2026-03-02 14:59:20.401 [INFO ] [33m[ALERT] SLOW_DDOS | 192.168.138.79:52320 | [L1] SLOW_DDOS from flow 192.168.138.79:52320-23.96.124.68:443-6[0m
+2026-03-02 14:59:23.005 [INFO ] Capture stopped
+2026-03-02 14:59:23.005 [INFO ] Shutdown sequence started
+2026-03-02 14:59:23.005 [INFO ] PacketCapture stopped
+2026-03-02 14:59:23.291 [INFO ] L2 feeder thread stopped
+2026-03-02 14:59:23.492 [INFO ] MLEngine stopped. Jobs processed: 10, Anomalies: 0
+2026-03-02 14:59:23.492 [INFO ] MLEngine stopped
+2026-03-02 14:59:23.505 [INFO ] WorkerThread 0 stopped
+2026-03-02 14:59:23.590 [INFO ] WorkerThread 1 stopped
+2026-03-02 14:59:23.672 [INFO ] WorkerThread 2 stopped
+2026-03-02 14:59:23.717 [INFO ] WorkerThread 3 stopped
+2026-03-02 14:59:23.718 [INFO ] WorkerThread 0 stopped
+2026-03-02 14:59:23.718 [INFO ] WorkerThread 1 stopped
+2026-03-02 14:59:23.718 [INFO ] WorkerThread 2 stopped
+2026-03-02 14:59:23.718 [INFO ] WorkerThread 3 stopped
+2026-03-02 14:59:23.718 [INFO ] Dispatcher stopped
+2026-03-02 14:59:23.718 [INFO ] Dispatcher stopped
+2026-03-02 14:59:23.718 [INFO ] === System stopped cleanly ===
+2026-03-02 14:59:23.781 [INFO ] MLEngine stopped. Jobs processed: 10, Anomalies: 0

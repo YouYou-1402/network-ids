@@ -47,8 +47,8 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         "onSystemStatusChanged",
         "running",
         "onToggleCapture",
-        "onAbout",
-        "updateUptime"
+        "updateUptime",
+        "onAbout"
     };
 
     QtMocHelpers::UintData qt_methods {
@@ -62,9 +62,9 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         }}),
         // Slot 'onToggleCapture'
         QtMocHelpers::SlotData<void()>(7, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onAbout'
-        QtMocHelpers::SlotData<void()>(8, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'updateUptime'
+        QtMocHelpers::SlotData<void()>(8, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'onAbout'
         QtMocHelpers::SlotData<void()>(9, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
@@ -92,8 +92,8 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 0: _t->onMetricsUpdated((*reinterpret_cast< std::add_pointer_t<MetricsSnapshot>>(_a[1]))); break;
         case 1: _t->onSystemStatusChanged((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
         case 2: _t->onToggleCapture(); break;
-        case 3: _t->onAbout(); break;
-        case 4: _t->updateUptime(); break;
+        case 3: _t->updateUptime(); break;
+        case 4: _t->onAbout(); break;
         default: ;
         }
     }

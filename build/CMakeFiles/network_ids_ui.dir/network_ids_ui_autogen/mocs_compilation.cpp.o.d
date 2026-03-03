@@ -453,15 +453,15 @@ CMakeFiles/network_ids_ui.dir/network_ids_ui_autogen/mocs_compilation.cpp.o: \
  /usr/include/c++/15/deque /usr/include/c++/15/bits/stl_deque.h \
  /usr/include/c++/15/bits/deque.tcc \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../dashboard/alert_manager.hpp \
+ /usr/include/c++/15/mutex /usr/include/c++/15/bits/std_mutex.h \
+ /usr/include/c++/15/bits/unique_lock.h \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../dashboard/../common/threat_types.hpp \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../dashboard/../layer2/ml_engine.hpp \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../dashboard/../layer2/data_queue.hpp \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../dashboard/../layer2/feature_extractor.hpp \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../dashboard/../layer2/../layer1/flow_state.hpp \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../dashboard/../layer2/../common/packet_info.hpp \
- /usr/include/x86_64-linux-gnu/sys/time.h /usr/include/c++/15/mutex \
- /usr/include/c++/15/bits/std_mutex.h \
- /usr/include/c++/15/bits/unique_lock.h \
+ /usr/include/x86_64-linux-gnu/sys/time.h \
  /usr/include/c++/15/condition_variable \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../dashboard/../layer2/onnx_model.hpp \
  /usr/include/c++/15/thread /usr/include/c++/15/bits/std_thread.h \
@@ -500,15 +500,12 @@ CMakeFiles/network_ids_ui.dir/network_ids_ui_autogen/mocs_compilation.cpp.o: \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/main_window.hpp \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QMainWindow \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qmainwindow.h \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QSplitter \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qsplitter.h \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QStatusBar \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qstatusbar.h \
- /usr/include/x86_64-linux-gnu/qt6/QtGui/QAction \
- /usr/include/x86_64-linux-gnu/qt6/QtGui/qaction.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTabWidget \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtabwidget.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCore/QTime \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QStatusBar \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qstatusbar.h \
+ /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/moc_metrics_widget.cpp \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/metrics_widget.hpp \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QLCDNumber \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qlcdnumber.h \
@@ -516,6 +513,96 @@ CMakeFiles/network_ids_ui.dir/network_ids_ui_autogen/mocs_compilation.cpp.o: \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qprogressbar.h \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QGroupBox \
  /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qgroupbox.h \
+ /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/moc_packet_detail_tree.cpp \
+ /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/packet_detail_tree.hpp \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTreeWidget \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreewidget.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreeview.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreewidgetitemiterator.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTreeWidgetItem \
+ /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/moc_packet_list_model.cpp \
+ /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/packet_list_model.hpp \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/QAbstractTableModel \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qabstractitemmodel.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtGui/QColor \
+ /usr/include/x86_64-linux-gnu/qt6/QtGui/qcolor.h \
+ /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/moc_pcap_tab.cpp \
+ /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/pcap_tab.hpp \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QSplitter \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qsplitter.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTableView \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtableview.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QScrollBar \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qscrollbar.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QToolBar \
+ /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtoolbar.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/QFileInfo \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qfileinfo.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qfile.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qfiledevice.h \
+ /usr/include/c++/15/filesystem /usr/include/c++/15/bits/fs_fwd.h \
+ /usr/include/c++/15/bits/fs_path.h /usr/include/c++/15/locale \
+ /usr/include/c++/15/bits/locale_facets.h /usr/include/c++/15/cwctype \
+ /usr/include/wctype.h /usr/include/x86_64-linux-gnu/bits/wctype-wchar.h \
+ /usr/include/x86_64-linux-gnu/c++/15/bits/ctype_base.h \
+ /usr/include/x86_64-linux-gnu/c++/15/bits/ctype_inline.h \
+ /usr/include/c++/15/bits/locale_facets.tcc \
+ /usr/include/c++/15/bits/locale_facets_nonio.h \
+ /usr/include/x86_64-linux-gnu/c++/15/bits/time_members.h \
+ /usr/include/x86_64-linux-gnu/c++/15/bits/messages_members.h \
+ /usr/include/libintl.h /usr/include/c++/15/bits/codecvt.h \
+ /usr/include/c++/15/bits/locale_facets_nonio.tcc \
+ /usr/include/c++/15/bits/locale_conv.h /usr/include/c++/15/iomanip \
+ /usr/include/c++/15/bits/quoted_string.h /usr/include/c++/15/sstream \
+ /usr/include/c++/15/istream /usr/include/c++/15/ios \
+ /usr/include/c++/15/bits/basic_ios.h \
+ /usr/include/c++/15/bits/basic_ios.tcc /usr/include/c++/15/ostream \
+ /usr/include/c++/15/bits/ostream.h /usr/include/c++/15/bits/ostream.tcc \
+ /usr/include/c++/15/bits/istream.tcc \
+ /usr/include/c++/15/bits/sstream.tcc /usr/include/c++/15/codecvt \
+ /usr/include/c++/15/bits/fs_dir.h /usr/include/c++/15/bits/fs_ops.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qdatetime.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qtimezone.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/QDir \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qdir.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qdirlisting.h \
+ /usr/include/x86_64-linux-gnu/qt6/QtCore/qfileinfo.h \
+ /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../pcap_io/pcap_reader.hpp \
+ /usr/include/x86_64-linux-gnu/sys/mman.h \
+ /usr/include/x86_64-linux-gnu/bits/mman.h \
+ /usr/include/x86_64-linux-gnu/bits/mman-map-flags-generic.h \
+ /usr/include/x86_64-linux-gnu/bits/mman-linux.h \
+ /usr/include/x86_64-linux-gnu/bits/mman-shared.h \
+ /usr/include/x86_64-linux-gnu/bits/mman_ext.h \
+ /usr/include/x86_64-linux-gnu/sys/stat.h \
+ /usr/include/x86_64-linux-gnu/bits/stat.h \
+ /usr/include/x86_64-linux-gnu/bits/struct_stat.h \
+ /usr/include/x86_64-linux-gnu/bits/statx.h /usr/include/linux/stat.h \
+ /usr/include/x86_64-linux-gnu/bits/statx-generic.h \
+ /usr/include/x86_64-linux-gnu/bits/types/struct_statx_timestamp.h \
+ /usr/include/x86_64-linux-gnu/bits/types/struct_statx.h \
+ /usr/include/fcntl.h /usr/include/x86_64-linux-gnu/bits/fcntl.h \
+ /usr/include/x86_64-linux-gnu/bits/fcntl-linux.h \
+ /usr/include/x86_64-linux-gnu/bits/types/struct_iovec.h \
+ /usr/include/linux/falloc.h \
+ /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../pcap_io/pcap_writer.hpp \
+ /usr/include/pcap.h /usr/include/pcap/pcap.h \
+ /usr/include/pcap/funcattrs.h /usr/include/pcap/compiler-tests.h \
+ /usr/include/pcap/pcap-inttypes.h /usr/include/inttypes.h \
+ /usr/include/pcap/socket.h /usr/include/x86_64-linux-gnu/sys/socket.h \
+ /usr/include/x86_64-linux-gnu/bits/socket.h \
+ /usr/include/x86_64-linux-gnu/bits/socket_type.h \
+ /usr/include/x86_64-linux-gnu/bits/sockaddr.h \
+ /usr/lib/linux/uapi/x86/asm/socket.h /usr/include/asm-generic/socket.h \
+ /usr/lib/linux/uapi/x86/asm/sockios.h /usr/include/asm-generic/sockios.h \
+ /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h \
+ /usr/include/netdb.h /usr/include/netinet/in.h \
+ /usr/include/x86_64-linux-gnu/bits/in.h /usr/include/rpc/netdb.h \
+ /usr/include/x86_64-linux-gnu/bits/types/sigevent_t.h \
+ /usr/include/x86_64-linux-gnu/bits/types/__sigval_t.h \
+ /usr/include/x86_64-linux-gnu/bits/netdb.h /usr/include/arpa/inet.h \
+ /usr/include/pcap/bpf.h /usr/include/pcap/dlt.h \
+ /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/moc_traffic_chart.cpp \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/traffic_chart.hpp \
  /usr/include/x86_64-linux-gnu/qt6/QtCharts/QChart \
  /usr/include/x86_64-linux-gnu/qt6/QtCharts/qchart.h \
@@ -583,60 +670,4 @@ CMakeFiles/network_ids_ui.dir/network_ids_ui_autogen/mocs_compilation.cpp.o: \
  /usr/include/x86_64-linux-gnu/qt6/QtGui/qimage.h \
  /usr/include/x86_64-linux-gnu/qt6/QtCharts/QValueAxis \
  /usr/include/x86_64-linux-gnu/qt6/QtCharts/qvalueaxis.h \
- /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/pcap_tab.hpp \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTableView \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtableview.h \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QToolBar \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtoolbar.h \
- /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/packet_list_model.hpp \
- /usr/include/x86_64-linux-gnu/qt6/QtCore/QAbstractTableModel \
- /usr/include/x86_64-linux-gnu/qt6/QtCore/qabstractitemmodel.h \
- /usr/include/x86_64-linux-gnu/qt6/QtGui/QColor \
- /usr/include/x86_64-linux-gnu/qt6/QtGui/qcolor.h \
- /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/packet_detail_tree.hpp \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTreeWidget \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreewidget.h \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreeview.h \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/qtreewidgetitemiterator.h \
- /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QTreeWidgetItem \
- /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../pcap_io/pcap_reader.hpp \
- /usr/include/x86_64-linux-gnu/sys/mman.h \
- /usr/include/x86_64-linux-gnu/bits/mman.h \
- /usr/include/x86_64-linux-gnu/bits/mman-map-flags-generic.h \
- /usr/include/x86_64-linux-gnu/bits/mman-linux.h \
- /usr/include/x86_64-linux-gnu/bits/mman-shared.h \
- /usr/include/x86_64-linux-gnu/bits/mman_ext.h \
- /usr/include/x86_64-linux-gnu/sys/stat.h \
- /usr/include/x86_64-linux-gnu/bits/stat.h \
- /usr/include/x86_64-linux-gnu/bits/struct_stat.h \
- /usr/include/x86_64-linux-gnu/bits/statx.h /usr/include/linux/stat.h \
- /usr/include/x86_64-linux-gnu/bits/statx-generic.h \
- /usr/include/x86_64-linux-gnu/bits/types/struct_statx_timestamp.h \
- /usr/include/x86_64-linux-gnu/bits/types/struct_statx.h \
- /usr/include/fcntl.h /usr/include/x86_64-linux-gnu/bits/fcntl.h \
- /usr/include/x86_64-linux-gnu/bits/fcntl-linux.h \
- /usr/include/x86_64-linux-gnu/bits/types/struct_iovec.h \
- /usr/include/linux/falloc.h \
- /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/../../../src/ui/qt/../../pcap_io/pcap_writer.hpp \
- /usr/include/pcap.h /usr/include/pcap/pcap.h \
- /usr/include/pcap/funcattrs.h /usr/include/pcap/compiler-tests.h \
- /usr/include/pcap/pcap-inttypes.h /usr/include/inttypes.h \
- /usr/include/pcap/socket.h /usr/include/x86_64-linux-gnu/sys/socket.h \
- /usr/include/x86_64-linux-gnu/bits/socket.h \
- /usr/include/x86_64-linux-gnu/bits/socket_type.h \
- /usr/include/x86_64-linux-gnu/bits/sockaddr.h \
- /usr/lib/linux/uapi/x86/asm/socket.h /usr/include/asm-generic/socket.h \
- /usr/lib/linux/uapi/x86/asm/sockios.h /usr/include/asm-generic/sockios.h \
- /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h \
- /usr/include/netdb.h /usr/include/netinet/in.h \
- /usr/include/x86_64-linux-gnu/bits/in.h /usr/include/rpc/netdb.h \
- /usr/include/x86_64-linux-gnu/bits/types/sigevent_t.h \
- /usr/include/x86_64-linux-gnu/bits/types/__sigval_t.h \
- /usr/include/x86_64-linux-gnu/bits/netdb.h /usr/include/arpa/inet.h \
- /usr/include/pcap/bpf.h /usr/include/pcap/dlt.h \
- /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/moc_metrics_widget.cpp \
- /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/moc_packet_detail_tree.cpp \
- /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/moc_packet_list_model.cpp \
- /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/moc_pcap_tab.cpp \
- /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/moc_traffic_chart.cpp \
  /media/linhlinh/learn/nckh/network-ids/build/network_ids_ui_autogen/WLEM7A2TAU/moc_ui_bridge.cpp

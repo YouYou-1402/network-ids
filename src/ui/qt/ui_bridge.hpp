@@ -1,3 +1,4 @@
+// ── ui_bridge.hpp ─────────────────────────────────────────────────────────────
 #pragma once
 #include <QObject>
 #include <QTimer>
@@ -12,7 +13,7 @@
 #include "../../layer2/ml_engine.hpp"
 #include "../../pcap_io/packet_ring_buffer.hpp"
 
-// ─── Snapshot structs ────────────────────────────────────────────────────────
+// ─── Snapshot structs ─────────────────────────────────────────────────────────
 struct MetricsSnapshot {
     uint64_t packets_captured = 0;
     uint64_t packets_dropped  = 0;
@@ -33,7 +34,7 @@ struct TrafficPoint {
     uint64_t alert_pps = 0;
 };
 
-// ─── UiBridge ────────────────────────────────────────────────────────────────
+// ─── UiBridge ─────────────────────────────────────────────────────────────────
 class UiBridge : public QObject {
     Q_OBJECT
 
@@ -44,22 +45,27 @@ public:
                       PacketRingBuffer& ring_buf,
                       QObject*          parent = nullptr);
 
-    void startPolling(int interval_ms = 100);
+    void startPolling(int interval_ms = 200);
     void stopPolling();
 
+    // Điều chỉnh batch size từ bên ngoài (MainWindow có thể gọi)
+    void setMaxBatchPerTick(uint64_t n) { max_batch_per_tick_ = n; }
+
 signals:
-    void metricsUpdated    (MetricsSnapshot snapshot);
-    void newAlerts         (std::vector<UnifiedAlert> alerts);
-    void trafficUpdated    (TrafficPoint point);
+    void metricsUpdated     (MetricsSnapshot snapshot);
+    void newAlerts          (std::vector<UnifiedAlert> alerts);
+    void trafficUpdated     (TrafficPoint point);
     void systemStatusChanged(bool running);
-    void newPacketRecords  (std::vector<PacketRecord> records);
+
+    // Batch packet signal — dùng Qt::QueuedConnection để không block capture
+    void newPacketRecords   (std::vector<PacketRecord> records);
 
 private slots:
     void onTimer();
 
 private:
     MetricsSnapshot buildMetricsSnapshot() const;
-    TrafficPoint    buildTrafficPoint();        // ← bỏ const, cần update state
+    TrafficPoint    buildTrafficPoint();
 
     AlertManager&     alert_manager_;
     Dispatcher&       dispatcher_;
@@ -67,18 +73,17 @@ private:
     PacketRingBuffer& ring_buf_;
     QTimer            timer_;
 
-    // ── Alert tracking ────────────────────────────────────────────────────────
-    size_t   last_alert_count_ = 0;
+    // Alert tracking
+    uint64_t last_alert_seq_      { 0 };
+    // size_t   last_alert_count_  { 0 };
 
-    // ── Live packet tracking ──────────────────────────────────────────────────
-    uint64_t last_sent_total_  = 0;
+    // Live packet tracking — chỉ gửi packet MỚI mỗi tick
+    uint64_t last_sent_seq_     { 0 };
 
-    // ── Adaptive batch ────────────────────────────────────────────────────────
-    static constexpr uint64_t MIN_BATCH = 50;
-    static constexpr uint64_t MAX_BATCH = 200;
-    uint64_t current_batch_   = MAX_BATCH;
+    // Adaptive batch: tự giảm khi PPS cao
+    uint64_t max_batch_per_tick_ { 300 };
 
-    // ── Sliding window PPS (fix bug *2) ───────────────────────────────────────
+    // Sliding window PPS
     struct PpsPoint {
         qint64   time_ms  = 0;
         uint64_t captured = 0;
@@ -86,5 +91,5 @@ private:
         uint64_t alerted  = 0;
     };
     std::deque<PpsPoint> pps_window_;
-    static constexpr int PPS_WINDOW_MS = 1000;  // sliding 1 giây
+    static constexpr int PPS_WINDOW_MS = 1000;
 };

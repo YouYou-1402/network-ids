@@ -1,69 +1,71 @@
+// ── main_window.hpp ───────────────────────────────────────────────────────────
 #pragma once
 #include <QMainWindow>
-#include <QSplitter>
-#include <QStatusBar>
-#include <QLabel>
-#include <QAction>
-#include <QTimer>
 #include <QTabWidget>
-#include <QPushButton>
-#include <memory>
+#include <QLabel>
+#include <QTimer>
 #include <QTime>
-
-#include "ui_bridge.hpp"
-#include "metrics_widget.hpp"
-#include "alert_panel.hpp"
-#include "traffic_chart.hpp"
-#include "pcap_tab.hpp"
-#include "../../pcap_io/packet_ring_buffer.hpp"
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <memory>
+#include <QStatusBar>
+// Forward declarations — tránh MOC redefinition
+class UiBridge;
+class PcapTab;
+class AlertPanel;
+class MetricsWidget;
+class TrafficChart;
+class AlertManager;
+class Dispatcher;
+class MLEngine;
+class PacketRingBuffer;
+struct MetricsSnapshot;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(AlertManager& alert_manager,
-                        Dispatcher&   dispatcher,
-                        MLEngine&     ml_engine,
+    explicit MainWindow(AlertManager&     alert_manager,
+                        Dispatcher&       dispatcher,
+                        MLEngine&         ml_engine,
                         PacketRingBuffer& ring_buf,
-                        QWidget*      parent = nullptr);
+                        QWidget*          parent = nullptr);
     ~MainWindow() override;
 
 protected:
     void closeEvent(QCloseEvent* event) override;
 
 private slots:
-    void onMetricsUpdated(MetricsSnapshot snapshot);
+    void onMetricsUpdated     (MetricsSnapshot snapshot);
     void onSystemStatusChanged(bool running);
-    void onToggleCapture();
-    void onAbout();
-    void updateUptime();
+    void onToggleCapture      ();
+    void updateUptime         ();
+    void onAbout              ();
 
 private:
-    void setupUI();
-    void setupMenuBar();
-    void setupStatusBar();
-    void applyDarkTheme();
-    void addPcapTab(const QString& filepath = "");
+    void setupUI        ();
+    void setupMenuBar   ();
+    void setupStatusBar ();
+    void applyDarkTheme ();
+    void addPcapTab     (const QString& filepath = {});
 
-    // ── Core bridge ───────────────────────────────────────────────────────────
+    // Core
     std::unique_ptr<UiBridge> bridge_;
+    QTime                     start_time_;
+    bool                      is_running_ { true };
 
-    // ── Widgets ───────────────────────────────────────────────────────────────
-    MetricsWidget* metrics_widget_;
-    TrafficChart*  traffic_chart_;
-    AlertPanel*    alert_panel_;
+    // Widgets
+    QTabWidget*    tab_widget_      { nullptr };
+    PcapTab*       live_tab_        { nullptr };
+    AlertPanel*    alert_panel_     { nullptr };
+    MetricsWidget* metrics_widget_  { nullptr };
+    TrafficChart*  traffic_chart_   { nullptr };
 
-    // ── Tab system ────────────────────────────────────────────────────────────
-    QTabWidget*    tab_widget_;
-    PcapTab*       live_tab_;
+    // Status bar
+    QLabel* status_running_ { nullptr };
+    QLabel* status_pps_     { nullptr };
+    QLabel* status_uptime_  { nullptr };
 
-    // ── Status bar ────────────────────────────────────────────────────────────
-    QLabel*        status_running_;
-    QLabel*        status_pps_;
-    QLabel*        status_uptime_;
-
-    // ── State ─────────────────────────────────────────────────────────────────
-    QTimer         uptime_timer_;
-    QTime          start_time_;
-    bool           is_running_ = true;
+    // Uptime timer
+    QTimer uptime_timer_;
 };

@@ -8,46 +8,54 @@
 #include <QAction>
 #include <QThread>
 #include <QApplication>
+#include <QFileInfo>
+#include <QDir>
 #include <thread>
+#include <algorithm>
 
+// ─── Constructor ──────────────────────────────────────────────────────────────
 PcapTab::PcapTab(Mode mode, QWidget* parent)
     : QWidget(parent)
     , mode_(mode)
-    // Ring buffer: 200K packets, giữ raw bytes 2000 gần nhất
-    , ring_buf_(200000, 2000)
+    , ring_buf_(200'000, 2000)          // 200K slots, giữ raw bytes 2000 gần nhất
     , reader_(std::make_unique<PcapReader>())
     , writer_(std::make_unique<PcapWriter>())
 {
-    tab_title_ = (mode == Mode::LIVE)
-        ? "🔴 Live Capture"
-        : "📂 No file";
-
+    tab_title_ = (mode == Mode::LIVE) ? "🔴 Live Capture" : "📂 No file";
     list_model_ = std::make_unique<PacketListModel>(ring_buf_, this);
 
     setupUI();
     setupToolbar();
 
-    // Live mode: flush pending packets mỗi 200ms
     if (mode_ == Mode::LIVE) {
+        // Flush pending → model mỗi RENDER_INTERVAL_NORMAL_MS
         connect(&live_timer_, &QTimer::timeout,
                 this, &PcapTab::onLiveTimer);
-        live_timer_.start(200);
+        live_timer_.start(RENDER_INTERVAL_NORMAL_MS);
+
+        // Đo PPS mỗi 1s → tự chỉnh render interval (Wireshark adaptive)
+        connect(&pps_check_timer_, &QTimer::timeout,
+                this, &PcapTab::onPpsCheckTimer);
+        pps_check_timer_.start(1000);
     }
 }
 
+// ─── Destructor ───────────────────────────────────────────────────────────────
 PcapTab::~PcapTab() {
     cancel_scan_ = true;
     live_timer_.stop();
+    pps_check_timer_.stop();
     if (writer_->isOpen())
         writer_->close();
 }
 
+// ─── setupUI ──────────────────────────────────────────────────────────────────
 void PcapTab::setupUI() {
     auto* root = new QVBoxLayout(this);
     root->setSpacing(0);
     root->setContentsMargins(0, 0, 0, 0);
 
-    // ── Toolbar placeholder (setupToolbar sẽ điền) ────────────────────────────
+    // Toolbar placeholder
     toolbar_ = new QToolBar(this);
     toolbar_->setMovable(false);
     toolbar_->setStyleSheet(
@@ -55,14 +63,15 @@ void PcapTab::setupUI() {
         "spacing: 4px; padding: 2px 4px; }"
         "QToolButton { color: #cccccc; background: #2a2a3e; "
         "border: 1px solid #444; border-radius: 3px; padding: 3px 8px; }"
-        "QToolButton:hover { background: #3a3a5a; }");
+        "QToolButton:hover { background: #3a3a5a; }"
+        "QToolButton:checked { background: #1a3a5a; color: #4488ff; }");
     root->addWidget(toolbar_);
 
-    // ── Filter bar ────────────────────────────────────────────────────────────
+    // Filter bar
     filter_bar_ = new FilterBar(this);
     root->addWidget(filter_bar_);
 
-    // ── Progress bar (ẩn khi không dùng) ─────────────────────────────────────
+    // Progress bar (ẩn khi không dùng)
     progress_bar_ = new QProgressBar(this);
     progress_bar_->setRange(0, 100);
     progress_bar_->setFixedHeight(4);
@@ -73,12 +82,12 @@ void PcapTab::setupUI() {
     progress_bar_->hide();
     root->addWidget(progress_bar_);
 
-    // ── Main splitter (vertical) ──────────────────────────────────────────────
+    // Main splitter (vertical)
     auto* v_split = new QSplitter(Qt::Vertical, this);
     v_split->setHandleWidth(3);
     v_split->setStyleSheet("QSplitter::handle { background: #333; }");
 
-    // ── Packet list (top) ─────────────────────────────────────────────────────
+    // Packet list (top)
     packet_table_ = new QTableView(v_split);
     packet_table_->setModel(list_model_.get());
     packet_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -98,92 +107,274 @@ void PcapTab::setupUI() {
         "padding: 3px 6px; font-size: 11px; }");
 
     // Column widths
-    packet_table_->setColumnWidth(PacketListModel::COL_NO,    55);
+    packet_table_->setColumnWidth(PacketListModel::COL_NO,     55);
     packet_table_->setColumnWidth(PacketListModel::COL_TIME,  110);
     packet_table_->setColumnWidth(PacketListModel::COL_SRC_IP,150);
     packet_table_->setColumnWidth(PacketListModel::COL_DST_IP,150);
     packet_table_->setColumnWidth(PacketListModel::COL_PROTO,  70);
     packet_table_->setColumnWidth(PacketListModel::COL_LEN,    55);
-    packet_table_->setColumnWidth(PacketListModel::COL_THREAT, 100);
-    packet_table_->horizontalHeader()
-        ->setSectionResizeMode(PacketListModel::COL_INFO,
-                               QHeaderView::Stretch);
+    packet_table_->setColumnWidth(PacketListModel::COL_THREAT,100);
+    packet_table_->horizontalHeader()->setSectionResizeMode(
+        PacketListModel::COL_INFO, QHeaderView::Stretch);
 
-    // ── Bottom splitter (detail | hex) ────────────────────────────────────────
+    // Bottom splitter (detail | hex)
     auto* h_split = new QSplitter(Qt::Horizontal, v_split);
     h_split->setHandleWidth(3);
     h_split->setStyleSheet("QSplitter::handle { background: #333; }");
 
     detail_tree_ = new PacketDetailTree(h_split);
     hex_view_    = new HexView(h_split);
-
     h_split->setSizes({500, 400});
 
     v_split->addWidget(packet_table_);
     v_split->addWidget(h_split);
     v_split->setSizes({450, 250});
-
     root->addWidget(v_split);
 
-    // ── Stats bar ─────────────────────────────────────────────────────────────
-    stats_label_ = new QLabel("Ready", this);
-    stats_label_->setStyleSheet(
-        "QLabel { background: #0f0f1a; color: #888888; "
-        "border-top: 1px solid #333; padding: 2px 8px; font-size: 10px; }");
-    root->addWidget(stats_label_);
+    // Stats bar (bottom)
+    auto* stats_bar = new QWidget(this);
+    stats_bar->setFixedHeight(22);
+    stats_bar->setStyleSheet(
+        "QWidget { background: #0f0f1a; border-top: 1px solid #333; }");
+    auto* stats_layout = new QHBoxLayout(stats_bar);
+    stats_layout->setContentsMargins(8, 0, 8, 0);
+    stats_layout->setSpacing(16);
 
-    // ── Connections ───────────────────────────────────────────────────────────
+    stats_label_ = new QLabel("Ready", stats_bar);
+    stats_label_->setStyleSheet("color: #888888; font-size: 10px;");
+
+    pps_label_ = new QLabel("", stats_bar);
+    pps_label_->setStyleSheet("color: #4488ff; font-size: 10px;");
+    pps_label_->setVisible(mode_ == Mode::LIVE);
+
+    stats_layout->addWidget(stats_label_);
+    stats_layout->addStretch();
+    stats_layout->addWidget(pps_label_);
+    root->addWidget(stats_bar);
+
+    // Connections
     connect(packet_table_->selectionModel(),
             &QItemSelectionModel::currentRowChanged,
             this, [this](const QModelIndex& cur, const QModelIndex&) {
                 onPacketSelected(cur);
             });
 
+    // Detect user scroll — tắt auto-scroll khi user cuộn lên
+    connect(packet_table_->verticalScrollBar(), &QScrollBar::valueChanged,
+            this, [this](int value) {
+                const QScrollBar* sb = packet_table_->verticalScrollBar();
+                auto_scroll_ = (value >= sb->maximum() - 5);
+            });
+
     connect(filter_bar_, &FilterBar::filterChanged,
             this, &PcapTab::onFilterChanged);
 }
 
+// ─── setupToolbar ─────────────────────────────────────────────────────────────
 void PcapTab::setupToolbar() {
-    // ── Open ──────────────────────────────────────────────────────────────────
+    // Open
     auto* open_act = new QAction("📂 Open", this);
-    open_act->setToolTip("Open pcap file");
-    connect(open_act, &QAction::triggered,
-            this, &PcapTab::onOpenClicked);
+    open_act->setToolTip("Open pcap file (Ctrl+O)");
+    open_act->setShortcut(QKeySequence::Open);
+    connect(open_act, &QAction::triggered, this, &PcapTab::onOpenClicked);
     toolbar_->addAction(open_act);
 
-    // ── Save ──────────────────────────────────────────────────────────────────
+    // Save
     auto* save_act = new QAction("💾 Save", this);
     save_act->setToolTip("Save packets to pcap file");
-    connect(save_act, &QAction::triggered,
-            this, &PcapTab::onSaveClicked);
+    connect(save_act, &QAction::triggered, this, &PcapTab::onSaveClicked);
     toolbar_->addAction(save_act);
 
     toolbar_->addSeparator();
 
-    // ── Clear ─────────────────────────────────────────────────────────────────
+    // Clear
     auto* clear_act = new QAction("🗑 Clear", this);
-    connect(clear_act, &QAction::triggered,
-            this, &PcapTab::onClearClicked);
+    clear_act->setToolTip("Clear all packets");
+    connect(clear_act, &QAction::triggered, this, &PcapTab::onClearClicked);
     toolbar_->addAction(clear_act);
 
     toolbar_->addSeparator();
 
-    // ── Stats label trong toolbar ─────────────────────────────────────────────
+    // Pause render (Wireshark-style "Update list in real time")
+    if (mode_ == Mode::LIVE) {
+        pause_act_ = new QAction("⏸ Pause Render", this);
+        pause_act_->setToolTip(
+            "Pause UI rendering (capture continues in background)");
+        pause_act_->setCheckable(true);
+        pause_act_->setChecked(false);
+        connect(pause_act_, &QAction::toggled,
+                this, [this](bool checked) {
+                    setRenderPaused(checked);
+                    pause_act_->setText(checked ? "▶ Resume Render"
+                                                : "⏸ Pause Render");
+                });
+        toolbar_->addAction(pause_act_);
+        toolbar_->addSeparator();
+    }
+
+    // Spacer + info label
     auto* spacer = new QWidget(toolbar_);
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     toolbar_->addWidget(spacer);
 
-    auto* info_lbl = new QLabel("  Ring buffer: 200K packets max  ", toolbar_);
+    auto* info_lbl = new QLabel("  Ring buffer: 200K packets  ", toolbar_);
     info_lbl->setStyleSheet("color: #666688; font-size: 10px;");
     toolbar_->addWidget(info_lbl);
 }
 
-// ─── Load file (chạy scan trong background thread) ────────────────────────────
+// ─── setRenderPaused ─────────────────────────────────────────────────────────
+void PcapTab::setRenderPaused(bool paused) {
+    render_paused_ = paused;
+    if (paused) {
+        live_timer_.stop();
+        stats_label_->setText(
+            QString("⏸ Render paused | buffered: %1 packets")
+                .arg(ring_buf_.totalReceived()));
+    } else {
+        live_timer_.start(RENDER_INTERVAL_NORMAL_MS);
+        // Flush ngay lập tức khi resume
+        flushPendingToModel();
+    }
+}
+
+// ─── appendLivePackets — batch API (ưu tiên dùng cái này) ────────────────────
+// Gọi từ UiBridge (Qt queued connection) — đã ở main thread
+void PcapTab::appendLivePackets(std::vector<PacketRecord> records) {
+    if (records.empty()) return;
+
+    {
+        std::lock_guard<std::mutex> lock(live_mutex_);
+
+        // Move toàn bộ batch vào pending — 1 lần lock duy nhất
+        for (auto& r : records)
+            live_pending_.push_back(std::move(r));
+
+        // Wireshark ringbuffer pattern: khi tràn, drop packet cũ nhất
+        if (live_pending_.size() > MAX_PENDING_BUFFER) {
+            const size_t excess = live_pending_.size() - DROP_TO_SIZE;
+            live_pending_.erase(
+                live_pending_.begin(),
+                live_pending_.begin() + static_cast<ptrdiff_t>(excess));
+        }
+    }
+}
+
+// ─── appendLivePacket — single packet (backward compat) ──────────────────────
+void PcapTab::appendLivePacket(const PacketRecord& record) {
+    std::lock_guard<std::mutex> lock(live_mutex_);
+    live_pending_.push_back(record);
+
+    if (live_pending_.size() > MAX_PENDING_BUFFER) {
+        const size_t excess = live_pending_.size() - DROP_TO_SIZE;
+        live_pending_.erase(
+            live_pending_.begin(),
+            live_pending_.begin() + static_cast<ptrdiff_t>(excess));
+    }
+}
+
+// ─── onLiveTimer — flush pending → model (main thread) ───────────────────────
+void PcapTab::onLiveTimer() {
+    if (render_paused_) return;
+    flushPendingToModel();
+}
+
+// ─── flushPendingToModel — core render logic ──────────────────────────────────
+void PcapTab::flushPendingToModel() {
+    // Lấy batch ra khỏi pending (swap nhanh hơn copy)
+    std::vector<PacketRecord> batch;
+    {
+        std::lock_guard<std::mutex> lock(live_mutex_);
+        if (live_pending_.empty()) return;
+
+        if (live_pending_.size() <= MAX_ROWS_PER_FLUSH) {
+            // Toàn bộ pending nhỏ hơn ngưỡng → swap toàn bộ (O(1))
+            batch.swap(live_pending_);
+        } else {
+            // Chỉ lấy MAX_ROWS_PER_FLUSH → tick sau render tiếp
+            batch.assign(
+                std::make_move_iterator(live_pending_.begin()),
+                std::make_move_iterator(
+                    live_pending_.begin()
+                    + static_cast<ptrdiff_t>(MAX_ROWS_PER_FLUSH)));
+            live_pending_.erase(
+                live_pending_.begin(),
+                live_pending_.begin()
+                    + static_cast<ptrdiff_t>(MAX_ROWS_PER_FLUSH));
+        }
+    }
+
+    if (batch.empty()) return;
+
+    // ✅ beginInsertRows / endInsertRows — 1 lần cho toàn batch
+    // Không emit dataChanged N lần
+    list_model_->appendRecords(batch);
+
+    // Auto-scroll chỉ khi user đang ở cuối (Wireshark behavior)
+    if (auto_scroll_) {
+        packet_table_->scrollToBottom();
+    }
+
+    // Update stats
+    const size_t pending_left = [this]() -> size_t {
+        std::lock_guard<std::mutex> lock(live_mutex_);
+        return live_pending_.size();
+    }();
+
+    QString stats = QString("🔴 %1 packets")
+        .arg(list_model_->rowCount());
+    if (pending_left > 0)
+        stats += QString("  |  queued: %1").arg(pending_left);
+    stats_label_->setText(stats);
+}
+
+// ─── onPpsCheckTimer — đo PPS thực tế mỗi 1s → adaptive interval ─────────────
+void PcapTab::onPpsCheckTimer() {
+    const uint64_t current_count = ring_buf_.totalReceived();
+    const double   pps = static_cast<double>(current_count - pps_last_count_);
+    pps_last_count_    = current_count;
+    current_pps_       = pps;
+
+    updateAdaptiveInterval(pps);
+
+    // Hiển thị PPS + trạng thái render
+    QString pps_str;
+    if (render_paused_) {
+        pps_str = QString("⏸ %1 pps (render paused)").arg(pps, 0, 'f', 0);
+        pps_label_->setStyleSheet("color: #ff8844; font-size: 10px;");
+    } else if (pps > 2000) {
+        pps_str = QString("⚡ %1 pps (turbo)").arg(pps, 0, 'f', 0);
+        pps_label_->setStyleSheet("color: #ff4444; font-size: 10px;");
+    } else if (pps > 500) {
+        pps_str = QString("🔥 %1 pps (fast)").arg(pps, 0, 'f', 0);
+        pps_label_->setStyleSheet("color: #ffaa44; font-size: 10px;");
+    } else {
+        pps_str = QString("📡 %1 pps").arg(pps, 0, 'f', 0);
+        pps_label_->setStyleSheet("color: #4488ff; font-size: 10px;");
+    }
+    pps_label_->setText(pps_str);
+}
+
+// ─── updateAdaptiveInterval — Wireshark adaptive render ───────────────────────
+void PcapTab::updateAdaptiveInterval(double pps) {
+    int new_interval;
+    if (pps > 2000) {
+        new_interval = RENDER_INTERVAL_TURBO_MS;   // 1000ms — giảm render load
+    } else if (pps > 500) {
+        new_interval = RENDER_INTERVAL_FAST_MS;    // 500ms
+    } else {
+        new_interval = RENDER_INTERVAL_NORMAL_MS;  // 200ms — mượt nhất
+    }
+
+    if (live_timer_.interval() != new_interval && !render_paused_) {
+        live_timer_.setInterval(new_interval);
+    }
+}
+
+// ─── loadFile ─────────────────────────────────────────────────────────────────
 void PcapTab::loadFile(const QString& filepath) {
     cancel_scan_ = false;
     current_filepath_ = filepath;
 
-    // Reset
     ring_buf_.clear();
     list_model_->clear();
     detail_tree_->clearDetail();
@@ -196,21 +387,20 @@ void PcapTab::loadFile(const QString& filepath) {
     progress_bar_->setValue(0);
     stats_label_->setText("Loading " + filepath + "...");
 
-    // Chạy scan trong thread riêng — không block Qt UI
+    // Scan trong background thread — không block Qt UI
     std::thread([this, filepath]() {
-        bool ok = reader_->scanFile(
+        const bool ok = reader_->scanFile(
             filepath.toStdString(),
             ring_buf_,
-            [this](uint64_t loaded, uint64_t, double pct) {
-                // Emit progress về Qt thread
-                QMetaObject::invokeMethod(this, [this, loaded, pct]() {
-                    onLoadProgress(loaded, 0, pct);
-                }, Qt::QueuedConnection);
+            [this](uint64_t loaded, uint64_t total, double pct) {
+                QMetaObject::invokeMethod(this,
+                    [this, loaded, total, pct]() {
+                        onLoadProgress(loaded, total, pct);
+                    }, Qt::QueuedConnection);
             },
             &cancel_scan_
         );
 
-        // Khi xong → update UI trong Qt thread
         QMetaObject::invokeMethod(this, [this, ok]() {
             progress_bar_->hide();
 
@@ -220,57 +410,19 @@ void PcapTab::loadFile(const QString& filepath) {
             }
 
             const auto& stats = reader_->stats();
-
-            // Apply filter hiện tại
-            list_model_->applyFilter(
-                filter_bar_->currentFilter());
+            list_model_->applyFilter(filter_bar_->currentFilter());
 
             stats_label_->setText(
-                QString("✅ %1 packets | %2 MB | Duration: %3s | %4")
+                QString("✅ %1 packets  |  %2 MB  |  %3s  |  %4")
                     .arg(stats.total_packets)
                     .arg(stats.total_bytes / 1024.0 / 1024.0, 0, 'f', 2)
                     .arg(stats.duration_sec, 0, 'f', 3)
-                    .arg(QString::fromStdString(stats.linktype_name))
-            );
+                    .arg(QString::fromStdString(stats.linktype_name)));
         }, Qt::QueuedConnection);
     }).detach();
 }
 
-// ─── Live capture: nhận packet từ engine thread ───────────────────────────────
-void PcapTab::appendLivePacket(const PacketRecord& record) {
-    // Gọi từ engine thread → buffer vào live_pending_
-    std::lock_guard<std::mutex> lock(live_mutex_);
-    live_pending_.push_back(record);
-
-    // Giới hạn pending buffer (tránh tràn RAM nếu UI lag)
-    if (live_pending_.size() > 5000)
-        live_pending_.erase(live_pending_.begin(),
-                            live_pending_.begin() + 2500);
-}
-
-// ─── Timer: flush pending packets vào model (Qt thread) ──────────────────────
-void PcapTab::onLiveTimer() {
-    std::vector<PacketRecord> batch;
-    {
-        std::lock_guard<std::mutex> lock(live_mutex_);
-        if (live_pending_.empty()) return;
-        batch.swap(live_pending_);
-    }
-
-    // Live mode: KHÔNG push vào ring_buf_ local (đã có trong global ring_buf)
-    // Chỉ notify model append indices
-    list_model_->appendRecords(batch);
-
-    if (!batch.empty())
-        packet_table_->scrollToBottom();
-
-    stats_label_->setText(
-        QString("🔴 Live | %1 packets displayed | cap: %2K")
-            .arg(list_model_->rowCount())
-            .arg(ring_buf_.totalReceived() / 1000)
-    );
-}
-// ─── Packet selected → hiển thị detail + hex ─────────────────────────────────
+// ─── onPacketSelected ─────────────────────────────────────────────────────────
 void PcapTab::onPacketSelected(const QModelIndex& index) {
     if (!index.isValid()) return;
 
@@ -279,20 +431,16 @@ void PcapTab::onPacketSelected(const QModelIndex& index) {
 
     PacketRecord record = *record_ptr;
 
-    // Lazy load raw bytes nếu chưa có
-    if (!record.raw_data && record.file_offset >= 0) {
+    // Lazy load raw bytes chỉ khi cần (Wireshark pattern)
+    if (!record.raw_data && record.file_offset >= 0)
         loadRawBytesForRecord(record);
-    }
 
-    // Hiển thị detail tree
     detail_tree_->showPacket(record);
 
-    // Hiển thị hex dump
-    if (record.raw_data && !record.raw_data->empty()) {
+    if (record.raw_data && !record.raw_data->empty())
         hex_view_->setData(*record.raw_data);
-    } else {
+    else
         hex_view_->clearData();
-    }
 }
 
 void PcapTab::loadRawBytesForRecord(PacketRecord& record) {
@@ -300,28 +448,24 @@ void PcapTab::loadRawBytesForRecord(PacketRecord& record) {
     reader_->loadRawBytes(record, current_filepath_.toStdString());
 }
 
-// ─── Filter changed ───────────────────────────────────────────────────────────
+// ─── onFilterChanged ──────────────────────────────────────────────────────────
 void PcapTab::onFilterChanged(DisplayFilter filter) {
     list_model_->applyFilter(filter);
 
-    uint64_t total   = ring_buf_.totalReceived();
-    int      visible = list_model_->rowCount();
+    const uint64_t total   = ring_buf_.totalReceived();
+    const int      visible = list_model_->rowCount();
     stats_label_->setText(
-        QString("Filter: %1 / %2 packets shown")
-            .arg(visible)
-            .arg(total)
-    );
+        QString("Filter: %1 / %2 packets shown").arg(visible).arg(total));
 }
 
-// ─── Save ─────────────────────────────────────────────────────────────────────
+// ─── onSaveClicked / saveToFile ───────────────────────────────────────────────
 void PcapTab::onSaveClicked() {
-    QString filepath = QFileDialog::getSaveFileName(
+    const QString filepath = QFileDialog::getSaveFileName(
         this, "Save Packets",
         QDir::homePath() + "/capture.pcap",
-        "PCAP Files (*.pcap);;All Files (*)"
-    );
-    if (filepath.isEmpty()) return;
-    saveToFile(filepath);
+        "PCAP Files (*.pcap);;All Files (*)");
+    if (!filepath.isEmpty())
+        saveToFile(filepath);
 }
 
 void PcapTab::saveToFile(const QString& filepath) {
@@ -332,53 +476,48 @@ void PcapTab::saveToFile(const QString& filepath) {
         return;
     }
 
-    // Lưu tất cả packets có raw_data
-    uint64_t saved = 0;
-    uint64_t oldest = ring_buf_.oldestIndex();
-    uint64_t newest = ring_buf_.newestIndex();
-    auto records = ring_buf_.getRange(oldest, newest + 1);
+    uint64_t saved   = 0;
+    auto     records = ring_buf_.getRange(
+        ring_buf_.oldestIndex(), ring_buf_.newestIndex() + 1);
 
     for (auto& rec : records) {
-        // Lazy load nếu cần
         if (!rec.raw_data && rec.file_offset >= 0)
             reader_->loadRawBytes(rec, current_filepath_.toStdString());
 
         if (rec.raw_data && !rec.raw_data->empty()) {
             writer.writePacket(rec);
-            saved++;
+            ++saved;
         }
     }
-
     writer.close();
 
     QMessageBox::information(this, "Saved",
         QString("Saved %1 packets to:\n%2").arg(saved).arg(filepath));
-
     stats_label_->setText(
         QString("💾 Saved %1 packets → %2").arg(saved).arg(filepath));
 }
 
-// ─── Open ─────────────────────────────────────────────────────────────────────
+// ─── onOpenClicked ────────────────────────────────────────────────────────────
 void PcapTab::onOpenClicked() {
-    QString filepath = QFileDialog::getOpenFileName(
-        this, "Open PCAP File",
-        QDir::homePath(),
-        "PCAP Files (*.pcap *.pcapng *.cap);;All Files (*)"
-    );
+    const QString filepath = QFileDialog::getOpenFileName(
+        this, "Open PCAP File", QDir::homePath(),
+        "PCAP Files (*.pcap *.pcapng *.cap);;All Files (*)");
     if (!filepath.isEmpty())
         loadFile(filepath);
 }
 
-// ─── Clear ────────────────────────────────────────────────────────────────────
+// ─── onClearClicked ───────────────────────────────────────────────────────────
 void PcapTab::onClearClicked() {
     ring_buf_.clear();
     list_model_->clear();
     detail_tree_->clearDetail();
     hex_view_->clearData();
+    pps_last_count_ = 0;
     stats_label_->setText("Cleared");
 }
 
-void PcapTab::onLoadProgress(uint64_t loaded, uint64_t, double pct) {
+// ─── onLoadProgress ───────────────────────────────────────────────────────────
+void PcapTab::onLoadProgress(uint64_t loaded, uint64_t /*total*/, double pct) {
     progress_bar_->setValue(static_cast<int>(pct));
     stats_label_->setText(
         QString("Loading... %1 packets (%2%)")

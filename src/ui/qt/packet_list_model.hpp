@@ -1,27 +1,27 @@
 #pragma once
 #include <QAbstractTableModel>
 #include <QColor>
+#include <QFont>
 #include <deque>
-#include <vector>
 #include <mutex>
+#include <vector>
 #include <memory>
 #include "../../pcap_io/packet_ring_buffer.hpp"
 #include "filter_bar.hpp"
 
+// ─── PacketListModel ──────────────────────────────────────────────────────────
 class PacketListModel : public QAbstractTableModel {
     Q_OBJECT
 
 public:
-    // ── Columns ───────────────────────────────────────────────────────────────
     enum Column {
         COL_NO = 0, COL_TIME, COL_SRC_IP, COL_DST_IP,
         COL_PROTO, COL_LEN, COL_INFO, COL_THREAT,
         COL_COUNT
     };
 
-    // ── Wireshark-style limits ─────────────────────────────────────────────────
-    static constexpr int MAX_DISPLAY_ROWS = 200'000; // tối đa rows trong model
-    static constexpr int SCROLL_CHUNK     = 1'000;   // batch insert tối đa/lần
+    static constexpr int      MAX_DISPLAY_ROWS = 50000;
+    static constexpr int      SCROLL_CHUNK     = 200;
 
     explicit PacketListModel(PacketRingBuffer& ring_buf,
                               QObject*          parent = nullptr);
@@ -29,35 +29,48 @@ public:
     // QAbstractTableModel interface
     int      rowCount   (const QModelIndex& parent = {}) const override;
     int      columnCount(const QModelIndex& parent = {}) const override;
-    QVariant data       (const QModelIndex& index,
-                         int role = Qt::DisplayRole)     const override;
-    QVariant headerData (int section, Qt::Orientation,
-                         int role = Qt::DisplayRole)     const override;
+    QVariant headerData (int section, Qt::Orientation, int role) const override;
+    QVariant data       (const QModelIndex&, int role) const override;
 
-    // ── Live capture API ──────────────────────────────────────────────────────
+    // ── Mutators (main thread only) ───────────────────────────────────────────
     void appendRecords(const std::vector<PacketRecord>& batch);
+    void applyFilter  (const DisplayFilter& filter);
+    void clear        ();
 
-    // ── Filter / clear ────────────────────────────────────────────────────────
-    void applyFilter(const DisplayFilter& filter);
-    void clear();
-
-    // ── Random access ─────────────────────────────────────────────────────────
     std::shared_ptr<PacketRecord> recordAt(int row) const;
 
 private:
-    QVariant    rowColor      (const PacketRecord& r) const;
-    QString     protocolName  (const PacketRecord& r) const;
-    QString     buildInfo     (const PacketRecord& r) const;
-    bool        matchFilter   (uint64_t idx,
-                               const DisplayFilter& f) const;
+    // ✅ RowCache: tất cả display data đã pre-computed
+    // data() chỉ đọc struct này — không lock, không alloc
+    struct RowCache {
+        uint64_t pkt_idx  = 0;
+        uint32_t orig_len = 0;
+        QString  time_str;
+        QString  src;        // "1.2.3.4:1234"
+        QString  dst;        // "5.6.7.8:80"
+        QString  proto;      // "HTTP"
+        QString  info;       // "[SYN] 1234→80 len=0"
+        QString  threat;     // "" hoặc "DDOS_VOLUMETRIC"
+        QColor   bg_color;
+    };
 
-    PacketRingBuffer& ring_buf_;
+    // ── Helpers — pure functions, không lock ──────────────────────────────────
+    RowCache     buildRowCache   (const PacketRecord& r) const;
+    bool         matchFilter     (uint64_t idx, const DisplayFilter& f) const;
+    QString      computeProto    (const PacketRecord& r) const;
+    QString      computeInfo     (const PacketRecord& r) const;
+    QColor       computeRowColor (const PacketRecord& r) const;
 
-    // ── Core: deque thay vector — O(1) pop_front khi evict ───────────────────
-    // Chỉ lưu index (8 bytes/packet), không copy PacketRecord
-    mutable std::mutex    mutex_;
-    std::deque<uint64_t>  filtered_indices_;   // ← deque, không phải vector
+    // ── Data ──────────────────────────────────────────────────────────────────
+    PacketRingBuffer&    ring_buf_;
+    DisplayFilter        current_filter_;
+    double               base_timestamp_ = -1.0;
 
-    DisplayFilter         current_filter_;
-    double                base_timestamp_ = -1.0; // relative time anchor
+    // ✅ row_cache_ và filtered_indices_ chỉ được đọc/ghi từ main thread
+    // → KHÔNG cần mutex trong data() / rowCount()
+    std::deque<RowCache>   row_cache_;
+    std::deque<uint64_t>   filtered_indices_;
+
+    // mutex_ chỉ bảo vệ applyFilter/clear khi gọi từ background thread
+    mutable std::mutex     mutex_;
 };

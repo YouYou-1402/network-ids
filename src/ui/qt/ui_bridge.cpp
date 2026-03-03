@@ -1,4 +1,6 @@
+// ── ui_bridge.cpp ─────────────────────────────────────────────────────────────
 #include "ui_bridge.hpp"
+#include <algorithm>
 
 UiBridge::UiBridge(AlertManager&     alert_manager,
                    Dispatcher&       dispatcher,
@@ -11,67 +13,83 @@ UiBridge::UiBridge(AlertManager&     alert_manager,
     , ml_engine_(ml_engine)
     , ring_buf_(ring_buf)
 {
-    connect(&timer_, &QTimer::timeout,
-            this,    &UiBridge::onTimer);
+    connect(&timer_, &QTimer::timeout, this, &UiBridge::onTimer);
 }
 
-void UiBridge::startPolling(int interval_ms) {
-    timer_.start(interval_ms);
-}
+void UiBridge::startPolling(int interval_ms) { timer_.start(interval_ms);  }
+void UiBridge::stopPolling()                 { timer_.stop();               }
 
-void UiBridge::stopPolling() {
-    timer_.stop();
-}
 
-// ─── onTimer ─────────────────────────────────────────────────────────────────
 void UiBridge::onTimer() {
 
-    // ── 1. Metrics ────────────────────────────────────────────────────────────
-    MetricsSnapshot snap = buildMetricsSnapshot();
-    emit metricsUpdated(snap);
+    // ── 1. Metrics — atomic reads, không lock ────────────────────────────────
+    emit metricsUpdated(buildMetricsSnapshot());
 
-    // ── 2. Traffic (sliding window PPS) ───────────────────────────────────────
+    // ── 2. Traffic chart ─────────────────────────────────────────────────────
     emit trafficUpdated(buildTrafficPoint());
 
-    // ── 3. Alerts: chỉ emit phần mới ─────────────────────────────────────────
+    // ── 3. Alerts — chỉ lấy PHẦN MỚI, không copy toàn bộ ───────────────────
     {
-        auto all_alerts = alert_manager_.getRecent(500);
-        if (all_alerts.size() > last_alert_count_) {
-            std::vector<UnifiedAlert> new_alerts(
-                all_alerts.begin() + last_alert_count_,
-                all_alerts.end());
-            last_alert_count_ = all_alerts.size();
-            emit newAlerts(std::move(new_alerts));
+        // ✅ Chỉ lấy tối đa 20 alert mới nhất mỗi tick
+        // Không dùng last_alert_count_ index vì deque có thể pop_front
+        const uint64_t total_now = alert_manager_.totalAlerts();
+
+        if (total_now > last_alert_seq_) {
+            // Chỉ lấy phần mới — tối đa 20 để không flood UI
+            const size_t want = static_cast<size_t>(
+                std::min<uint64_t>(total_now - last_alert_seq_, 20));
+
+            auto new_alerts = alert_manager_.getRecent(want);
+            last_alert_seq_ = total_now;
+
+            if (!new_alerts.empty())
+                emit newAlerts(std::move(new_alerts));
         }
     }
 
-    // ── 4. Live packets — adaptive batch ──────────────────────────────────────
-    // {
-    //     uint64_t total_now = ring_buf_.totalReceived();
-    //     if (total_now > last_sent_total_) {
-    //         uint64_t pending = total_now - last_sent_total_;
+    // ── 4. Live packets ───────────────────────────────────────────────────────
+    {
+        const uint64_t total_now = ring_buf_.totalReceived();
+        if (total_now <= last_sent_seq_) return;
 
-    //         // Adaptive: PPS cao → batch nhỏ để Qt không bị block
-    //         if (!pps_window_.empty()) {
-    //             uint64_t pps = pps_window_.back().captured > pps_window_.front().captured
-    //                 ? (pps_window_.back().captured - pps_window_.front().captured)
-    //                 : 0;
-    //             if      (pps > 800) current_batch_ = MIN_BATCH;
-    //             else if (pps > 400) current_batch_ = MIN_BATCH * 2;
-    //             else                current_batch_ = MAX_BATCH;
-    //         }
+        const uint64_t pending = total_now - last_sent_seq_;
 
-    //         uint64_t to_send = std::min(pending, current_batch_);
-    //         uint64_t idx_end = last_sent_total_ + to_send;
+        // Adaptive batch
+        uint64_t to_send = std::min(pending, max_batch_per_tick_);
 
-    //         auto records = ring_buf_.getRange(last_sent_total_, idx_end);
-    //         if (!records.empty())
-    //             emit newPacketRecords(std::move(records));
+        if (pps_window_.size() >= 2) {
+            const auto& oldest   = pps_window_.front();
+            const auto& newest   = pps_window_.back();
+            const qint64 elapsed = newest.time_ms - oldest.time_ms;
 
-    //         last_sent_total_ = idx_end;
-    //     }
-    // }
+            if (elapsed > 0) {
+                const uint64_t pps =
+                    (newest.captured > oldest.captured)
+                    ? (newest.captured - oldest.captured) * 1000ULL
+                      / static_cast<uint64_t>(elapsed)
+                    : 0ULL;
+
+                if      (pps > 5000) max_batch_per_tick_ = 30;
+                else if (pps > 2000) max_batch_per_tick_ = 60;
+                else if (pps > 500)  max_batch_per_tick_ = 100;
+                else                 max_batch_per_tick_ = 150;
+
+                to_send = std::min(pending, max_batch_per_tick_);
+            }
+        }
+
+        auto records = ring_buf_.getRange(last_sent_seq_,
+                                          last_sent_seq_ + to_send);
+        if (!records.empty()) {
+            for (auto& r : records)
+                r.raw_data = nullptr;
+
+            last_sent_seq_ += static_cast<uint64_t>(records.size());
+            emit newPacketRecords(std::move(records));
+        }
+    }
 }
+
 
 // ─── buildMetricsSnapshot ────────────────────────────────────────────────────
 MetricsSnapshot UiBridge::buildMetricsSnapshot() const {
@@ -89,44 +107,38 @@ MetricsSnapshot UiBridge::buildMetricsSnapshot() const {
     return s;
 }
 
-// ─── buildTrafficPoint ───────────────────────────────────────────────────────
-// Dùng sliding window 1 giây thay vì nhân cứng *2
-// → chính xác kể cả khi timer bị jitter
+// ─── buildTrafficPoint — sliding window PPS ───────────────────────────────────
 TrafficPoint UiBridge::buildTrafficPoint() {
-    qint64   now_ms      = QDateTime::currentMSecsSinceEpoch();
-    uint64_t captured    = METRICS.packets_captured.load();
-    uint64_t dropped     = METRICS.packets_dropped.load();
-    uint64_t alerted     = METRICS.packets_alerted.load();
+    const qint64   now_ms   = QDateTime::currentMSecsSinceEpoch();
+    const uint64_t captured = METRICS.packets_captured.load();
+    const uint64_t dropped  = METRICS.packets_dropped.load();
+    const uint64_t alerted  = METRICS.packets_alerted.load();
 
-    // Push điểm hiện tại vào window
     pps_window_.push_back({now_ms, captured, dropped, alerted});
 
     // Xóa điểm cũ hơn PPS_WINDOW_MS
     while (pps_window_.size() > 1 &&
-           now_ms - pps_window_.front().time_ms > PPS_WINDOW_MS) {
+           now_ms - pps_window_.front().time_ms > PPS_WINDOW_MS)
         pps_window_.pop_front();
-    }
 
     TrafficPoint p;
     p.timestamp = now_ms / 1000.0;
 
     if (pps_window_.size() >= 2) {
-        const auto& oldest   = pps_window_.front();
-        const auto& newest   = pps_window_.back();
-        qint64 elapsed_ms    = newest.time_ms - oldest.time_ms;
+        const auto& oldest    = pps_window_.front();
+        const auto& newest    = pps_window_.back();
+        const qint64 elapsed  = newest.time_ms - oldest.time_ms;
 
-        if (elapsed_ms > 0) {
-            // PPS = delta_packets / elapsed_seconds (thực tế)
+        if (elapsed > 0) {
             auto pps = [&](uint64_t a, uint64_t b) -> uint64_t {
-                return (a > b) ? (a - b) * 1000ULL / elapsed_ms : 0ULL;
+                return (a > b)
+                    ? (a - b) * 1000ULL / static_cast<uint64_t>(elapsed)
+                    : 0ULL;
             };
             p.total_pps = pps(newest.captured, oldest.captured);
             p.drop_pps  = pps(newest.dropped,  oldest.dropped);
             p.alert_pps = pps(newest.alerted,  oldest.alerted);
         }
     }
-    // Nếu window chỉ có 1 điểm (tick đầu tiên) → giữ nguyên 0
-    // Không bao giờ trả về giá trị sai
-
     return p;
 }
