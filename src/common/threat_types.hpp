@@ -1,8 +1,9 @@
+// src/common/threat_types.hpp
 #pragma once
 #include <string>
 #include <cstdint>
 
-// Kết quả phát hiện của từng engine
+// ─── DetectionResult ──────────────────────────────────────────────────────────
 enum class DetectionResult {
     NORMAL,
     DDOS_VOLUMETRIC,
@@ -11,14 +12,14 @@ enum class DetectionResult {
     MALFORMED
 };
 
-// Hành động thực hiện với gói tin
+// ─── PacketAction ─────────────────────────────────────────────────────────────
 enum class PacketAction {
     PASS,
     DROP,
-    ALERT   // Cho qua nhưng ghi cảnh báo
+    ALERT
 };
 
-// Nguồn phát hiện (Layer 1 hay Layer 2)
+// ─── DetectionSource ──────────────────────────────────────────────────────────
 enum class DetectionSource {
     LAYER1_SIGNATURE,
     LAYER1_PROTOCOL_ANOMALY,
@@ -27,20 +28,20 @@ enum class DetectionSource {
     LAYER2_AUTOENCODER
 };
 
-// Struct kết quả đầy đủ
+// ─── DetectionEvent ───────────────────────────────────────────────────────────
 struct DetectionEvent {
-    DetectionResult  result;
-    PacketAction     action;
-    DetectionSource  source;
-    std::string      detail;      
-    uint32_t         src_ip;
-    uint32_t         dst_ip;
-    uint16_t         src_port;
-    uint16_t         dst_port;
-    double           timestamp;  
+    DetectionResult  result     = DetectionResult::NORMAL;
+    PacketAction     action     = PacketAction::PASS;
+    DetectionSource  source     = DetectionSource::LAYER1_SIGNATURE;
+    std::string      detail;
+    uint32_t         src_ip     = 0;
+    uint32_t         dst_ip     = 0;
+    uint16_t         src_port   = 0;
+    uint16_t         dst_port   = 0;
+    double           timestamp  = 0.0;
 };
 
-// Helper: convert enum → string để log
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 inline std::string threatToString(DetectionResult r) {
     switch (r) {
         case DetectionResult::NORMAL:           return "NORMAL";

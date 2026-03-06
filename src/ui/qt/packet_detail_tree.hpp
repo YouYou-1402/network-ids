@@ -1,44 +1,46 @@
-// ── packet_detail_tree.hpp ────────────────────────────────────────────────────
+// src/ui/qt/packet_detail_tree.hpp
 #pragma once
+
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include "../../pcap_io/packet_ring_buffer.hpp"
 
-// Decode và hiển thị chi tiết từng layer (giống Wireshark middle pane)
+
 class PacketDetailTree : public QTreeWidget {
     Q_OBJECT
 
 public:
     explicit PacketDetailTree(QWidget* parent = nullptr);
 
-    // Hiển thị chi tiết một packet
+    /// Hiển thị chi tiết một packet
     void showPacket(const PacketRecord& record);
 
-    // Xóa
+    /// Xóa toàn bộ nội dung
     void clearDetail();
 
 private:
+    // ── Section / field helpers ───────────────────────────────────────────────
     QTreeWidgetItem* addSection(const QString& title,
-                                 const QString& summary = "");
+                                const QString& summary = {});
 
-    void decodeEthernet (QTreeWidgetItem* parent,
-                         const uint8_t*   data, uint32_t len);
-    void decodeIPv4     (QTreeWidgetItem* parent,
-                         const uint8_t*   data, uint32_t len,
-                         size_t&          next_offset);
-    void decodeTCP      (QTreeWidgetItem* parent,
-                         const uint8_t*   data, uint32_t len);
-    void decodeUDP      (QTreeWidgetItem* parent,
-                         const uint8_t*   data, uint32_t len);
-    void decodeICMP     (QTreeWidgetItem* parent,
-                         const uint8_t*   data, uint32_t len);
-    void decodeHTTP     (QTreeWidgetItem* parent,
-                         const uint8_t*   data, uint32_t len);
-    void decodeDNS      (QTreeWidgetItem* parent,
-                         const uint8_t*   data, uint32_t len);
-    void decodeThreat   (QTreeWidgetItem* parent,
-                         const PacketRecord& record);
+    // ── Layer parsers — raw bytes ─────────────────────────────────────────────
+    void showEthernet (const uint8_t* data, uint32_t len);
+    void showIPv4     (const uint8_t* data, uint32_t len);
+    void showTCP      (const uint8_t* data, uint32_t len);
+    void showUDP      (const uint8_t* data, uint32_t len);
+    void showICMP     (const uint8_t* data, uint32_t len);
+    void showARP      (const uint8_t* data, uint32_t len);
+    void showIPv6Stub (const uint8_t* data, uint32_t len);
 
-    static QString flagsToString(uint8_t flags);
-    static QString macToString  (const uint8_t* mac);
+    // ── Application-layer parsers ─────────────────────────────────────────────
+    void showHTTP (QTreeWidgetItem* parent, const uint8_t* data, uint32_t len);
+    void showDNS  (QTreeWidgetItem* parent, const uint8_t* data, uint32_t len);
+
+    // ── Fallback khi raw_data đã bị evict ────────────────────────────────────
+    void showFromFields (const PacketRecord& rec);
+    void showThreat     (const PacketRecord& record);
+
+    // ── Utilities ────────────────────────────────────────────────────────────
+    static QString flagsToString (uint8_t        flags);
+    static QString macStr        (const uint8_t* mac);
 };

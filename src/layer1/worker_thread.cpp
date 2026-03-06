@@ -1,16 +1,19 @@
+// src/layer1/worker_thread.cpp
 #include "worker_thread.hpp"
 #include "../common/logger.hpp"
 #include "../common/metrics.hpp"
 #include <arpa/inet.h>
 
-// ─── PacketQueue ──────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// PacketQueue
+// ═══════════════════════════════════════════════════════════════════════════════
+
 PacketQueue::PacketQueue(size_t max_size)
     : max_size_(max_size) {}
 
 bool PacketQueue::push(PacketInfo pkt) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (queue_.size() >= max_size_)
-        return false;
+    if (queue_.size() >= max_size_) return false;
     queue_.push(std::move(pkt));
     cv_.notify_one();
     return true;
@@ -18,9 +21,10 @@ bool PacketQueue::push(PacketInfo pkt) {
 
 bool PacketQueue::pop(PacketInfo& pkt, int timeout_ms) {
     std::unique_lock<std::mutex> lock(mutex_);
-    bool got = cv_.wait_for(lock,
-                            std::chrono::milliseconds(timeout_ms),
-                            [this]{ return !queue_.empty(); });
+    const bool got = cv_.wait_for(
+        lock,
+        std::chrono::milliseconds(timeout_ms),
+        [this]{ return !queue_.empty(); });
     if (!got) return false;
     pkt = std::move(queue_.front());
     queue_.pop();
@@ -37,17 +41,22 @@ bool PacketQueue::empty() const {
     return queue_.empty();
 }
 
-// ─── WorkerThread ─────────────────────────────────────────────────────────────
-WorkerThread::WorkerThread(int id, FlowTable& flow_table,
-                            AlertCallback on_alert)
+// ═══════════════════════════════════════════════════════════════════════════════
+// WorkerThread
+// ═══════════════════════════════════════════════════════════════════════════════
+
+WorkerThread::WorkerThread(int              id,
+                            FlowTable&       flow_table,
+                            AlertCallback    on_alert,
+                            PacketRingBuffer& ring_buf)
     : id_(id)
     , flow_table_(flow_table)
     , on_alert_(std::move(on_alert))
-    , queue_(4096) {}
+    , ring_buf_(ring_buf)
+    , queue_(4096)
+{}
 
-WorkerThread::~WorkerThread() {
-    stop();
-}
+WorkerThread::~WorkerThread() { stop(); }
 
 void WorkerThread::start() {
     running_ = true;
@@ -57,21 +66,19 @@ void WorkerThread::start() {
 
 void WorkerThread::stop() {
     running_ = false;
-    if (thread_.joinable())
-        thread_.join();
+    if (thread_.joinable()) thread_.join();
     LOG_INFO("WorkerThread " + std::to_string(id_) + " stopped");
 }
 
 bool WorkerThread::enqueue(PacketInfo pkt) {
-    bool ok = queue_.push(std::move(pkt));
+    const bool ok = queue_.push(std::move(pkt));
     if (!ok) METRICS.queue_drops++;
     return ok;
 }
 
-// ─── Main processing loop ─────────────────────────────────────────────────────
+// ─── run ──────────────────────────────────────────────────────────────────────
 void WorkerThread::run() {
     LOG_INFO("WorkerThread " + std::to_string(id_) + " running");
-
     while (running_) {
         PacketInfo pkt;
         if (queue_.pop(pkt, 100))
@@ -79,37 +86,93 @@ void WorkerThread::run() {
     }
 }
 
-void WorkerThread::processPacket(PacketInfo& pkt) {
-    METRICS.packets_captured++;
+// ─── makeRecord: PacketInfo → PacketRecord ────────────────────────────────────
+PacketRecord WorkerThread::makeRecord(const PacketInfo& pkt) {
+    PacketRecord r;
 
+    // Timing & size
+    r.timestamp = pkt.timestampSeconds();
+    r.orig_len  = pkt.pkt_len;
+    r.cap_len   = static_cast<uint32_t>(pkt.raw_data.size());
+
+    // ✅ Layer 2 — eth_type là field quan trọng nhất
+    r.eth_type  = pkt.eth_type;
+
+    // Layer 3
+    r.src_ip    = pkt.src_ip;
+    r.dst_ip    = pkt.dst_ip;
+    r.protocol  = pkt.protocol;
+    r.ttl       = pkt.ttl;
+    r.src_ip6   = pkt.src_ip6;
+    r.dst_ip6   = pkt.dst_ip6;
+    
+    // Layer 4
+    r.src_port  = pkt.src_port;
+    r.dst_port  = pkt.dst_port;
+    r.tcp_flags = pkt.tcp_flags;
+    r.seq_num   = pkt.seq_num;
+    r.ack_num   = pkt.ack_num;
+    r.win_size  = pkt.win_size;
+
+    // Payload
+    r.payload_len    = pkt.payload_len;
+    r.payload_offset = pkt.payload_offset;
+
+    // Raw bytes — share ownership, ring buffer tự evict sau keep_raw_last_n
+    if (!pkt.raw_data.empty())
+        r.raw_data = std::make_shared<std::vector<uint8_t>>(pkt.raw_data);
+
+    return r;
+}
+
+// ─── processPacket ────────────────────────────────────────────────────────────
+void WorkerThread::processPacket(PacketInfo& pkt) {
     // 1. Lấy hoặc tạo flow state
-    std::string key   = pkt.flowKey();
-    FlowState*  flow  = flow_table_.getOrCreate(key, pkt);
+    const std::string key  = pkt.flowKey();
+    FlowState*        flow = flow_table_.getOrCreate(key, pkt);
 
     if (!flow) {
-        // Flow table đầy — drop gói tin
+        // Flow table đầy — drop nhưng vẫn ghi vào ring_buf để UI thấy
         METRICS.packets_dropped++;
+        PacketRecord rec = makeRecord(pkt);
+        rec.action       = "DROP";
+        ring_buf_.push(std::move(rec));
         return;
     }
 
     // 2. Signature Engine (Aho-Corasick + DDoS/Scan rules)
-    auto sig_result = sig_engine_.analyze(pkt, *flow);
+    const auto sig_result = sig_engine_.analyze(pkt, *flow);
     if (sig_result != DetectionResult::NORMAL) {
         handleDetection(sig_result, pkt, *flow);
+
+        PacketRecord rec = makeRecord(pkt);
+        rec.threat_type  = threatToString(sig_result);
+        rec.action       = (sig_result == DetectionResult::DDOS_VOLUMETRIC)
+                           ? "DROP" : "ALERT";
+        ring_buf_.push(std::move(rec));
         return;
     }
 
     // 3. Protocol Anomaly Engine (Slow DDoS)
-    auto anomaly_result = anomaly_engine_.analyze(pkt, *flow);
+    const auto anomaly_result = anomaly_engine_.analyze(pkt, *flow);
     if (anomaly_result != DetectionResult::NORMAL) {
         handleDetection(anomaly_result, pkt, *flow);
+
+        PacketRecord rec = makeRecord(pkt);
+        rec.threat_type  = threatToString(anomaly_result);
+        rec.action       = "ALERT";
+        ring_buf_.push(std::move(rec));
         return;
     }
 
-    // 4. Gói tin bình thường — PASS
+    // 4. Normal packet — PASS
     METRICS.packets_passed++;
+    PacketRecord rec = makeRecord(pkt);
+    rec.action       = "PASS";
+    ring_buf_.push(std::move(rec));
 }
 
+// ─── handleDetection ──────────────────────────────────────────────────────────
 void WorkerThread::handleDetection(const DetectionResult& result,
                                     const PacketInfo&      pkt,
                                     FlowState&             flow) {
@@ -131,11 +194,11 @@ void WorkerThread::handleDetection(const DetectionResult& result,
             break;
     }
 
-    // Đánh dấu flow là độc hại
+    // Đánh dấu flow độc hại
     flow.is_malicious = true;
     flow.threat_type  = threatToString(result);
 
-    // Tạo DetectionEvent và gọi callback
+    // Tạo event và callback
     DetectionEvent event;
     event.result    = result;
     event.action    = (result == DetectionResult::DDOS_VOLUMETRIC)
@@ -148,6 +211,5 @@ void WorkerThread::handleDetection(const DetectionResult& result,
     event.dst_port  = pkt.dst_port;
     event.timestamp = pkt.timestampSeconds();
 
-    if (on_alert_)
-        on_alert_(event);
+    if (on_alert_) on_alert_(event);
 }

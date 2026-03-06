@@ -1,9 +1,13 @@
+// src/main_qt.cpp
 #include <QApplication>
 #include <QTimer>
 #include <atomic>
 #include <thread>
+#include <chrono>
 #include <csignal>
 #include <arpa/inet.h>
+#include <iomanip>
+#include <unistd.h>
 
 #include "common/logger.hpp"
 #include "common/metrics.hpp"
@@ -18,8 +22,10 @@
 #include "ui/qt/main_window.hpp"
 #include "pcap_io/packet_ring_buffer.hpp"
 
-// ─── Global state ─────────────────────────────────────────────────────────────
-std::atomic<bool>  g_running { true };
+// ─────────────────────────────────────────────────────────────────────────────
+// Global state
+// ─────────────────────────────────────────────────────────────────────────────
+std::atomic<bool>  g_running{true};
 PacketCapture*     g_capture_ptr = nullptr;
 
 void signalHandler(int) {
@@ -28,8 +34,9 @@ void signalHandler(int) {
         g_capture_ptr->stopCapture();
 }
 
-// ─── Engine thread ────────────────────────────────────────────────────────────
-// Toàn bộ blocking I/O nằm ở đây — KHÔNG bao giờ chạy trên main thread
+// ─────────────────────────────────────────────────────────────────────────────
+// Engine thread — toàn bộ blocking I/O ở đây
+// ─────────────────────────────────────────────────────────────────────────────
 void engineThread(const std::string& mode,
                   const std::string& target,
                   Dispatcher&        dispatcher,
@@ -42,7 +49,6 @@ void engineThread(const std::string& mode,
     g_capture_ptr = &capture;
 
     // ── Mở capture source ────────────────────────────────────────────────────
-    // ✅ Nằm trong thread riêng — không block Qt main thread
     const bool opened = (mode == "-i")
         ? capture.openLive(target, "tcp or udp")
         : capture.openOffline(target, "");
@@ -52,14 +58,12 @@ void engineThread(const std::string& mode,
         g_running = false;
         return;
     }
-
     LOG_INFO("Engine: capture opened → " + target);
 
     // ── L2 feeder thread ─────────────────────────────────────────────────────
     std::thread l2_feeder([&]() {
         while (g_running) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
             dispatcher.forEachFlow([&](FlowState& flow) {
                 if (flow.total_packets < 5) return;
                 if (flow.is_malicious)      return;
@@ -91,38 +95,26 @@ void engineThread(const std::string& mode,
     });
 
     // ── Blocking capture loop ─────────────────────────────────────────────────
-    // ✅ Block ở đây là OK — đang trong thread riêng
+    // ✅ Qt UI mode: KHÔNG tự tạo PacketRecord ở đây
+    // ✅ worker_thread.cpp đã push đầy đủ record (có eth_type) vào ring_buf
+    // ✅ Chỉ cần dispatch → worker tự xử lý và push
     capture.startCapture([&](PacketInfo pkt) {
         if (!g_running) return;
-
-        dispatcher.dispatch(pkt);
-
-        // Đẩy vào ring buffer cho Qt UI
-        PacketRecord rec;
-        rec.src_ip      = pkt.src_ip;
-        rec.dst_ip      = pkt.dst_ip;
-        rec.src_port    = pkt.src_port;
-        rec.dst_port    = pkt.dst_port;
-        rec.protocol    = pkt.protocol;
-        rec.tcp_flags   = pkt.tcp_flags;
-        rec.payload_len = pkt.payload_len;
-        rec.cap_len     = pkt.pkt_len;
-        rec.timestamp   = static_cast<double>(pkt.timestamp.tv_sec)
-                        + static_cast<double>(pkt.timestamp.tv_usec) * 1e-6;
-        // ✅ Không copy raw_data ở đây — lazy load khi user click
-        // rec.raw_data = nullptr;  (default)
-        ring_buf.push(std::move(rec));
+        // ✅ dispatch() → WorkerThread::processPacket() → ring_buf_.push()
+        // WorkerThread đã có ring_buf_ reference từ constructor
+        dispatcher.dispatch(std::move(pkt));
     });
 
     // ── Shutdown ──────────────────────────────────────────────────────────────
     g_running = false;
     if (l2_feeder.joinable()) l2_feeder.join();
     if (cleanup.joinable())   cleanup.join();
-
     LOG_INFO("Engine thread exited cleanly");
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Main
+// ─────────────────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
 
     // ✅ QApplication PHẢI là object đầu tiên
@@ -149,18 +141,20 @@ int main(int argc, char* argv[]) {
         if (std::string(argv[i]) == "--no-mock")
             use_mock = false;
 
-    // ── Khởi tạo các object NHẸ (không block) ────────────────────────────────
+    // ── Khởi tạo shared objects ───────────────────────────────────────────────
     MLJobQueue       ml_queue;
     AlertManager     alert_manager(1000);
-    PacketRingBuffer ring_buf(100'000, 65535);
+    PacketRingBuffer ring_buf(100'000, 65'535);
 
-    // Layer 1 — constructor nhẹ, start() chỉ spawn threads
-    Dispatcher dispatcher(4);
+    // ── Layer 1 ───────────────────────────────────────────────────────────────
+    // ✅ Truyền ring_buf vào Dispatcher → WorkerThread
+    //    WorkerThread::makeRecord() copy đầy đủ eth_type + tất cả fields
+    Dispatcher dispatcher(4, ring_buf);
     dispatcher.start([&](const DetectionEvent& event) {
         alert_manager.addL1Alert(event);
     });
 
-    // Layer 2 — start(use_mock=true) không load ONNX → không block
+    // ── Layer 2 ───────────────────────────────────────────────────────────────
     FeedbackLoop feedback_loop([](const RuleProposal& p) {
         LOG_INFO("Rule update: " + p.detail);
     });
@@ -170,19 +164,15 @@ int main(int argc, char* argv[]) {
     });
     ml_engine.start(use_mock);
 
-    // ── Tạo và hiện MainWindow ────────────────────────────────────────────────
-    // ✅ Tạo TRƯỚC khi start engine thread
-    // ✅ show() TRƯỚC khi app.exec() để Qt kịp paint
+    // ── MainWindow ────────────────────────────────────────────────────────────
+    // ✅ Tạo TRƯỚC engine thread — UI sẵn sàng nhận data ngay
     MainWindow window(alert_manager, dispatcher, ml_engine, ring_buf);
     window.show();
 
-    // ── Start engine thread SAU khi UI đã hiện ───────────────────────────────
-    // ✅ QTimer::singleShot(0) = chạy ngay sau lần đầu event loop tick
-    //    → UI đã render xong frame đầu tiên trước khi engine start
+    // ── Engine thread ─────────────────────────────────────────────────────────
+    // ✅ QTimer::singleShot(0) = start sau khi Qt render frame đầu tiên
     std::thread engine_thread;
-
     QTimer::singleShot(0, [&]() {
-        // ✅ Engine chạy trong std::thread riêng — không block Qt
         engine_thread = std::thread(
             engineThread,
             mode, target,
@@ -192,7 +182,7 @@ int main(int argc, char* argv[]) {
             std::ref(ring_buf));
     });
 
-    // ── Dừng engine khi Qt thoát ──────────────────────────────────────────────
+    // ── Qt aboutToQuit ────────────────────────────────────────────────────────
     QObject::connect(&app, &QApplication::aboutToQuit, [&]() {
         g_running = false;
         if (g_capture_ptr)
@@ -200,7 +190,6 @@ int main(int argc, char* argv[]) {
     });
 
     // ── Qt event loop (blocking) ──────────────────────────────────────────────
-    // ✅ Chạy ngay sau window.show() — UI responsive từ frame đầu tiên
     const int ret = app.exec();
 
     // ── Shutdown ──────────────────────────────────────────────────────────────

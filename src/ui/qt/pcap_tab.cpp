@@ -280,17 +280,14 @@ void PcapTab::onLiveTimer() {
 
 // ─── flushPendingToModel — core render logic ──────────────────────────────────
 void PcapTab::flushPendingToModel() {
-    // Lấy batch ra khỏi pending (swap nhanh hơn copy)
     std::vector<PacketRecord> batch;
     {
         std::lock_guard<std::mutex> lock(live_mutex_);
         if (live_pending_.empty()) return;
 
         if (live_pending_.size() <= MAX_ROWS_PER_FLUSH) {
-            // Toàn bộ pending nhỏ hơn ngưỡng → swap toàn bộ (O(1))
             batch.swap(live_pending_);
         } else {
-            // Chỉ lấy MAX_ROWS_PER_FLUSH → tick sau render tiếp
             batch.assign(
                 std::make_move_iterator(live_pending_.begin()),
                 std::make_move_iterator(
@@ -305,27 +302,27 @@ void PcapTab::flushPendingToModel() {
 
     if (batch.empty()) return;
 
-    // ✅ beginInsertRows / endInsertRows — 1 lần cho toàn batch
-    // Không emit dataChanged N lần
+    // ✅ FIX: Push vào ring_buf_ TRƯỚC khi đưa vào model
+    // Live packet chưa bao giờ được push → getByIndex() luôn trả nullptr
+    for (auto& r : batch)
+        ring_buf_.push(r);   // push copy (raw_data shared_ptr vẫn valid)
+
     list_model_->appendRecords(batch);
 
-    // Auto-scroll chỉ khi user đang ở cuối (Wireshark behavior)
-    if (auto_scroll_) {
+    if (auto_scroll_)
         packet_table_->scrollToBottom();
-    }
 
-    // Update stats
     const size_t pending_left = [this]() -> size_t {
         std::lock_guard<std::mutex> lock(live_mutex_);
         return live_pending_.size();
     }();
 
-    QString stats = QString("🔴 %1 packets")
-        .arg(list_model_->rowCount());
+    QString stats = QString("🔴 %1 packets").arg(list_model_->rowCount());
     if (pending_left > 0)
         stats += QString("  |  queued: %1").arg(pending_left);
     stats_label_->setText(stats);
 }
+
 
 // ─── onPpsCheckTimer — đo PPS thực tế mỗi 1s → adaptive interval ─────────────
 void PcapTab::onPpsCheckTimer() {
@@ -431,9 +428,18 @@ void PcapTab::onPacketSelected(const QModelIndex& index) {
 
     PacketRecord record = *record_ptr;
 
-    // Lazy load raw bytes chỉ khi cần (Wireshark pattern)
-    if (!record.raw_data && record.file_offset >= 0)
-        loadRawBytesForRecord(record);
+    if (!record.raw_data) {
+        if (record.file_offset >= 0) {
+            // Offline: lazy load từ file
+            loadRawBytesForRecord(record);
+        } else {
+            // Live: raw_data bị evict → thử lấy lại từ ring_buf
+            // (chỉ còn nếu trong keep_raw window 2000 gần nhất)
+            auto fresh = ring_buf_.getByIndex(record.index);
+            if (fresh && fresh->raw_data)
+                record.raw_data = fresh->raw_data;
+        }
+    }
 
     detail_tree_->showPacket(record);
 
@@ -442,6 +448,8 @@ void PcapTab::onPacketSelected(const QModelIndex& index) {
     else
         hex_view_->clearData();
 }
+
+
 
 void PcapTab::loadRawBytesForRecord(PacketRecord& record) {
     if (current_filepath_.isEmpty()) return;

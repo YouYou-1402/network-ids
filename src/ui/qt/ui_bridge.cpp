@@ -81,8 +81,8 @@ void UiBridge::onTimer() {
         auto records = ring_buf_.getRange(last_sent_seq_,
                                           last_sent_seq_ + to_send);
         if (!records.empty()) {
-            for (auto& r : records)
-                r.raw_data = nullptr;
+            // for (auto& r : records)
+            //     r.raw_data = nullptr;
 
             last_sent_seq_ += static_cast<uint64_t>(records.size());
             emit newPacketRecords(std::move(records));

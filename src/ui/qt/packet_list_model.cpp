@@ -1,7 +1,10 @@
+// src/ui/qt/packet_list_model.cpp
 #include "packet_list_model.hpp"
 #include <QFont>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/ip6.h>   // struct ip6_hdr
+#include <net/ethernet.h>  // ETH_HLEN
 
 static const QStringList HEADERS = {
     "No.", "Time", "Source", "Destination",
@@ -21,6 +24,76 @@ static bool evalOp(DisplayFilter::Op op, uint16_t lhs, uint16_t rhs) {
     }
 }
 
+// ─── ipv4ToString ─────────────────────────────────────────────────────────────
+static QString ipv4ToString(uint32_t ip_net) {
+    if (ip_net == 0) return {};
+    struct in_addr a{};
+    a.s_addr = ip_net;
+    return QString::fromLatin1(inet_ntoa(a));
+}
+
+// ─── ipv6ToString ─────────────────────────────────────────────────────────────
+// Đọc trực tiếp từ raw_data nếu src_ip6 chưa được parse
+static QString ipv6FromRaw(const PacketRecord& r, bool is_src) {
+    // Cần raw_data và đủ dài để chứa Ethernet + IPv6 header
+    if (!r.raw_data) return {};
+    const auto& raw = *r.raw_data;
+
+    // Ethernet header = 14 bytes, IPv6 header = 40 bytes → tối thiểu 54 bytes
+    constexpr size_t ETH_HDR  = 14;
+    constexpr size_t IP6_HDR  = 40;
+    constexpr size_t MIN_SIZE = ETH_HDR + IP6_HDR;
+
+    if (raw.size() < MIN_SIZE) return {};
+
+    // Kiểm tra eth_type = 0x86DD tại offset 12-13
+    const uint16_t eth_type =
+        (static_cast<uint16_t>(raw[12]) << 8) | raw[13];
+    if (eth_type != 0x86DD) return {};
+
+    // IPv6 header bắt đầu tại offset 14
+    const uint8_t* ip6 = raw.data() + ETH_HDR;
+
+    // src = offset 8..23, dst = offset 24..39 (trong IPv6 header)
+    const uint8_t* addr = is_src ? (ip6 + 8) : (ip6 + 24);
+
+    char buf[INET6_ADDRSTRLEN] = {};
+    if (inet_ntop(AF_INET6, addr, buf, sizeof(buf)))
+        return QString::fromLatin1(buf);
+    return {};
+}
+
+// ─── buildAddrString ──────────────────────────────────────────────────────────
+// Ưu tiên: IPv4 → IPv6 (từ raw_data) → fallback label
+static QString buildAddrString(const PacketRecord& r,
+                                bool                is_src) {
+    // 1. IPv4
+    const uint32_t ip4 = is_src ? r.src_ip : r.dst_ip;
+    QString ip_str = ipv4ToString(ip4);
+
+    // 2. IPv6 — đọc từ raw_data (không cần thêm field mới vào PacketRecord)
+    if (ip_str.isEmpty() && r.eth_type == 0x86DD)
+        ip_str = ipv6FromRaw(r, is_src);
+
+    // 3. Có địa chỉ → thêm port nếu có
+    if (!ip_str.isEmpty()) {
+        const uint16_t port = is_src ? r.src_port : r.dst_port;
+        if (port != 0)
+            ip_str += ':' + QString::number(port);
+        return ip_str;
+    }
+
+    // 4. Fallback label theo eth_type
+    switch (r.eth_type) {
+        case 0x0806: return "ARP";
+        case 0x8100: return "VLAN";
+        default:
+            if (r.eth_type != 0 && r.eth_type != 0x0800)
+                return QString("0x%1").arg(r.eth_type, 4, 16, QChar('0'));
+            return {};
+    }
+}
+
 // ─── Constructor ──────────────────────────────────────────────────────────────
 PacketListModel::PacketListModel(PacketRingBuffer& ring_buf, QObject* parent)
     : QAbstractTableModel(parent)
@@ -28,7 +101,6 @@ PacketListModel::PacketListModel(PacketRingBuffer& ring_buf, QObject* parent)
 {}
 
 // ─── rowCount / columnCount ───────────────────────────────────────────────────
-// ✅ Gọi từ main thread — không cần lock
 int PacketListModel::rowCount(const QModelIndex&) const {
     return static_cast<int>(row_cache_.size());
 }
@@ -46,10 +118,7 @@ QVariant PacketListModel::headerData(int             section,
     return {};
 }
 
-// ─── data — KHÔNG lock, KHÔNG alloc, KHÔNG tính toán ────────────────────────
-// ✅ Qt gọi data() từ main thread
-// ✅ row_cache_ chỉ bị modify bởi appendRecords/applyFilter/clear
-//    — tất cả đều từ main thread → zero contention
+// ─── data ─────────────────────────────────────────────────────────────────────
 QVariant PacketListModel::data(const QModelIndex& index, int role) const {
     if (!index.isValid()) return {};
 
@@ -59,15 +128,9 @@ QVariant PacketListModel::data(const QModelIndex& index, int role) const {
 
     const RowCache& c = row_cache_[static_cast<size_t>(row)];
 
-    // ── Roles ─────────────────────────────────────────────────────────────────
-    if (role == Qt::BackgroundRole)
-        return c.bg_color;                     // ✅ pre-computed QColor
-
-    if (role == Qt::ForegroundRole)
-        return QColor("#dddddd");
-
-    if (role == Qt::FontRole)
-        return QFont("Monospace", 10);
+    if (role == Qt::BackgroundRole)  return c.bg_color;
+    if (role == Qt::ForegroundRole)  return QColor("#dddddd");
+    if (role == Qt::FontRole)        return QFont("Monospace", 10);
 
     if (role == Qt::TextAlignmentRole) {
         const int col = index.column();
@@ -78,7 +141,6 @@ QVariant PacketListModel::data(const QModelIndex& index, int role) const {
 
     if (role != Qt::DisplayRole) return {};
 
-    // ── Display — tất cả đọc từ cache, zero computation ──────────────────────
     switch (index.column()) {
         case COL_NO:     return QString::number(c.pkt_idx + 1);
         case COL_TIME:   return c.time_str;
@@ -87,12 +149,12 @@ QVariant PacketListModel::data(const QModelIndex& index, int role) const {
         case COL_PROTO:  return c.proto;
         case COL_LEN:    return QString::number(c.orig_len);
         case COL_INFO:   return c.info;
-        case COL_THREAT: return c.threat;      // ✅ pre-built — không gọi ring_buf_
+        case COL_THREAT: return c.threat;
         default:         return {};
     }
 }
 
-// ─── buildRowCache — tính toán 1 lần khi insert ──────────────────────────────
+// ─── buildRowCache ────────────────────────────────────────────────────────────
 PacketListModel::RowCache
 PacketListModel::buildRowCache(const PacketRecord& r) const {
     RowCache c;
@@ -103,44 +165,32 @@ PacketListModel::buildRowCache(const PacketRecord& r) const {
     c.info     = computeInfo(r);
     c.threat   = QString::fromStdString(r.threat_type);
 
-    // IP:port — inet_ntoa tính 1 lần
-    struct in_addr sa{}, da{};
-    sa.s_addr = r.src_ip;
-    da.s_addr = r.dst_ip;
+    // ✅ Dùng buildAddrString — tự động IPv4 → IPv6(raw) → fallback
+    c.src = buildAddrString(r, /*is_src=*/true);
+    c.dst = buildAddrString(r, /*is_src=*/false);
 
-    c.src = QString(inet_ntoa(sa));
-    if (r.src_port) c.src += ':' + QString::number(r.src_port);
-
-    c.dst = QString(inet_ntoa(da));
-    if (r.dst_port) c.dst += ':' + QString::number(r.dst_port);
-
-    // Relative time
-    const double base = (base_timestamp_ >= 0.0) ? base_timestamp_ : r.timestamp;
+    // ── Relative timestamp ────────────────────────────────────────────────────
+    const double base = (base_timestamp_ >= 0.0) ? base_timestamp_
+                                                  : r.timestamp;
     c.time_str = QString::number(r.timestamp - base, 'f', 6);
 
     return c;
 }
 
 // ─── appendRecords ────────────────────────────────────────────────────────────
-// ✅ Gọi từ main thread (Qt queued connection từ UiBridge)
-// Build cache TRƯỚC beginInsertRows → Qt không block trong notify
 void PacketListModel::appendRecords(const std::vector<PacketRecord>& batch) {
     if (batch.empty()) return;
 
-    // ── 1. Build cache ngoài lock ─────────────────────────────────────────────
     std::vector<RowCache> new_cache;
     new_cache.reserve(batch.size());
 
     for (const auto& r : batch) {
-        // Set base_timestamp_ từ packet đầu tiên
         if (base_timestamp_ < 0.0)
             base_timestamp_ = r.timestamp;
 
-        // Filter check — dùng withRecord để không copy
         bool pass = true;
-        if (current_filter_.valid && !current_filter_.conditions.empty()) {
+        if (current_filter_.valid && !current_filter_.conditions.empty())
             pass = matchFilter(r.index, current_filter_);
-        }
         if (!pass) continue;
 
         new_cache.push_back(buildRowCache(r));
@@ -148,11 +198,9 @@ void PacketListModel::appendRecords(const std::vector<PacketRecord>& batch) {
 
     if (new_cache.empty()) return;
 
-    // ── 2. Giới hạn batch ────────────────────────────────────────────────────
     if (new_cache.size() > static_cast<size_t>(SCROLL_CHUNK))
         new_cache.resize(static_cast<size_t>(SCROLL_CHUNK));
 
-    // ── 3. Evict nếu vượt MAX_DISPLAY_ROWS ───────────────────────────────────
     const int overflow = static_cast<int>(row_cache_.size())
                        + static_cast<int>(new_cache.size())
                        - MAX_DISPLAY_ROWS;
@@ -166,7 +214,6 @@ void PacketListModel::appendRecords(const std::vector<PacketRecord>& batch) {
         endRemoveRows();
     }
 
-    // ── 4. Insert ─────────────────────────────────────────────────────────────
     const int first = static_cast<int>(row_cache_.size());
     const int last  = first + static_cast<int>(new_cache.size()) - 1;
 
@@ -178,7 +225,7 @@ void PacketListModel::appendRecords(const std::vector<PacketRecord>& batch) {
     endInsertRows();
 }
 
-// ─── applyFilter — rebuild từ ring_buf ───────────────────────────────────────
+// ─── applyFilter ──────────────────────────────────────────────────────────────
 void PacketListModel::applyFilter(const DisplayFilter& filter) {
     beginResetModel();
 
@@ -194,13 +241,9 @@ void PacketListModel::applyFilter(const DisplayFilter& filter) {
                              : oldest;
 
     for (uint64_t i = scan_from; i < total; ++i) {
-        // ✅ withRecord: không alloc, callback trong lock
         ring_buf_.withRecord(i, [&](const PacketRecord& r) {
             if (!matchFilter(i, filter)) return;
-
-            if (base_timestamp_ < 0.0)
-                base_timestamp_ = r.timestamp;
-
+            if (base_timestamp_ < 0.0) base_timestamp_ = r.timestamp;
             filtered_indices_.push_back(i);
             row_cache_.push_back(buildRowCache(r));
         });
@@ -218,8 +261,7 @@ void PacketListModel::clear() {
     endResetModel();
 }
 
-// ─── recordAt — dùng cho click → detail panel ────────────────────────────────
-// Đây là trường hợp hiếm (user click) → shared_ptr alloc OK
+// ─── recordAt ─────────────────────────────────────────────────────────────────
 std::shared_ptr<PacketRecord> PacketListModel::recordAt(int row) const {
     if (row < 0 || row >= static_cast<int>(filtered_indices_.size()))
         return nullptr;
@@ -233,41 +275,56 @@ bool PacketListModel::matchFilter(uint64_t             idx,
 
     bool result = false;
     ring_buf_.withRecord(idx, [&](const PacketRecord& rec) {
-        // Proto filter
         if (f.proto_filter != DisplayFilter::Proto::ANY) {
             const QString proto = computeProto(rec);
             switch (f.proto_filter) {
                 case DisplayFilter::Proto::TCP:
-                    if (proto != "TCP")  return;  break;
+                    if (proto != "TCP")  return; break;
                 case DisplayFilter::Proto::UDP:
-                    if (proto != "UDP")  return;  break;
+                    if (proto != "UDP")  return; break;
                 case DisplayFilter::Proto::ICMP:
-                    if (proto != "ICMP") return;  break;
+                    if (proto != "ICMP") return; break;
                 case DisplayFilter::Proto::HTTP:
-                    if (proto != "HTTP") return;  break;
+                    if (proto != "HTTP") return; break;
                 case DisplayFilter::Proto::DNS:
-                    if (proto != "DNS")  return;  break;
+                    if (proto != "DNS")  return; break;
                 default: break;
             }
         }
 
-        // Conditions (AND)
         for (const auto& cond : f.conditions) {
             switch (cond.field) {
                 case DisplayFilter::Field::SRC_IP: {
-                    struct in_addr a{};
-                    inet_pton(AF_INET, cond.value.c_str(), &a);
-                    const bool eq = (rec.src_ip == a.s_addr);
-                    if (cond.op == DisplayFilter::Op::EQ  && !eq) return;
-                    if (cond.op == DisplayFilter::Op::NEQ &&  eq) return;
+                    // ✅ Tự detect IPv4 vs IPv6 từ chuỗi filter
+                    if (cond.value.find(':') != std::string::npos) {
+                        // IPv6 filter — so sánh với raw_data
+                        const QString rec_ip6 = ipv6FromRaw(rec, true);
+                        const bool eq = (rec_ip6.toStdString() == cond.value);
+                        if (cond.op == DisplayFilter::Op::EQ  && !eq) return;
+                        if (cond.op == DisplayFilter::Op::NEQ &&  eq) return;
+                    } else {
+                        // IPv4 filter
+                        struct in_addr a{};
+                        inet_pton(AF_INET, cond.value.c_str(), &a);
+                        const bool eq = (rec.src_ip == a.s_addr);
+                        if (cond.op == DisplayFilter::Op::EQ  && !eq) return;
+                        if (cond.op == DisplayFilter::Op::NEQ &&  eq) return;
+                    }
                     break;
                 }
                 case DisplayFilter::Field::DST_IP: {
-                    struct in_addr a{};
-                    inet_pton(AF_INET, cond.value.c_str(), &a);
-                    const bool eq = (rec.dst_ip == a.s_addr);
-                    if (cond.op == DisplayFilter::Op::EQ  && !eq) return;
-                    if (cond.op == DisplayFilter::Op::NEQ &&  eq) return;
+                    if (cond.value.find(':') != std::string::npos) {
+                        const QString rec_ip6 = ipv6FromRaw(rec, false);
+                        const bool eq = (rec_ip6.toStdString() == cond.value);
+                        if (cond.op == DisplayFilter::Op::EQ  && !eq) return;
+                        if (cond.op == DisplayFilter::Op::NEQ &&  eq) return;
+                    } else {
+                        struct in_addr a{};
+                        inet_pton(AF_INET, cond.value.c_str(), &a);
+                        const bool eq = (rec.dst_ip == a.s_addr);
+                        if (cond.op == DisplayFilter::Op::EQ  && !eq) return;
+                        if (cond.op == DisplayFilter::Op::NEQ &&  eq) return;
+                    }
                     break;
                 }
                 case DisplayFilter::Field::SRC_PORT: {
@@ -316,6 +373,28 @@ bool PacketListModel::matchFilter(uint64_t             idx,
 
 // ─── computeProto ─────────────────────────────────────────────────────────────
 QString PacketListModel::computeProto(const PacketRecord& r) const {
+    // ── Non-IP / special frames ───────────────────────────────────────────────
+    if (r.protocol == 0) {
+        switch (r.eth_type) {
+            case 0x0806: return "ARP";
+            case 0x86DD: return "IPv6";
+            case 0x8100: return "VLAN";
+            case 0x0800: break;
+            default:
+                if (r.eth_type != 0)
+                    return QString("ETH(0x%1)")
+                        .arg(r.eth_type, 4, 16, QChar('0'));
+                return "UNKNOWN";
+        }
+    }
+
+    // ── IPv6 với next-header ──────────────────────────────────────────────────
+    // ✅ ICMPv6 (next header = 58) phân biệt với ICMP (1)
+    if (r.eth_type == 0x86DD) {
+        if (r.protocol == 58) return "ICMPv6";
+    }
+
+    // ── IPv4 / IPv6 transport ─────────────────────────────────────────────────
     switch (r.protocol) {
         case IPPROTO_TCP: {
             if (r.src_port == 80   || r.dst_port == 80   ||
@@ -328,21 +407,25 @@ QString PacketListModel::computeProto(const PacketRecord& r) const {
             return "TCP";
         }
         case IPPROTO_UDP: {
-            if (r.src_port == 53  || r.dst_port == 53)    return "DNS";
+            if (r.src_port == 53  || r.dst_port == 53)   return "DNS";
             if (r.src_port == 67  || r.dst_port == 67 ||
-                r.src_port == 68  || r.dst_port == 68)    return "DHCP";
-            if (r.src_port == 123 || r.dst_port == 123)   return "NTP";
-            if (r.src_port == 161 || r.dst_port == 161)   return "SNMP";
+                r.src_port == 68  || r.dst_port == 68)   return "DHCP";
+            if (r.src_port == 123 || r.dst_port == 123)  return "NTP";
+            if (r.src_port == 161 || r.dst_port == 161)  return "SNMP";
             return "UDP";
         }
         case IPPROTO_ICMP: return "ICMP";
         case IPPROTO_IGMP: return "IGMP";
-        default:           return QString("IP(%1)").arg(r.protocol);
+        default:
+            return QString("IP(%1)").arg(r.protocol);
     }
 }
 
 // ─── computeInfo ──────────────────────────────────────────────────────────────
 QString PacketListModel::computeInfo(const PacketRecord& r) const {
+    if (r.eth_type == 0x0806)
+        return "ARP";
+
     if (r.protocol == IPPROTO_TCP) {
         QStringList flags;
         if (r.tcp_flags & 0x02) flags << "SYN";
@@ -365,6 +448,9 @@ QString PacketListModel::computeInfo(const PacketRecord& r) const {
             .arg(r.src_port).arg(r.dst_port).arg(r.payload_len);
     if (r.protocol == IPPROTO_ICMP)
         return "ICMP message";
+    if (r.protocol == 58)
+        return "ICMPv6 message";
+
     return QString("len=%1").arg(r.orig_len);
 }
 
@@ -379,6 +465,10 @@ QColor PacketListModel::computeRowColor(const PacketRecord& r) const {
             return QColor(60, 38, 10);
         return QColor(50, 10, 10);
     }
+
+    if (r.eth_type == 0x0806) return QColor(25, 25, 10);
+    if (r.eth_type == 0x86DD) return QColor(10, 25, 25);
+
     switch (r.protocol) {
         case IPPROTO_TCP: {
             if (r.tcp_flags & 0x04) return QColor(40, 10, 10);
@@ -395,6 +485,7 @@ QColor PacketListModel::computeRowColor(const PacketRecord& r) const {
                 return QColor(35, 20, 45);
             return QColor(20, 20, 35);
         case IPPROTO_ICMP: return QColor(10, 35, 35);
+        case 58:           return QColor(10, 30, 30);  // ICMPv6
         default:           return QColor(15, 15, 15);
     }
 }

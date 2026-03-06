@@ -1,6 +1,8 @@
+// src/layer1/worker_thread.hpp
 #pragma once
 #include "../common/packet_info.hpp"
 #include "../common/threat_types.hpp"
+#include "../pcap_io/packet_ring_buffer.hpp"
 #include "flow_table.hpp"
 #include "signature_engine.hpp"
 #include "protocol_anomaly.hpp"
@@ -11,19 +13,17 @@
 #include <atomic>
 #include <functional>
 
-// Callback type: được gọi khi phát hiện threat
+// ─── AlertCallback ────────────────────────────────────────────────────────────
 using AlertCallback = std::function<void(const DetectionEvent&)>;
 
-// Thread-safe packet queue
+// ─── PacketQueue ──────────────────────────────────────────────────────────────
 class PacketQueue {
 public:
     explicit PacketQueue(size_t max_size = 4096);
 
-    bool push(PacketInfo pkt);          // Non-blocking, false nếu đầy
-    bool pop(PacketInfo& pkt,
-             int timeout_ms = 100);     // Blocking với timeout
-
-    size_t size() const;
+    bool   push(PacketInfo pkt);
+    bool   pop (PacketInfo& pkt, int timeout_ms = 100);
+    size_t size()  const;
     bool   empty() const;
 
 private:
@@ -33,21 +33,20 @@ private:
     size_t                  max_size_;
 };
 
-// Worker Thread: xử lý gói tin từ queue
+// ─── WorkerThread ─────────────────────────────────────────────────────────────
 class WorkerThread {
 public:
-    WorkerThread(int id, FlowTable& flow_table,
-                 AlertCallback on_alert);
+    WorkerThread(int              id,
+                 FlowTable&       flow_table,
+                 AlertCallback    on_alert,
+                 PacketRingBuffer& ring_buf);
     ~WorkerThread();
 
     void start();
     void stop();
-    bool isRunning() const { return running_; }
-
-    // Nhận gói tin từ Dispatcher
+    bool isRunning() const { return running_.load(); }
     bool enqueue(PacketInfo pkt);
-
-    int id() const { return id_; }
+    int  id()      const { return id_; }
 
 private:
     void run();
@@ -56,13 +55,16 @@ private:
                          const PacketInfo&      pkt,
                          FlowState&             flow);
 
+    // ── Helper: PacketInfo → PacketRecord ─────────────────────────────────────
+    static PacketRecord makeRecord(const PacketInfo& pkt);
+
     int               id_;
     FlowTable&        flow_table_;
     AlertCallback     on_alert_;
+    PacketRingBuffer& ring_buf_;
     PacketQueue       queue_;
-    SignatureEngine   sig_engine_;
-    ProtocolAnomalyEngine anomaly_engine_;
-
+    SignatureEngine        sig_engine_;
+    ProtocolAnomalyEngine  anomaly_engine_;
     std::thread       thread_;
     std::atomic<bool> running_{false};
 };

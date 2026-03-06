@@ -1,36 +1,44 @@
+// src/layer1/dispatcher.hpp
 #pragma once
 #include "worker_thread.hpp"
 #include "../common/packet_info.hpp"
+#include "../pcap_io/packet_ring_buffer.hpp"
 #include <vector>
 #include <memory>
 #include <atomic>
+#include <functional>
 
 class Dispatcher {
 public:
-    explicit Dispatcher(int num_workers = 4);
+    explicit Dispatcher(int               num_workers = 4,
+                        PacketRingBuffer& ring_buf    = *defaultRingBuf());
     ~Dispatcher();
 
     void start(AlertCallback on_alert);
     void stop();
 
-    // Nhận gói tin từ PacketCapture và route đến đúng worker
     void dispatch(PacketInfo pkt);
-
-    // Cleanup flows định kỳ
     void cleanupFlows(double idle_timeout_sec = 300.0);
 
     void forEachFlow(std::function<void(FlowState&)> callback) {
-    flow_table_.forEach(callback);
-}
+        flow_table_.forEach(callback);
+    }
 
     size_t activeFlows() const { return flow_table_.size(); }
 
 private:
-    // Hash 5-tuple → worker index
     uint32_t hashToWorker(const PacketInfo& pkt) const;
 
-    int                                    num_workers_;
-    FlowTable                              flow_table_;
+    // ── Không dùng defaultRingBuf() trong production ──────────────────────────
+    // Chỉ để tránh lỗi compile khi không truyền ring_buf
+    static PacketRingBuffer* defaultRingBuf() {
+        static PacketRingBuffer fallback;
+        return &fallback;
+    }
+
+    int                                        num_workers_;
+    PacketRingBuffer&                          ring_buf_;
+    FlowTable                                  flow_table_;
     std::vector<std::unique_ptr<WorkerThread>> workers_;
-    std::atomic<bool>                      running_{false};
+    std::atomic<bool>                          running_{false};
 };
