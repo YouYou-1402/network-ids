@@ -20,7 +20,7 @@ struct SystemMetrics {
 
     // Performance
     std::atomic<uint64_t> active_flows      {0};
-    std::atomic<uint64_t> queue_drops       {0};  // Dropped do queue đầy
+    std::atomic<uint64_t> queue_drops       {0};  
 
     // Singleton
     static SystemMetrics& instance() {
@@ -35,5 +35,4 @@ private:
     SystemMetrics() = default;
 };
 
-// Macro tiện lợi
 #define METRICS SystemMetrics::instance()

@@ -8,11 +8,6 @@
 #include <deque>
 #include "ui_bridge.hpp"
 
-// ❌ XÓA dòng này — Qt6 đã bỏ hoàn toàn QtCharts namespace
-// QT_CHARTS_USE_NAMESPACE
-
-// Qt6: QChart, QLineSeries, QValueAxis... đều nằm trong Qt:: namespace bình thường
-// Không cần using namespace QtCharts hay QT_CHARTS_USE_NAMESPACE
 
 class TrafficChart : public QWidget {
     Q_OBJECT

@@ -39,15 +39,9 @@ public:
 
     void     push(PacketRecord record);
 
-    // Lấy range [from, to) — copy metadata, không copy raw_data
     std::vector<PacketRecord> getRange(size_t from, size_t to) const;
-
-    // Lấy shared_ptr<PacketRecord> — dùng cho lazy raw-byte load
     std::shared_ptr<PacketRecord> getByIndex(uint64_t index) const;
 
-    // ✅ MỚI: callback-based access — không alloc, không copy
-    // Trả về false nếu index đã bị evict
-    // f() được gọi TRONG lock — chỉ dùng cho read nhanh
     template<typename Fn>
     bool withRecord(uint64_t index, Fn&& f) const {
         std::lock_guard<std::mutex> lock(mutex_);

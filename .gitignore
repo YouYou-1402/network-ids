@@ -1,6 +1,7 @@
 # Build folder
 build/
-
+data/
+models/
 # CMake
 CMakeFiles/
 CMakeCache.txt

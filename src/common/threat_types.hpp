@@ -32,12 +32,12 @@ struct DetectionEvent {
     DetectionResult  result;
     PacketAction     action;
     DetectionSource  source;
-    std::string      detail;      // Mô tả ngắn gọn
+    std::string      detail;      
     uint32_t         src_ip;
     uint32_t         dst_ip;
     uint16_t         src_port;
     uint16_t         dst_port;
-    double           timestamp;   // Unix timestamp
+    double           timestamp;  
 };
 
 // Helper: convert enum → string để log

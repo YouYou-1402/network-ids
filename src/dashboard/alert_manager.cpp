@@ -34,7 +34,7 @@ void AlertManager::addL1Alert(const DetectionEvent& event) {
     alert.dst_ip     = event.dst_ip;
     alert.src_port   = event.src_port;
     alert.dst_port   = event.dst_port;
-    alert.confidence = 1.0f;   // L1 rule-based → deterministic
+    alert.confidence = 1.0f;   
     alert.detail     = "[L1] " + event.detail;
     alert.timestamp  = event.timestamp;
     addAlert(std::move(alert));
@@ -45,7 +45,7 @@ void AlertManager::addL2Alert(const MLResult& result) {
     UnifiedAlert alert;
     alert.source     = UnifiedAlert::Source::LAYER2;
     alert.result     = result.final_result;
-    alert.action     = PacketAction::ALERT;   // L2 chỉ alert, không DROP
+    alert.action     = PacketAction::ALERT;   
     alert.src_ip     = result.src_ip;
     alert.dst_ip     = result.dst_ip;
     alert.src_port   = result.src_port;

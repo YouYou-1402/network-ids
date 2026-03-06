@@ -32,29 +32,24 @@ struct UnifiedAlert {
 // ─── AlertManager ─────────────────────────────────────────────────────────────
 class AlertManager {
 public:
-    // Cooldown mặc định: cùng flow không alert quá 1 lần / 5 giây
     static constexpr int    SUPPRESS_SEC  = 5;
     static constexpr size_t MAX_LOG_QUEUE = 512;
 
     explicit AlertManager(size_t max_alerts = 1000);
 
-    // ✅ Gọi từ worker thread — phải cực nhanh, không I/O
     void addL1Alert(const DetectionEvent& event);
     void addL2Alert(const MLResult& result);
 
-    // ✅ Gọi từ Qt main thread — lock ngắn
     std::vector<UnifiedAlert> getRecent(size_t n) const;
 
-    // ✅ Atomic reads — không cần lock
     uint64_t ddosAlerts()     const { return ddos_alerts_.load();      }
     uint64_t slowDdosAlerts() const { return slow_ddos_alerts_.load(); }
     uint64_t scanAlerts()     const { return scan_alerts_.load();      }
     uint64_t totalAlerts()    const { return total_alerts_.load();     }
 
 private:
-    // dedup_key tự build bên trong — caller không cần truyền
     void addAlert(UnifiedAlert alert);
-    bool shouldSuppress(const std::string& key);  // gọi khi đang giữ mutex_
+    bool shouldSuppress(const std::string& key); 
 
     // ── Storage ───────────────────────────────────────────────────────────────
     mutable std::mutex       mutex_;

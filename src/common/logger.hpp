@@ -11,7 +11,6 @@ class Logger {
 public:
     enum class Level { DBG = 0, INFO = 1, WARN = 2, ERR = 3 };
 
-    // Singleton
     static Logger& instance() {
         static Logger inst;
         return inst;
@@ -22,7 +21,6 @@ public:
 
     void log(Level level, const std::string& msg);
 
-    // Convenience methods
     void debug(const std::string& msg) { log(Level::DBG, msg); }
     void info (const std::string& msg) { log(Level::INFO,  msg); }
     void warn (const std::string& msg) { log(Level::WARN,  msg); }
@@ -39,7 +37,6 @@ private:
     bool          file_open_ = false;
 };
 
-// Macro tiện lợi
 #define LOG_DEBUG(msg) Logger::instance().debug(msg)
 #define LOG_INFO(msg)  Logger::instance().info(msg)
 #define LOG_WARN(msg)  Logger::instance().warn(msg)
