@@ -8,7 +8,10 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <memory>
+#include <atomic>
+#include <thread>
 #include <QStatusBar>
+
 // Forward declarations — tránh MOC redefinition
 class UiBridge;
 class PcapTab;
@@ -19,6 +22,7 @@ class AlertManager;
 class Dispatcher;
 class MLEngine;
 class PacketRingBuffer;
+class PacketCapture;
 struct MetricsSnapshot;
 
 class MainWindow : public QMainWindow {
@@ -42,6 +46,11 @@ private slots:
     void updateUptime         ();
     void onAbout              ();
 
+    // ── Capture control slots ─────────────────────────────────────────────────
+    void onStartCaptureClicked();
+    void onStopCaptureClicked ();
+    void onSaveCaptureClicked ();
+
 private:
     void setupUI        ();
     void setupMenuBar   ();
@@ -49,23 +58,39 @@ private:
     void applyDarkTheme ();
     void addPcapTab     (const QString& filepath = {});
 
-    // Core
+    // ── Capture control ───────────────────────────────────────────────────────
+    void startLiveCapture(const QString& iface, const QString& filter);
+    void stopLiveCapture ();
+
+    // ── Core ──────────────────────────────────────────────────────────────────
     std::unique_ptr<UiBridge> bridge_;
     QTime                     start_time_;
     bool                      is_running_ { true };
 
-    // Widgets
+    // ── Capture state ─────────────────────────────────────────────────────────
+    std::shared_ptr<PacketCapture> active_capture_;
+    std::unique_ptr<std::thread>   capture_thread_;
+    std::atomic<bool>              capture_running_ { false };
+    QString                        capture_iface_;
+
+    // ── Widgets ───────────────────────────────────────────────────────────────
     QTabWidget*    tab_widget_      { nullptr };
     PcapTab*       live_tab_        { nullptr };
     AlertPanel*    alert_panel_     { nullptr };
     MetricsWidget* metrics_widget_  { nullptr };
     TrafficChart*  traffic_chart_   { nullptr };
 
-    // Status bar
-    QLabel* status_running_ { nullptr };
-    QLabel* status_pps_     { nullptr };
-    QLabel* status_uptime_  { nullptr };
+    // ── Capture action refs — để enable/disable ───────────────────────────────
+    QAction* act_start_cap_ { nullptr };
+    QAction* act_stop_cap_  { nullptr };
+    QAction* act_save_cap_  { nullptr };
 
-    // Uptime timer
+    // ── Status bar ────────────────────────────────────────────────────────────
+    QLabel* status_running_  { nullptr };
+    QLabel* status_pps_      { nullptr };
+    QLabel* status_uptime_   { nullptr };
+    QLabel* status_iface_    { nullptr };   // ← hiện interface đang capture
+
+    // ── Uptime timer ──────────────────────────────────────────────────────────
     QTimer uptime_timer_;
 };

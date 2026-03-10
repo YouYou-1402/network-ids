@@ -212,6 +212,7 @@ set(UI_SOURCES
     src/ui/qt/packet_list_model.cpp
     src/ui/qt/hex_view.cpp
     src/ui/qt/filter_bar.cpp
+    src/ui/qt/capture_control_dialog.cpp
     src/ui/qt/main_window.cpp
 )
 
@@ -225,6 +226,7 @@ set(UI_HEADERS
     src/ui/qt/packet_list_model.hpp
     src/ui/qt/hex_view.hpp
     src/ui/qt/filter_bar.hpp
+    src/ui/qt/capture_control_dialog.hpp
     src/ui/qt/main_window.hpp
 )
 

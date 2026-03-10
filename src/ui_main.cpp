@@ -1,4 +1,4 @@
-// src/main_qt.cpp
+// src/ui_main.cpp
 #include <QApplication>
 #include <QTimer>
 #include <atomic>
@@ -25,7 +25,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Global state
 // ─────────────────────────────────────────────────────────────────────────────
-std::atomic<bool>  g_running{true};
+std::atomic<bool>  g_running { true };
 PacketCapture*     g_capture_ptr = nullptr;
 
 void signalHandler(int) {
@@ -35,7 +35,7 @@ void signalHandler(int) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Engine thread — toàn bộ blocking I/O ở đây
+// Engine thread — chỉ chạy khi UI gọi startEngineCapture()
 // ─────────────────────────────────────────────────────────────────────────────
 void engineThread(const std::string& mode,
                   const std::string& target,
@@ -95,13 +95,8 @@ void engineThread(const std::string& mode,
     });
 
     // ── Blocking capture loop ─────────────────────────────────────────────────
-    // ✅ Qt UI mode: KHÔNG tự tạo PacketRecord ở đây
-    // ✅ worker_thread.cpp đã push đầy đủ record (có eth_type) vào ring_buf
-    // ✅ Chỉ cần dispatch → worker tự xử lý và push
     capture.startCapture([&](PacketInfo pkt) {
         if (!g_running) return;
-        // ✅ dispatch() → WorkerThread::processPacket() → ring_buf_.push()
-        // WorkerThread đã có ring_buf_ reference từ constructor
         dispatcher.dispatch(std::move(pkt));
     });
 
@@ -128,18 +123,26 @@ int main(int argc, char* argv[]) {
     Logger::instance().setLevel(Logger::Level::INFO);
     Logger::instance().setLogFile("ids_ui.log");
 
-    // ── Parse args ────────────────────────────────────────────────────────────
-    if (argc < 3) {
-        std::cerr << "Usage: " << argv[0]
-                  << " -i <interface> | -f <pcap_file>\n";
-        return 1;
-    }
-    const std::string mode   = argv[1];
-    const std::string target = argv[2];
-    bool use_mock = true;
-    for (int i = 3; i < argc; ++i)
-        if (std::string(argv[i]) == "--no-mock")
+    // ── Parse args — tất cả OPTIONAL ─────────────────────────────────────────
+    // Có thể chạy không cần arg:  ./network_ids_ui
+    // Hoặc truyền sẵn:            ./network_ids_ui -i eth0
+    //                              ./network_ids_ui -f traffic.pcap
+    std::string mode;
+    std::string target;
+    bool        use_mock    = true;
+    bool        auto_start  = false;   // true nếu truyền arg từ CLI
+
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if ((arg == "-i" || arg == "-f") && i + 1 < argc) {
+            mode       = arg;
+            target     = argv[++i];
+            auto_start = true;
+        } else if (arg == "--no-mock") {
             use_mock = false;
+        }
+        // arg không nhận ra → bỏ qua (không crash)
+    }
 
     // ── Khởi tạo shared objects ───────────────────────────────────────────────
     MLJobQueue       ml_queue;
@@ -147,8 +150,6 @@ int main(int argc, char* argv[]) {
     PacketRingBuffer ring_buf(100'000, 65'535);
 
     // ── Layer 1 ───────────────────────────────────────────────────────────────
-    // ✅ Truyền ring_buf vào Dispatcher → WorkerThread
-    //    WorkerThread::makeRecord() copy đầy đủ eth_type + tất cả fields
     Dispatcher dispatcher(4, ring_buf);
     dispatcher.start([&](const DetectionEvent& event) {
         alert_manager.addL1Alert(event);
@@ -165,22 +166,34 @@ int main(int argc, char* argv[]) {
     ml_engine.start(use_mock);
 
     // ── MainWindow ────────────────────────────────────────────────────────────
-    // ✅ Tạo TRƯỚC engine thread — UI sẵn sàng nhận data ngay
     MainWindow window(alert_manager, dispatcher, ml_engine, ring_buf);
     window.show();
 
-    // ── Engine thread ─────────────────────────────────────────────────────────
-    // ✅ QTimer::singleShot(0) = start sau khi Qt render frame đầu tiên
+    // ── Engine thread handle ──────────────────────────────────────────────────
     std::thread engine_thread;
-    QTimer::singleShot(0, [&]() {
+
+    // ── Hàm start engine — dùng cho cả auto_start và UI-triggered ────────────
+    auto startEngine = [&](const std::string& m, const std::string& t) {
+        if (engine_thread.joinable()) return;   // đang chạy rồi
+        g_running = true;
         engine_thread = std::thread(
             engineThread,
-            mode, target,
+            m, t,
             std::ref(dispatcher),
             std::ref(ml_queue),
             std::ref(alert_manager),
             std::ref(ring_buf));
-    });
+    };
+
+    // ── Nếu truyền arg CLI → auto start sau frame đầu tiên ───────────────────
+    if (auto_start) {
+        QTimer::singleShot(0, [&]() {
+            startEngine(mode, target);
+        });
+    }
+    // ── Nếu KHÔNG có arg → UI idle, chờ user bấm "Start Capture" ─────────────
+    // MainWindow::startLiveCapture() tự mở PacketCapture riêng (đã có sẵn)
+    // engine_thread ở đây chỉ dùng khi muốn route qua IDS engine
 
     // ── Qt aboutToQuit ────────────────────────────────────────────────────────
     QObject::connect(&app, &QApplication::aboutToQuit, [&]() {
