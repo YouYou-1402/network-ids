@@ -57,7 +57,7 @@ struct PacketRecord {
 class PacketRingBuffer {
 public:
     explicit PacketRingBuffer(size_t max_packets     = 100'000,
-                               size_t keep_raw_last_n = 1'000);
+                               size_t keep_raw_last_n = 10'000);
 
     // ── Write ─────────────────────────────────────────────────────────────────
     void push(PacketRecord record);

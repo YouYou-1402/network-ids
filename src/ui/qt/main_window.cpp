@@ -141,6 +141,12 @@ void MainWindow::setupUI() {
     h_splitter->addWidget(tab_widget_);
     h_splitter->setSizes({240, 1160});
     root_layout->addWidget(h_splitter);
+
+    connect(tab_widget_, &QTabWidget::currentChanged,
+        this, [this](int index) {
+            if (tab_widget_->widget(index) == traffic_chart_)
+                traffic_chart_->forceResize();
+        });
 }
 
 // ─── addPcapTab ───────────────────────────────────────────────────────────────
@@ -266,12 +272,14 @@ void MainWindow::applyDarkTheme() {
     setStyleSheet(
         "QMainWindow { background: #0f0f1a; }"
         "QWidget { background: #0f0f1a; color: #cccccc; }"
+        "QChartView { background: transparent; }"   // ✅ không override chart bg
         "QScrollBar:vertical { background: #1a1a2e; width: 8px; }"
         "QScrollBar::handle:vertical { background: #444; "
         "border-radius: 4px; min-height: 20px; }"
         "QScrollBar::add-line:vertical, "
         "QScrollBar::sub-line:vertical { height: 0; }");
 }
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CAPTURE CONTROL
@@ -362,6 +370,7 @@ void MainWindow::startLiveCapture(const QString& iface,
             PacketRecord rec;
             rec.timestamp   = pkt.timestampSeconds();
             rec.orig_len    = pkt.pkt_len;
+            rec.cap_len     = pkt.cap_len; 
             rec.src_ip      = pkt.src_ip;
             rec.dst_ip      = pkt.dst_ip;
             rec.src_port    = pkt.src_port;

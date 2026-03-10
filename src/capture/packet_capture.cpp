@@ -197,6 +197,7 @@ PacketInfo PacketCapture::parsePacket(const u_char*             data,
     PacketInfo pkt {};
     pkt.timestamp = header->ts;
     pkt.pkt_len   = header->len;
+    pkt.cap_len   = header->caplen;
     pkt.raw_data.assign(data, data + header->caplen);
 
     const u_char* ptr       = data;

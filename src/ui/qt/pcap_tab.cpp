@@ -17,7 +17,7 @@
 PcapTab::PcapTab(Mode mode, QWidget* parent)
     : QWidget(parent)
     , mode_(mode)
-    , ring_buf_(200'000, 2000)          // 200K slots, giữ raw bytes 2000 gần nhất
+    , ring_buf_(200'000, 20'000)
     , reader_(std::make_unique<PcapReader>())
     , writer_(std::make_unique<PcapWriter>())
 {
@@ -28,12 +28,17 @@ PcapTab::PcapTab(Mode mode, QWidget* parent)
     setupToolbar();
 
     if (mode_ == Mode::LIVE) {
-        // Flush pending → model mỗi RENDER_INTERVAL_NORMAL_MS
+        // Mở file buffer tạm ngay khi tạo tab — ghi song song với capture
+        live_buffer_path_ = QString("/tmp/live_%1.pcap")
+                                .arg(QDateTime::currentSecsSinceEpoch());
+        current_filepath_ = live_buffer_path_;   // lazy load dùng cái này
+        if (!writer_->open(live_buffer_path_.toStdString()))
+            LOG_WARN("PcapTab: cannot open live buffer file");
+
         connect(&live_timer_, &QTimer::timeout,
                 this, &PcapTab::onLiveTimer);
         live_timer_.start(RENDER_INTERVAL_NORMAL_MS);
 
-        // Đo PPS mỗi 1s → tự chỉnh render interval (Wireshark adaptive)
         connect(&pps_check_timer_, &QTimer::timeout,
                 this, &PcapTab::onPpsCheckTimer);
         pps_check_timer_.start(1000);
@@ -302,10 +307,14 @@ void PcapTab::flushPendingToModel() {
 
     if (batch.empty()) return;
 
-    // ✅ FIX: Push vào ring_buf_ TRƯỚC khi đưa vào model
-    // Live packet chưa bao giờ được push → getByIndex() luôn trả nullptr
-    for (auto& r : batch)
-        ring_buf_.push(r);   // push copy (raw_data shared_ptr vẫn valid)
+    for (auto& r : batch) {
+        // ✅ Ghi ra disk TRƯỚC — lưu offset để lazy load sau khi raw_data bị evict
+        if (writer_->isOpen()) {
+            r.file_offset = writer_->currentOffset();
+            writer_->writePacket(r);
+        }
+        ring_buf_.push(r);
+    }
 
     list_model_->appendRecords(batch);
 
@@ -522,6 +531,14 @@ void PcapTab::onClearClicked() {
     hex_view_->clearData();
     pps_last_count_ = 0;
     stats_label_->setText("Cleared");
+
+    if (mode_ == Mode::LIVE) {
+        writer_->close();
+        live_buffer_path_ = QString("/tmp/live_%1.pcap")
+                                .arg(QDateTime::currentSecsSinceEpoch());
+        current_filepath_ = live_buffer_path_;
+        writer_->open(live_buffer_path_.toStdString());
+    }
 }
 
 // ─── onLoadProgress ───────────────────────────────────────────────────────────

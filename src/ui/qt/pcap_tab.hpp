@@ -11,6 +11,7 @@
 #include <QTimer>
 #include <QFileInfo>
 #include <QDir>
+#include <QDateTime>  
 
 #include <memory>
 #include <atomic>
@@ -22,6 +23,7 @@
 #include "packet_list_model.hpp"
 #include "packet_detail_tree.hpp"
 #include "hex_view.hpp"
+#include "../../common/logger.hpp"   
 #include "../../pcap_io/pcap_reader.hpp"
 #include "../../pcap_io/pcap_writer.hpp"
 #include "../../pcap_io/packet_ring_buffer.hpp"
@@ -83,10 +85,12 @@ private:
     void loadRawBytesForRecord(PacketRecord& record);
     void updateAdaptiveInterval(double pps);
 
+    
     // ── Mode & state ──────────────────────────────────────────────────────────
     Mode              mode_;
     QString           tab_title_;
     QString           current_filepath_;
+    QString           live_buffer_path_; 
     std::atomic<bool> cancel_scan_    { false };
     bool              render_paused_  { false };
     bool              auto_scroll_    { true  };

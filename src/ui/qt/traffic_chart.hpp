@@ -8,29 +8,35 @@
 #include <deque>
 #include "ui_bridge.hpp"
 
-
 class TrafficChart : public QWidget {
     Q_OBJECT
 
 public:
     explicit TrafficChart(QWidget* parent = nullptr);
 
+    void forceResize() {
+        if (chart_view_) {
+            chart_view_->resize(size());
+            chart_view_->update();
+        }
+    }
+
 public slots:
     void onTrafficUpdated(TrafficPoint point);
 
 private:
     void setupUI();
-    void updateAxes();
 
-    QChartView*  chart_view_;
-    QChart*      chart_;
-    QLineSeries* series_total_;
-    QLineSeries* series_drop_;
-    QLineSeries* series_alert_;
-    QValueAxis*  axis_x_;
-    QValueAxis*  axis_y_;
+    QChartView*  chart_view_  { nullptr };
+    QChart*      chart_       { nullptr };
+    QLineSeries* series_total_{ nullptr };
+    QLineSeries* series_drop_ { nullptr };
+    QLineSeries* series_alert_{ nullptr };
+    QValueAxis*  axis_x_      { nullptr };
+    QValueAxis*  axis_y_      { nullptr };
 
     std::deque<TrafficPoint> history_;
-    static constexpr int     WINDOW_SEC = 60;
-    static constexpr int     MAX_POINTS = 120;
+
+    static constexpr int    WINDOW_SEC = 60;
+    static constexpr size_t MAX_POINTS = 360;
 };

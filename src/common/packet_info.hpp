@@ -52,6 +52,7 @@ struct PacketInfo {
 
     // ── Payload ───────────────────────────────────────────────────────────────
     uint32_t pkt_len        = 0;
+    uint32_t cap_len        = 0;
     uint32_t payload_len    = 0;
     uint32_t payload_offset = 0;
 

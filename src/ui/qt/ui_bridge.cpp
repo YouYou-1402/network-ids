@@ -115,21 +115,22 @@ TrafficPoint UiBridge::buildTrafficPoint() {
     const uint64_t alerted  = METRICS.packets_alerted.load();
 
     pps_window_.push_back({now_ms, captured, dropped, alerted});
-
-    // Xóa điểm cũ hơn PPS_WINDOW_MS
     while (pps_window_.size() > 1 &&
            now_ms - pps_window_.front().time_ms > PPS_WINDOW_MS)
         pps_window_.pop_front();
 
     TrafficPoint p;
-    p.timestamp = now_ms / 1000.0;
+    p.timestamp = static_cast<double>(now_ms) / 1000.0;
+    p.total_pps = 0;
+    p.drop_pps  = 0;
+    p.alert_pps = 0;
 
     if (pps_window_.size() >= 2) {
-        const auto& oldest    = pps_window_.front();
-        const auto& newest    = pps_window_.back();
-        const qint64 elapsed  = newest.time_ms - oldest.time_ms;
+        const auto& oldest   = pps_window_.front();
+        const auto& newest   = pps_window_.back();
+        const qint64 elapsed = newest.time_ms - oldest.time_ms;
 
-        if (elapsed > 0) {
+        if (elapsed >= 100) {  
             auto pps = [&](uint64_t a, uint64_t b) -> uint64_t {
                 return (a > b)
                     ? (a - b) * 1000ULL / static_cast<uint64_t>(elapsed)
@@ -142,3 +143,4 @@ TrafficPoint UiBridge::buildTrafficPoint() {
     }
     return p;
 }
+

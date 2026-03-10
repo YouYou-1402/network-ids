@@ -1,3 +1,4 @@
+// ── pcap_writer.cpp ───────────────────────────────────────────────────────────
 #include "pcap_writer.hpp"
 #include "../common/logger.hpp"
 #include <cstring>
@@ -7,8 +8,8 @@ PcapWriter::~PcapWriter() {
 }
 
 bool PcapWriter::open(const std::string& filepath,
-                       int                snaplen,
-                       int                linktype) {
+                      int                snaplen,
+                      int                linktype) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (dumper_) {
@@ -16,7 +17,6 @@ bool PcapWriter::open(const std::string& filepath,
         return false;
     }
 
-    // Tạo pcap handle giả (dead handle) chỉ để mở dumper
     handle_ = pcap_open_dead(linktype, snaplen);
     if (!handle_) {
         LOG_ERROR("PcapWriter: pcap_open_dead failed");
@@ -32,7 +32,9 @@ bool PcapWriter::open(const std::string& filepath,
         return false;
     }
 
-    filepath_ = filepath;
+    filepath_        = filepath;
+    packets_written_ = 0;
+    bytes_written_   = 0;   // reset khi mở file mới
     LOG_INFO("PcapWriter: opened " + filepath);
     return true;
 }
@@ -52,7 +54,7 @@ bool PcapWriter::writePacket(const uint8_t*        data,
     pcap_dump(reinterpret_cast<u_char*>(dumper_), &hdr, data);
 
     packets_written_++;
-    bytes_written_ += cap_len;
+    bytes_written_ += PCAP_PACKET_HEADER_SIZE + cap_len; // ✅ FIX: +16 bytes packet header
     return true;
 }
 
@@ -63,7 +65,7 @@ bool PcapWriter::writePacket(const PacketRecord& record) {
     struct timeval ts;
     ts.tv_sec  = static_cast<time_t>(record.timestamp);
     ts.tv_usec = static_cast<suseconds_t>(
-        (record.timestamp - ts.tv_sec) * 1e6);
+        (record.timestamp - static_cast<double>(ts.tv_sec)) * 1e6);
 
     return writePacket(
         record.raw_data->data(),
@@ -80,7 +82,8 @@ void PcapWriter::close() {
         pcap_dump_close(dumper_);
         dumper_ = nullptr;
         LOG_INFO("PcapWriter: closed " + filepath_
-                 + " (" + std::to_string(packets_written_) + " packets)");
+                 + " (" + std::to_string(packets_written_) + " packets"
+                 + ", " + std::to_string(bytes_written_) + " bytes)");
     }
     if (handle_) {
         pcap_close(handle_);
