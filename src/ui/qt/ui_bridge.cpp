@@ -1,4 +1,4 @@
-// ── ui_bridge.cpp ─────────────────────────────────────────────────────────────
+// src/ui/qt/ui_bridge.cpp
 #include "ui_bridge.hpp"
 #include <algorithm>
 

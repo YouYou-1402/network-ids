@@ -1,4 +1,4 @@
-// src/pcap_io/packet_capture.cpp
+// src/capture/packet_capture.cpp
 #include "packet_capture.hpp"
 #include "../common/logger.hpp"
 #include "../common/metrics.hpp"

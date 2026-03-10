@@ -1,3 +1,4 @@
+//src/ui/qt/metrics_widget.hpp
 #pragma once
 #include <QWidget>
 #include <QLabel>

@@ -12,14 +12,14 @@
 
 #include "common/logger.hpp"
 #include "common/metrics.hpp"
-#include "common/threat_types.hpp"
+#include "core/threat_types.hpp"
 #include "capture/packet_capture.hpp"
-#include "layer1/dispatcher.hpp"
-#include "layer2/feature_extractor.hpp"
-#include "layer2/data_queue.hpp"
-#include "layer2/ml_engine.hpp"
-#include "layer2/feedback_loop.hpp"
-#include "dashboard/alert_manager.hpp"
+#include "detection/dispatcher.hpp"
+#include "ml/feature_extractor.hpp"
+#include "ml/data_queue.hpp"
+#include "ml/ml_engine.hpp"
+#include "ml/feedback_loop.hpp"
+#include "analysis/alert_manager.hpp"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Global state

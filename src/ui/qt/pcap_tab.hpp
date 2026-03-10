@@ -1,4 +1,4 @@
-// ── pcap_tab.hpp ──────────────────────────────────────────────────────────────
+// src/ui/qt/pcap_tab.hpp
 #pragma once
 #include <QWidget>
 #include <QSplitter>
@@ -24,9 +24,9 @@
 #include "packet_detail_tree.hpp"
 #include "hex_view.hpp"
 #include "../../common/logger.hpp"   
-#include "../../pcap_io/pcap_reader.hpp"
-#include "../../pcap_io/pcap_writer.hpp"
-#include "../../pcap_io/packet_ring_buffer.hpp"
+#include "../../capture/io/pcap_reader.hpp"
+#include "../../capture/io/pcap_writer.hpp"
+#include "../../capture/io/packet_ring_buffer.hpp"
 
 class PcapTab : public QWidget {
     Q_OBJECT

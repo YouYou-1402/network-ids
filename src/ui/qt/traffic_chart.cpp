@@ -1,3 +1,4 @@
+// src/ui/qt/traffic_chart.cpp
 #include "traffic_chart.hpp"
 #include <QPen>
 #include <QBrush>

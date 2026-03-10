@@ -1,4 +1,4 @@
-// ── main_window.cpp ───────────────────────────────────────────────────────────
+//src/ui/qt/main_window.cpp
 #include "main_window.hpp"
 
 #include "pcap_tab.hpp"
@@ -9,7 +9,7 @@
 #include "capture_control_dialog.hpp"
 
 #include "../../capture/packet_capture.hpp"
-#include "../../common/packet_info.hpp"
+#include "../../core/packet_info.hpp"
 
 #include <QApplication>
 #include <QMenuBar>

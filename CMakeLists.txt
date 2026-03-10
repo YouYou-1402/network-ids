@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
+
 project(NetworkIDS VERSION 0.1.0 LANGUAGES CXX)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -22,38 +23,29 @@ message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 # Compiler flags
 # ─────────────────────────────────────────────────────────────────────────────
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    set(CMAKE_CXX_FLAGS_DEBUG
-        "-g -O0 -Wall -Wextra -Wpedantic -DDEBUG")
-    set(CMAKE_CXX_FLAGS_RELEASE
-        "-O2 -DNDEBUG")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO
-        "-O2 -g -DNDEBUG")
+    set(CMAKE_CXX_FLAGS_DEBUG          "-g -O0 -Wall -Wextra -Wpedantic -DDEBUG")
+    set(CMAKE_CXX_FLAGS_RELEASE        "-O2 -DNDEBUG")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG")
 endif()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Options
 # ─────────────────────────────────────────────────────────────────────────────
-option(BUILD_UI    "Build Qt6 GUI target"       ON)
-option(BUILD_CLI   "Build headless CLI target"  ON)
-option(BUILD_TESTS "Build unit tests"           OFF)
-option(USE_ONNX    "Enable ONNX Runtime"        OFF)
+option(BUILD_UI    "Build Qt6 GUI target"      ON)
+option(BUILD_CLI   "Build headless CLI target" ON)
+option(BUILD_TESTS "Build unit tests"          OFF)
+option(USE_ONNX    "Enable ONNX Runtime"       OFF)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Find libpcap
 # ─────────────────────────────────────────────────────────────────────────────
-find_library(PCAP_LIB
-    NAMES pcap
-    REQUIRED
-)
-find_path(PCAP_INCLUDE_DIR
-    NAMES pcap.h
-    REQUIRED
-)
+find_library(PCAP_LIB   NAMES pcap REQUIRED)
+find_path(PCAP_INCLUDE_DIR NAMES pcap.h REQUIRED)
 
 if(NOT PCAP_LIB)
     message(FATAL_ERROR
         "libpcap not found.\n"
-        "Install with: sudo apt-get install libpcap-dev")
+        "Install: sudo apt-get install libpcap-dev")
 endif()
 
 message(STATUS "libpcap     : ${PCAP_LIB}")
@@ -84,7 +76,7 @@ if(USE_ONNX)
     else()
         message(WARNING
             "ONNX Runtime not found — falling back to Mock models.\n"
-            "Set ONNXRUNTIME_ROOT env var or install to /usr/local.")
+            "Set ONNXRUNTIME_ROOT or install to /usr/local.")
         set(USE_ONNX OFF)
     endif()
 endif()
@@ -101,13 +93,12 @@ if(BUILD_UI)
     if(NOT Qt6_FOUND)
         message(FATAL_ERROR
             "Qt6 not found.\n"
-            "Install with: sudo apt-get install "
+            "Install: sudo apt-get install "
             "qt6-base-dev qt6-charts-dev libqt6charts6-dev\n"
-            "Or disable UI with: cmake -DBUILD_UI=OFF")
+            "Or disable: cmake -DBUILD_UI=OFF")
     endif()
 
     message(STATUS "Qt6 version : ${Qt6_VERSION}")
-    message(STATUS "Qt6 Core    : ${Qt6Core_VERSION}")
 
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTORCC ON)
@@ -116,136 +107,145 @@ if(BUILD_UI)
 endif()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Source file groups
+# Source groups — theo cấu trúc thư mục mới
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Common ────────────────────────────────────────────────────────────────────
+# ── core/ — domain objects ────────────────────────────────────────────────────
+set(CORE_SOURCES
+    src/core/packet_info.cpp
+)
+set(CORE_HEADERS
+    src/core/packet_info.hpp
+    src/core/threat_types.hpp
+)
+
+# ── common/ — pure utilities ──────────────────────────────────────────────────
 set(COMMON_SOURCES
     src/common/logger.cpp
     src/common/metrics.cpp
-    src/common/packet_info.cpp
+    src/common/config_loader.cpp
 )
-
 set(COMMON_HEADERS
     src/common/logger.hpp
     src/common/metrics.hpp
-    src/common/packet_info.hpp
-    src/common/threat_types.hpp
+    src/common/config_loader.hpp
 )
 
-# ── Capture ───────────────────────────────────────────────────────────────────
+# ── capture/ — thu thập packet từ NIC ────────────────────────────────────────
 set(CAPTURE_SOURCES
     src/capture/packet_capture.cpp
+    src/capture/bpf_filter.cpp
+    src/capture/protocol_decoder.cpp
 )
-
 set(CAPTURE_HEADERS
     src/capture/packet_capture.hpp
+    src/capture/bpf_filter.hpp
+    src/capture/protocol_decoder.hpp
 )
 
-# ── Layer 1 ───────────────────────────────────────────────────────────────────
-set(LAYER1_SOURCES
-    src/layer1/flow_table.cpp
-    src/layer1/signature_engine.cpp
-    src/layer1/protocol_anomaly.cpp
-    src/layer1/worker_thread.cpp
-    src/layer1/dispatcher.cpp
+# ── capture/io/ — đọc/ghi pcap file + ring buffer ────────────────────────────
+set(CAPTURE_IO_SOURCES
+    src/capture/io/packet_ring_buffer.cpp
+    src/capture/io/pcap_reader.cpp
+    src/capture/io/pcap_writer.cpp
+)
+set(CAPTURE_IO_HEADERS
+    src/capture/io/packet_ring_buffer.hpp
+    src/capture/io/pcap_reader.hpp
+    src/capture/io/pcap_writer.hpp
 )
 
-set(LAYER1_HEADERS
-    src/layer1/flow_state.hpp
-    src/layer1/flow_table.hpp
-    src/layer1/signature_engine.hpp
-    src/layer1/protocol_anomaly.hpp
-    src/layer1/worker_thread.hpp
-    src/layer1/dispatcher.hpp
+# ── detection/ — IDS engine rule-based ───────────────────────────────────────
+set(DETECTION_SOURCES
+    src/detection/flow_table.cpp
+    src/detection/signature_engine.cpp
+    src/detection/behavioral_engine.cpp
+    src/detection/protocol_anomaly.cpp
+    src/detection/worker_thread.cpp
+    src/detection/dispatcher.cpp
+)
+set(DETECTION_HEADERS
+    src/detection/flow_state.hpp
+    src/detection/flow_table.hpp
+    src/detection/signature_engine.hpp
+    src/detection/behavioral_engine.hpp
+    src/detection/protocol_anomaly.hpp
+    src/detection/worker_thread.hpp
+    src/detection/dispatcher.hpp
+    src/detection/action_handler.hpp
 )
 
-# ── Layer 2 ───────────────────────────────────────────────────────────────────
-set(LAYER2_SOURCES
-    src/layer2/feature_extractor.cpp
-    src/layer2/onnx_model.cpp
-    src/layer2/ml_engine.cpp
-    src/layer2/feedback_loop.cpp
+# ── ml/ — ML engine ──────────────────────────────────────────────────────────
+set(ML_SOURCES
+    src/ml/feature_extractor.cpp
+    src/ml/onnx_model.cpp
+    src/ml/ml_engine.cpp
+    src/ml/data_queue.cpp
+    src/ml/feedback_loop.cpp
+)
+set(ML_HEADERS
+    src/ml/feature_extractor.hpp
+    src/ml/onnx_model.hpp
+    src/ml/ml_engine.hpp
+    src/ml/data_queue.hpp
+    src/ml/feedback_loop.hpp
 )
 
-set(LAYER2_HEADERS
-    src/layer2/feature_extractor.hpp
-    src/layer2/data_queue.hpp
-    src/layer2/onnx_model.hpp
-    src/layer2/ml_engine.hpp
-    src/layer2/feedback_loop.hpp
+# ── analysis/ — alert + stats ─────────────────────────────────────────────────
+set(ANALYSIS_SOURCES
+    src/analysis/alert_manager.cpp
+    src/analysis/stats_collector.cpp
+)
+set(ANALYSIS_HEADERS
+    src/analysis/alert_manager.hpp
+    src/analysis/stats_collector.hpp
 )
 
-# ── Dashboard ─────────────────────────────────────────────────────────────────
-set(DASHBOARD_SOURCES
-    src/dashboard/alert_manager.cpp
-    src/dashboard/stats_collector.cpp
-)
-
-set(DASHBOARD_HEADERS
-    src/dashboard/alert_manager.hpp
-    src/dashboard/stats_collector.hpp
-)
-
-# ── Pcap IO ───────────────────────────────────────────────────────────────────
-# FIX: định nghĩa PCAP_IO_SOURCES (trước đây bị thiếu hoàn toàn)
-set(PCAP_IO_SOURCES
-    src/pcap_io/packet_ring_buffer.cpp
-    src/pcap_io/pcap_reader.cpp
-    src/pcap_io/pcap_writer.cpp
-)
-
-set(PCAP_IO_HEADERS
-    src/pcap_io/packet_ring_buffer.hpp
-    src/pcap_io/pcap_reader.hpp
-    src/pcap_io/pcap_writer.hpp
-)
-
-# ── UI (Qt6) ──────────────────────────────────────────────────────────────────
+# ── ui/qt/ — Qt6 GUI ─────────────────────────────────────────────────────────
 set(UI_SOURCES
     src/ui/qt/ui_bridge.cpp
-    src/ui/qt/metrics_widget.cpp
-    src/ui/qt/alert_panel.cpp
-    src/ui/qt/traffic_chart.cpp
-    src/ui/qt/packet_detail_tree.cpp
+    src/ui/qt/main_window.cpp
     src/ui/qt/pcap_tab.cpp
     src/ui/qt/packet_list_model.cpp
+    src/ui/qt/packet_detail_tree.cpp
     src/ui/qt/hex_view.cpp
     src/ui/qt/filter_bar.cpp
+    src/ui/qt/alert_panel.cpp
+    src/ui/qt/metrics_widget.cpp
+    src/ui/qt/traffic_chart.cpp
     src/ui/qt/capture_control_dialog.cpp
-    src/ui/qt/main_window.cpp
 )
-
 set(UI_HEADERS
     src/ui/qt/ui_bridge.hpp
-    src/ui/qt/metrics_widget.hpp
-    src/ui/qt/alert_panel.hpp
-    src/ui/qt/traffic_chart.hpp
-    src/ui/qt/packet_detail_tree.hpp
+    src/ui/qt/main_window.hpp
     src/ui/qt/pcap_tab.hpp
     src/ui/qt/packet_list_model.hpp
+    src/ui/qt/packet_detail_tree.hpp
     src/ui/qt/hex_view.hpp
     src/ui/qt/filter_bar.hpp
+    src/ui/qt/alert_panel.hpp
+    src/ui/qt/metrics_widget.hpp
+    src/ui/qt/traffic_chart.hpp
     src/ui/qt/capture_control_dialog.hpp
-    src/ui/qt/main_window.hpp
 )
 
-# ── All engine sources (dùng chung cho cả 2 targets) ─────────────────────────
+# ── Engine sources — dùng chung cho cả 2 targets ─────────────────────────────
 set(ENGINE_SOURCES
+    ${CORE_SOURCES}
     ${COMMON_SOURCES}
     ${CAPTURE_SOURCES}
-    ${LAYER1_SOURCES}
-    ${LAYER2_SOURCES}
-    ${DASHBOARD_SOURCES}
-    ${PCAP_IO_SOURCES}      # FIX: đã có định nghĩa, giờ expand đúng
+    ${CAPTURE_IO_SOURCES}
+    ${DETECTION_SOURCES}
+    ${ML_SOURCES}
+    ${ANALYSIS_SOURCES}
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Helper: apply common settings cho một target
+# Helper: apply common settings
 # ─────────────────────────────────────────────────────────────────────────────
 function(apply_common_settings TARGET_NAME)
     target_include_directories(${TARGET_NAME} PRIVATE
-        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src   # include "core/packet_info.hpp" etc.
         ${PCAP_INCLUDE_DIR}
     )
 
@@ -255,12 +255,8 @@ function(apply_common_settings TARGET_NAME)
     )
 
     if(USE_ONNX AND ONNX_LIB)
-        target_include_directories(${TARGET_NAME} PRIVATE
-            ${ONNX_INCLUDE_DIR}
-        )
-        target_link_libraries(${TARGET_NAME} PRIVATE
-            ${ONNX_LIB}
-        )
+        target_include_directories(${TARGET_NAME} PRIVATE ${ONNX_INCLUDE_DIR})
+        target_link_libraries(${TARGET_NAME} PRIVATE ${ONNX_LIB})
     endif()
 
     target_compile_definitions(${TARGET_NAME} PRIVATE
@@ -277,7 +273,7 @@ function(apply_common_settings TARGET_NAME)
 endfunction()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Target 1: network_ids  (headless CLI)
+# Target 1: network_ids — headless CLI
 # ─────────────────────────────────────────────────────────────────────────────
 if(BUILD_CLI)
     add_executable(network_ids
@@ -291,14 +287,14 @@ if(BUILD_CLI)
 endif()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Target 2: network_ids_ui  (Qt6 GUI)
+# Target 2: network_ids_ui — Qt6 GUI
 # ─────────────────────────────────────────────────────────────────────────────
 if(BUILD_UI)
     add_executable(network_ids_ui
         src/ui_main.cpp
         ${ENGINE_SOURCES}
         ${UI_SOURCES}
-        ${UI_HEADERS}       # MOC cần thấy headers có Q_OBJECT
+        ${UI_HEADERS}   # MOC cần thấy headers có Q_OBJECT
     )
 
     apply_common_settings(network_ids_ui)
@@ -328,7 +324,6 @@ endif()
 # ─────────────────────────────────────────────────────────────────────────────
 if(BUILD_TESTS)
     enable_testing()
-
     find_package(GTest QUIET)
 
     if(GTest_FOUND)
@@ -337,7 +332,7 @@ if(BUILD_TESTS)
     else()
         message(WARNING
             "GTest not found — tests disabled.\n"
-            "Install with: sudo apt-get install libgtest-dev")
+            "Install: sudo apt-get install libgtest-dev")
     endif()
 endif()
 
@@ -348,24 +343,20 @@ include(GNUInstallDirs)
 
 if(BUILD_CLI)
     install(TARGETS network_ids
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    )
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 if(BUILD_UI)
     install(TARGETS network_ids_ui
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    )
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 install(DIRECTORY config/
-    DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/network-ids
-)
+    DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/network-ids)
 
 install(DIRECTORY models/
     DESTINATION ${CMAKE_INSTALL_DATADIR}/network-ids/models
-    OPTIONAL
-)
+    OPTIONAL)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Print summary
@@ -383,3 +374,5 @@ message(STATUS "║ ONNX Runtime: ${USE_ONNX}")
 message(STATUS "║ libpcap     : ${PCAP_LIB}")
 message(STATUS "╚══════════════════════════════════════╝")
 message(STATUS "")
+
+

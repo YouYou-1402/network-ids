@@ -3,7 +3,7 @@
 
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
-#include "../../pcap_io/packet_ring_buffer.hpp"
+#include "../../capture/io/packet_ring_buffer.hpp"
 
 
 class PacketDetailTree : public QTreeWidget {

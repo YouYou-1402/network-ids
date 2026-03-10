@@ -1,4 +1,4 @@
-// ── main_window.hpp ───────────────────────────────────────────────────────────
+//src/ui/qt/main_window.hpp
 #pragma once
 #include <QMainWindow>
 #include <QTabWidget>

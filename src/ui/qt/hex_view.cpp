@@ -1,4 +1,4 @@
-// ── hex_view.cpp ──────────────────────────────────────────────────────────────
+//src/ui/qt/hex_view.cpp
 #include "hex_view.hpp"
 #include <QPainter>
 #include <QScrollBar>

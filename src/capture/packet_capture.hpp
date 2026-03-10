@@ -1,7 +1,7 @@
-// src/pcap_io/packet_capture.hpp
+// src/capture/packet_capture.hpp
 #pragma once
 
-#include "../common/packet_info.hpp"
+#include "../core/packet_info.hpp"
 #include <pcap.h>
 #include <functional>
 #include <string>

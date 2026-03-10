@@ -11,16 +11,16 @@
 
 #include "common/logger.hpp"
 #include "common/metrics.hpp"
-#include "common/packet_info.hpp"
+#include "core/packet_info.hpp"
 #include "capture/packet_capture.hpp"
-#include "layer1/dispatcher.hpp"
-#include "layer2/feature_extractor.hpp"
-#include "layer2/data_queue.hpp"
-#include "layer2/ml_engine.hpp"
-#include "layer2/feedback_loop.hpp"
-#include "dashboard/alert_manager.hpp"
+#include "detection/dispatcher.hpp"
+#include "ml/feature_extractor.hpp"
+#include "ml/data_queue.hpp"
+#include "ml/ml_engine.hpp"
+#include "ml/feedback_loop.hpp"
+#include "analysis/alert_manager.hpp"
 #include "ui/qt/main_window.hpp"
-#include "pcap_io/packet_ring_buffer.hpp"
+#include "capture/io/packet_ring_buffer.hpp"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Global state

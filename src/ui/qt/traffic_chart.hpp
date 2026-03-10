@@ -1,3 +1,4 @@
+// src/ui/qt/traffic_chart.hpp
 #pragma once
 #include <QWidget>
 #include <QtCharts/QChart>

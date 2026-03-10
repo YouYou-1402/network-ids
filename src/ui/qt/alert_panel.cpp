@@ -1,3 +1,4 @@
+//src/ui/qt/alert_panel.cpp
 #include "alert_panel.hpp"
 #include <QHeaderView>
 #include <QDialog>

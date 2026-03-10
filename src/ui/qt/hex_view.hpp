@@ -1,4 +1,4 @@
-// ── hex_view.hpp ──────────────────────────────────────────────────────────────
+//src/ui/qt/hex_view.hpp
 #pragma once
 #include <QAbstractScrollArea>
 #include <QFont>

@@ -1,3 +1,4 @@
+//src/ui/qt/filter_bar.hpp
 #pragma once
 #include <QWidget>
 #include <QLineEdit>
@@ -6,7 +7,7 @@
 #include <QCompleter>
 #include <QStringListModel>
 #include <functional>
-#include "../../pcap_io/packet_ring_buffer.hpp"
+#include "../../capture/io/packet_ring_buffer.hpp"
 
 // Compiled display filter
 struct DisplayFilter {

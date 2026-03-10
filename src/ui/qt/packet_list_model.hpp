@@ -1,3 +1,4 @@
+// src/ui/qt/packet_list_model.hpp
 #pragma once
 #include <QAbstractTableModel>
 #include <QColor>
@@ -6,7 +7,7 @@
 #include <mutex>
 #include <vector>
 #include <memory>
-#include "../../pcap_io/packet_ring_buffer.hpp"
+#include "../../capture/io/packet_ring_buffer.hpp"
 #include "filter_bar.hpp"
 
 // ─── PacketListModel ──────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-// ── ui_bridge.hpp ─────────────────────────────────────────────────────────────
+// src/ui/qt/ui_bridge.hpp
 #pragma once
 #include <QObject>
 #include <QTimer>
@@ -7,11 +7,11 @@
 #include <vector>
 #include <memory>
 
-#include "../../dashboard/alert_manager.hpp"
+#include "../../analysis/alert_manager.hpp"
 #include "../../common/metrics.hpp"
-#include "../../layer1/dispatcher.hpp"
-#include "../../layer2/ml_engine.hpp"
-#include "../../pcap_io/packet_ring_buffer.hpp"
+#include "../../detection/dispatcher.hpp"
+#include "../../ml/ml_engine.hpp"
+#include "../../capture/io/packet_ring_buffer.hpp"
 
 // ─── Snapshot structs ─────────────────────────────────────────────────────────
 struct MetricsSnapshot {

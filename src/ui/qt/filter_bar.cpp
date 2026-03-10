@@ -1,3 +1,4 @@
+//src/ui/qt/filter_bar.cpp
 #include "filter_bar.hpp"
 #include <QHBoxLayout>
 #include <QKeyEvent>
