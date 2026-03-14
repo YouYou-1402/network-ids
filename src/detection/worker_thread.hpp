@@ -1,4 +1,4 @@
-// src/layer1/worker_thread.hpp
+// src/dêtction/worker_thread.hpp
 #pragma once
 #include "../core/packet_info.hpp"
 #include "../core/threat_types.hpp"
@@ -55,8 +55,6 @@ private:
                          const PacketInfo&      pkt,
                          FlowState&             flow);
 
-    // ── Helper: PacketInfo → PacketRecord ─────────────────────────────────────
-    static PacketRecord makeRecord(const PacketInfo& pkt);
 
     int               id_;
     FlowTable&        flow_table_;

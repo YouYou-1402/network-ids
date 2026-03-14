@@ -1,4 +1,4 @@
-//src/capture/io/pcap_writer.cpp
+// src/capture/io/pcap_writer.cpp
 #include "pcap_writer.hpp"
 #include "../../common/logger.hpp"
 #include <cstring>
@@ -34,7 +34,7 @@ bool PcapWriter::open(const std::string& filepath,
 
     filepath_        = filepath;
     packets_written_ = 0;
-    bytes_written_   = 0;   // reset khi mở file mới
+    bytes_written_   = 0;
     LOG_INFO("PcapWriter: opened " + filepath);
     return true;
 }
@@ -53,25 +53,21 @@ bool PcapWriter::writePacket(const uint8_t*        data,
 
     pcap_dump(reinterpret_cast<u_char*>(dumper_), &hdr, data);
 
-    packets_written_++;
-    bytes_written_ += PCAP_PACKET_HEADER_SIZE + cap_len; // ✅ FIX: +16 bytes packet header
+    ++packets_written_;
+    bytes_written_ += PCAP_PACKET_HEADER_SIZE + cap_len;
     return true;
 }
 
-bool PcapWriter::writePacket(const PacketRecord& record) {
+bool PcapWriter::writePacket(const PacketInfo& record) {
     if (!record.raw_data || record.raw_data->empty())
         return false;
 
-    struct timeval ts;
-    ts.tv_sec  = static_cast<time_t>(record.timestamp);
-    ts.tv_usec = static_cast<suseconds_t>(
-        (record.timestamp - static_cast<double>(ts.tv_sec)) * 1e6);
-
+    // FIX BUG 1: record.timestamp là struct timeval — dùng trực tiếp
     return writePacket(
         record.raw_data->data(),
         record.cap_len,
         record.orig_len,
-        ts
+        record.timestamp       // struct timeval, không cần convert
     );
 }
 
@@ -83,7 +79,7 @@ void PcapWriter::close() {
         dumper_ = nullptr;
         LOG_INFO("PcapWriter: closed " + filepath_
                  + " (" + std::to_string(packets_written_) + " packets"
-                 + ", " + std::to_string(bytes_written_) + " bytes)");
+                 + ", " + std::to_string(bytes_written_)   + " bytes)");
     }
     if (handle_) {
         pcap_close(handle_);

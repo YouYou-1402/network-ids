@@ -12,6 +12,7 @@
 #include "../../detection/dispatcher.hpp"
 #include "../../ml/ml_engine.hpp"
 #include "../../capture/io/packet_ring_buffer.hpp"
+#include "../../common/engine_config.hpp"   // ← thêm
 
 // ─── Snapshot structs ─────────────────────────────────────────────────────────
 struct MetricsSnapshot {
@@ -48,17 +49,28 @@ public:
     void startPolling(int interval_ms = 200);
     void stopPolling();
 
-    // Điều chỉnh batch size từ bên ngoài (MainWindow có thể gọi)
     void setMaxBatchPerTick(uint64_t n) { max_batch_per_tick_ = n; }
 
-signals:
-    void metricsUpdated     (MetricsSnapshot snapshot);
-    void newAlerts          (std::vector<UnifiedAlert> alerts);
-    void trafficUpdated     (TrafficPoint point);
-    void systemStatusChanged(bool running);
+    // Query trạng thái hiện tại
+    bool isDetectionEnabled() const {
+        return ENGINE_CFG.detection_enabled.load();
+    }
+    bool isMlEnabled() const {
+        return ENGINE_CFG.ml_enabled.load();
+    }
 
-    // Batch packet signal — dùng Qt::QueuedConnection để không block capture
-    void newPacketRecords   (std::vector<PacketRecord> records);
+signals:
+    void metricsUpdated        (MetricsSnapshot snapshot);
+    void newAlerts             (std::vector<UnifiedAlert> alerts);
+    void trafficUpdated        (TrafficPoint point);
+    void systemStatusChanged   (bool running);
+    void newPacketInfos        (std::vector<PacketInfo> records);
+    void detectionStatusChanged(bool enabled);  
+    void mlStatusChanged       (bool enabled); 
+
+public slots:                                   
+    void setDetectionEnabled(bool enabled);
+    void setMlEnabled       (bool enabled);
 
 private slots:
     void onTimer();
@@ -73,17 +85,10 @@ private:
     PacketRingBuffer& ring_buf_;
     QTimer            timer_;
 
-    // Alert tracking
-    uint64_t last_alert_seq_      { 0 };
-    // size_t   last_alert_count_  { 0 };
-
-    // Live packet tracking — chỉ gửi packet MỚI mỗi tick
-    uint64_t last_sent_seq_     { 0 };
-
-    // Adaptive batch: tự giảm khi PPS cao
+    uint64_t last_alert_seq_     { 0 };
+    uint64_t last_sent_seq_      { 0 };
     uint64_t max_batch_per_tick_ { 300 };
 
-    // Sliding window PPS
     struct PpsPoint {
         qint64   time_ms  = 0;
         uint64_t captured = 0;

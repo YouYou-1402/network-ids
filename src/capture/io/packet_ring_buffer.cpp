@@ -14,7 +14,7 @@ PacketRingBuffer::PacketRingBuffer(size_t max_packets,
 }
 
 // ─── push ─────────────────────────────────────────────────────────────────────
-void PacketRingBuffer::push(PacketRecord record) {
+void PacketRingBuffer::push(PacketInfo record) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     const uint64_t idx = total_received_.fetch_add(1);
@@ -37,7 +37,7 @@ void PacketRingBuffer::push(PacketRecord record) {
 }
 
 // ─── getRange ─────────────────────────────────────────────────────────────────
-std::vector<PacketRecord>
+std::vector<PacketInfo>
 PacketRingBuffer::getRange(size_t from, size_t to) const {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -49,7 +49,7 @@ PacketRingBuffer::getRange(size_t from, size_t to) const {
     const uint64_t t      = std::min(static_cast<uint64_t>(to),   total);
     if (f >= t) return {};
 
-    std::vector<PacketRecord> result;
+    std::vector<PacketInfo> result;
     result.reserve(static_cast<size_t>(t - f));
     for (uint64_t i = f; i < t; ++i) {
         const size_t slot = i % max_packets_;
@@ -60,7 +60,7 @@ PacketRingBuffer::getRange(size_t from, size_t to) const {
 }
 
 // ─── getByIndex ───────────────────────────────────────────────────────────────
-std::shared_ptr<PacketRecord>
+std::shared_ptr<PacketInfo>
 PacketRingBuffer::getByIndex(uint64_t index) const {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -73,7 +73,7 @@ PacketRingBuffer::getByIndex(uint64_t index) const {
     const size_t slot = index % max_packets_;
     if (buffer_[slot].index != index) return nullptr;
 
-    return std::make_shared<PacketRecord>(buffer_[slot]);
+    return std::make_shared<PacketInfo>(buffer_[slot]);
 }
 
 // ─── size ─────────────────────────────────────────────────────────────────────
@@ -100,9 +100,8 @@ uint64_t PacketRingBuffer::newestIndex() const {
 void PacketRingBuffer::clear() {
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& r : buffer_) r.raw_data.reset();
-    buffer_.assign(max_packets_, PacketRecord{});
+    buffer_.assign(max_packets_, PacketInfo{});
     total_received_ = 0;
-    head_           = 0;
 }
 
 // ─── evictAllRawData ──────────────────────────────────────────────────────────

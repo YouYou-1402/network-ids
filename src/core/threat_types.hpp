@@ -3,7 +3,7 @@
 #include <string>
 #include <cstdint>
 
-// ─── DetectionResult ──────────────────────────────────────────────────────────
+//   DetectionResult 
 enum class DetectionResult {
     NORMAL,
     DDOS_VOLUMETRIC,
@@ -12,14 +12,14 @@ enum class DetectionResult {
     MALFORMED
 };
 
-// ─── PacketAction ─────────────────────────────────────────────────────────────
+//   PacketAction 
 enum class PacketAction {
     PASS,
     DROP,
     ALERT
 };
 
-// ─── DetectionSource ──────────────────────────────────────────────────────────
+//   DetectionSource 
 enum class DetectionSource {
     LAYER1_SIGNATURE,
     LAYER1_PROTOCOL_ANOMALY,
@@ -28,7 +28,7 @@ enum class DetectionSource {
     LAYER2_AUTOENCODER
 };
 
-// ─── DetectionEvent ───────────────────────────────────────────────────────────
+//   DetectionEvent 
 struct DetectionEvent {
     DetectionResult  result     = DetectionResult::NORMAL;
     PacketAction     action     = PacketAction::PASS;
@@ -41,7 +41,7 @@ struct DetectionEvent {
     double           timestamp  = 0.0;
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+//   Helpers 
 inline std::string threatToString(DetectionResult r) {
     switch (r) {
         case DetectionResult::NORMAL:           return "NORMAL";

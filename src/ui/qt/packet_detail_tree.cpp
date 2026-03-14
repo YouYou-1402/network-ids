@@ -69,7 +69,7 @@ static QString ipStr(uint32_t ip_net) {
 }
 
 // ─── showPacket — entry point ─────────────────────────────────────────────────
-void PacketDetailTree::showPacket(const PacketRecord& record) {
+void PacketDetailTree::showPacket(const PacketInfo& record) {
     clear();
 
     // ── 1. Frame section — luôn hiển thị được (không cần raw_data) ───────────
@@ -80,26 +80,32 @@ void PacketDetailTree::showPacket(const PacketRecord& record) {
                 .arg(record.cap_len)
                 .arg(record.index + 1));
 
-        // Timestamp
-        const qint64 secs = static_cast<qint64>(record.timestamp);
-        const int    ms   = static_cast<int>(
-            (record.timestamp - secs) * 1000);
-        QDateTime dt = QDateTime::fromSecsSinceEpoch(secs);
+        // FIX BUG 1+2: timestamp là struct timeval — KHÔNG static_cast trực tiếp
+        // Dùng tv_sec / tv_usec trực tiếp
+        const qint64 secs = static_cast<qint64>(record.timestamp.tv_sec);
+        const int    ms   = static_cast<int>(record.timestamp.tv_usec / 1000);
+
+        // FIX BUG 3 (code smell): timestamp_d đã cache sẵn → dùng luôn nếu cần double
+        // Ở đây chỉ cần QDateTime → dùng tv_sec là đủ, không cần timestamp_d
+        QDateTime dt = QDateTime::fromSecsSinceEpoch(secs, Qt::UTC);
         addField(frame, "Arrival Time",
-                 dt.toString("yyyy-MM-dd hh:mm:ss")
-                 + QString(".%1").arg(ms, 3, 10, QChar('0')));
-        addField(frame, "Frame Number",   QString::number(record.index + 1));
+                dt.toString("yyyy-MM-dd hh:mm:ss")
+                + QString(".%1 UTC").arg(ms, 3, 10, QChar('0')));
+
+        addField(frame, "Frame Number",
+                QString::number(record.index + 1));
         addField(frame, "Frame Length",
-                 QString::number(record.orig_len) + " bytes");
+                QString::number(record.orig_len) + " bytes");
         addField(frame, "Capture Length",
-                 QString::number(record.cap_len) + " bytes");
+                QString::number(record.cap_len) + " bytes");
 
         if (record.cap_len < record.orig_len)
             addField(frame, "⚠ Truncated",
-                     QString("missing %1 bytes")
-                         .arg(record.orig_len - record.cap_len),
-                     QColor("#ffaa44"));
+                    QString("missing %1 bytes")
+                        .arg(record.orig_len - record.cap_len),
+                    QColor("#ffaa44"));
     }
+
 
     // ── 2. Có raw_data → parse đầy đủ từ bytes ───────────────────────────────
     if (record.raw_data && !record.raw_data->empty()) {
@@ -390,16 +396,12 @@ void PacketDetailTree::showIPv6Stub(const uint8_t* data, uint32_t len) {
     addField(sec, "Next Header",   QString::number(data[6]));
     addField(sec, "Hop Limit",     QString::number(data[7]));
 
-    // Hiển thị địa chỉ dạng hex đơn giản (không dùng inet_ntop để tránh include)
+    // FIX BUG 4: dùng inet_ntop() — chuẩn, an toàn, không overflow
+    // inet_ntop cho IPv6 cần buffer INET6_ADDRSTRLEN = 46 bytes
     auto ipv6Str = [](const uint8_t* addr) -> QString {
-        char buf[40];
-        snprintf(buf, sizeof(buf),
-            "%02x%02x:%02x%02x:%02x%02x:%02x%02x:"
-            "%02x%02x:%02x%02x:%02x%02x:%02x%02x",
-            addr[0],addr[1],addr[2],addr[3],
-            addr[4],addr[5],addr[6],addr[7],
-            addr[8],addr[9],addr[10],addr[11],
-            addr[12],addr[13],addr[14],addr[15]);
+        char buf[INET6_ADDRSTRLEN];   // 46 bytes — đủ cho mọi trường hợp
+        if (inet_ntop(AF_INET6, addr, buf, sizeof(buf)) == nullptr)
+            return "(invalid)";
         return QString::fromLatin1(buf);
     };
 
@@ -408,9 +410,9 @@ void PacketDetailTree::showIPv6Stub(const uint8_t* data, uint32_t len) {
 }
 
 // ─── showFromFields — fallback khi raw_data đã evict ─────────────────────────
-void PacketDetailTree::showFromFields(const PacketRecord& rec) {
+void PacketDetailTree::showFromFields(const PacketInfo& pkt) {
     // ARP
-    if (rec.eth_type == 0x0806) {
+    if (pkt.eth_type == 0x0806) {
         auto* sec = addSection("📋 Address Resolution Protocol",
                                 "(from fields)");
         addField(sec, "EtherType", "ARP (0x0806)");
@@ -418,9 +420,9 @@ void PacketDetailTree::showFromFields(const PacketRecord& rec) {
     }
 
     // IPv4
-    if (rec.src_ip != 0 || rec.dst_ip != 0) {
-        const QString src = ipStr(rec.src_ip);
-        const QString dst = ipStr(rec.dst_ip);
+    if (pkt.src_ip != 0 || pkt.dst_ip != 0) {
+        const QString src = ipStr(pkt.src_ip);
+        const QString dst = ipStr(pkt.dst_ip);
 
         auto* ip_sec = addSection("🌐 Internet Protocol v4",
                                    src + " → " + dst);
@@ -428,50 +430,50 @@ void PacketDetailTree::showFromFields(const PacketRecord& rec) {
         addField(ip_sec, "Destination IP", dst);
 
         const QString proto_str =
-            (rec.protocol == IPPROTO_TCP)  ? "TCP (6)"   :
-            (rec.protocol == IPPROTO_UDP)  ? "UDP (17)"  :
-            (rec.protocol == IPPROTO_ICMP) ? "ICMP (1)"  :
-            QString("Unknown (%1)").arg(rec.protocol);
+            (pkt.protocol == IPPROTO_TCP)  ? "TCP (6)"   :
+            (pkt.protocol == IPPROTO_UDP)  ? "UDP (17)"  :
+            (pkt.protocol == IPPROTO_ICMP) ? "ICMP (1)"  :
+            QString("Unknown (%1)").arg(pkt.protocol);
         addField(ip_sec, "Protocol", proto_str);
 
         // TCP
-        if (rec.protocol == IPPROTO_TCP) {
+        if (pkt.protocol == IPPROTO_TCP) {
             auto* tcp_sec = addSection("🔗 Transmission Control Protocol",
                 QString("%1 → %2  [%3]")
-                    .arg(rec.src_port)
-                    .arg(rec.dst_port)
-                    .arg(flagsToString(rec.tcp_flags)));
+                    .arg(pkt.src_port)
+                    .arg(pkt.dst_port)
+                    .arg(flagsToString(pkt.tcp_flags)));
 
             addField(tcp_sec, "Source Port",
-                     QString::number(rec.src_port));
+                     QString::number(pkt.src_port));
             addField(tcp_sec, "Destination Port",
-                     QString::number(rec.dst_port));
+                     QString::number(pkt.dst_port));
             addField(tcp_sec, "Flags",
-                     flagsToString(rec.tcp_flags));
+                     flagsToString(pkt.tcp_flags));
             addField(tcp_sec, "Payload Length",
-                     QString::number(rec.payload_len) + " bytes");
+                     QString::number(pkt.payload_len) + " bytes");
 
         // UDP
-        } else if (rec.protocol == IPPROTO_UDP) {
+        } else if (pkt.protocol == IPPROTO_UDP) {
             auto* udp_sec = addSection("📡 User Datagram Protocol",
                 QString("%1 → %2")
-                    .arg(rec.src_port).arg(rec.dst_port));
+                    .arg(pkt.src_port).arg(pkt.dst_port));
 
             addField(udp_sec, "Source Port",
-                     QString::number(rec.src_port));
+                     QString::number(pkt.src_port));
             addField(udp_sec, "Destination Port",
-                     QString::number(rec.dst_port));
+                     QString::number(pkt.dst_port));
             addField(udp_sec, "Payload Length",
-                     QString::number(rec.payload_len) + " bytes");
+                     QString::number(pkt.payload_len) + " bytes");
 
         // ICMP
-        } else if (rec.protocol == IPPROTO_ICMP) {
+        } else if (pkt.protocol == IPPROTO_ICMP) {
             auto* icmp_sec = addSection(
                 "🏓 Internet Control Message Protocol", "");
             addField(icmp_sec, "Type (src_port field)",
-                     QString::number(rec.src_port));
+                     QString::number(pkt.src_port));
             addField(icmp_sec, "Code (dst_port field)",
-                     QString::number(rec.dst_port));
+                     QString::number(pkt.dst_port));
         }
     }
 }
@@ -480,7 +482,8 @@ void PacketDetailTree::showFromFields(const PacketRecord& rec) {
 void PacketDetailTree::showHTTP(QTreeWidgetItem* parent,
                                  const uint8_t*   data,
                                  uint32_t         len) {
-    if (len < 4) return;
+    // FIX BUG 5: parent == nullptr → không có chỗ hợp lệ để attach → bail out
+    if (!parent || len < 4) return;
 
     const std::string start(reinterpret_cast<const char*>(data),
                             std::min(len, 4u));
@@ -489,8 +492,8 @@ void PacketDetailTree::showHTTP(QTreeWidgetItem* parent,
                           start == "PUT " || start == "DELE");
     if (!is_http) return;
 
-    auto* sec = new QTreeWidgetItem(
-        parent ? parent : invisibleRootItem());
+    // parent luôn valid từ đây — không cần ternary nữa
+    auto* sec = new QTreeWidgetItem(parent);
     sec->setText(0, "🌍 Hypertext Transfer Protocol");
     sec->setForeground(0, QColor("#88aaff"));
     QFont f = sec->font(0);
@@ -514,24 +517,20 @@ void PacketDetailTree::showHTTP(QTreeWidgetItem* parent,
     }
 }
 
-// ─── showDNS ──────────────────────────────────────────────────────────────────
 void PacketDetailTree::showDNS(QTreeWidgetItem* parent,
                                 const uint8_t*   data,
                                 uint32_t         len) {
-    if (len < 12) return;
+    // FIX BUG 5: cùng pattern — guard null parent
+    if (!parent || len < 12) return;
 
-    const uint16_t txid  = ntohs(
-        *reinterpret_cast<const uint16_t*>(data));
-    const uint16_t flags = ntohs(
-        *reinterpret_cast<const uint16_t*>(data + 2));
-    const uint16_t qdcnt = ntohs(
-        *reinterpret_cast<const uint16_t*>(data + 4));
-    const uint16_t ancnt = ntohs(
-        *reinterpret_cast<const uint16_t*>(data + 6));
+    const uint16_t txid  = ntohs(*reinterpret_cast<const uint16_t*>(data));
+    const uint16_t flags = ntohs(*reinterpret_cast<const uint16_t*>(data + 2));
+    const uint16_t qdcnt = ntohs(*reinterpret_cast<const uint16_t*>(data + 4));
+    const uint16_t ancnt = ntohs(*reinterpret_cast<const uint16_t*>(data + 6));
     const bool is_resp   = (flags & 0x8000) != 0;
 
-    auto* sec = new QTreeWidgetItem(
-        parent ? parent : invisibleRootItem());
+    // parent luôn valid từ đây
+    auto* sec = new QTreeWidgetItem(parent);
     sec->setText(0, QString("🔍 Domain Name System (%1)")
         .arg(is_resp ? "Response" : "Query"));
     sec->setForeground(0, QColor("#88aaff"));
@@ -542,11 +541,10 @@ void PacketDetailTree::showDNS(QTreeWidgetItem* parent,
 
     addField(sec, "Transaction ID",
              QString("0x%1").arg(txid, 4, 16, QChar('0')));
-    addField(sec, "Type",      is_resp ? "Response" : "Query");
-    addField(sec, "Questions", QString::number(qdcnt));
-    addField(sec, "Answer RRs",QString::number(ancnt));
+    addField(sec, "Type",       is_resp ? "Response" : "Query");
+    addField(sec, "Questions",  QString::number(qdcnt));
+    addField(sec, "Answer RRs", QString::number(ancnt));
 
-    // Parse question section (tên domain)
     if (qdcnt > 0 && len > 12) {
         const uint8_t* ptr = data + 12;
         const uint8_t* end = data + len;
@@ -565,7 +563,7 @@ void PacketDetailTree::showDNS(QTreeWidgetItem* parent,
 }
 
 // ─── showThreat ───────────────────────────────────────────────────────────────
-void PacketDetailTree::showThreat(const PacketRecord& record) {
+void PacketDetailTree::showThreat(const PacketInfo& record) {
     auto* sec = addSection("🚨 IDS/IPS Detection",
         QString::fromStdString(record.threat_type));
     sec->setForeground(0, QColor("#ff6666"));

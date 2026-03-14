@@ -5,7 +5,7 @@
 
 #include <netinet/ether.h>
 #include <netinet/ip.h>
-#include <netinet/ip6.h>    
+#include <netinet/ip6.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <netinet/ip_icmp.h>
@@ -17,6 +17,7 @@ PacketCapture::PacketCapture() = default;
 
 PacketCapture::~PacketCapture() {
     stopCapture();
+    waitForStop();
     if (handle_) {
         pcap_close(handle_);
         handle_ = nullptr;
@@ -51,19 +52,33 @@ bool PacketCapture::openLive(const std::string& interface,
                               const std::string& bpf_filter) {
     char errbuf[PCAP_ERRBUF_SIZE] {};
 
-    handle_ = pcap_open_live(
-        interface.c_str(),
-        65535,
-        1,       // promiscuous
-        1000,    // timeout ms
-        errbuf
-    );
-
+    // ── Bước 1: create (chưa activate) ───────────────────────────────────────
+    handle_ = pcap_create(interface.c_str(), errbuf);
     if (!handle_) {
-        LOG_ERROR("pcap_open_live failed: " + std::string(errbuf));
+        LOG_ERROR("pcap_create failed: " + std::string(errbuf));
         return false;
     }
 
+    // ── Bước 2: set params TRƯỚC activate ────────────────────────────────────
+    pcap_set_snaplen(handle_, 65535);
+    pcap_set_promisc(handle_, 1);
+    pcap_set_timeout(handle_, 10);                      // 10ms thay vì 1000ms
+    pcap_set_buffer_size(handle_, 32 * 1024 * 1024);    // 32 MB kernel buffer
+
+    // ── Bước 3: activate ─────────────────────────────────────────────────────
+    const int rc = pcap_activate(handle_);
+    if (rc < 0) {
+        LOG_ERROR("pcap_activate failed: " + std::string(pcap_geterr(handle_)));
+        pcap_close(handle_);
+        handle_ = nullptr;
+        return false;
+    }
+    if (rc > 0) {
+        // rc > 0 là warning, không phải lỗi (vẫn hoạt động)
+        LOG_WARN("pcap_activate warning: " + std::string(pcap_geterr(handle_)));
+    }
+
+    // ── Bước 4: kiểm tra datalink ────────────────────────────────────────────
     if (pcap_datalink(handle_) != DLT_EN10MB) {
         LOG_WARN("Interface " + interface +
                  " is not Ethernet (DLT=" +
@@ -71,7 +86,8 @@ bool PacketCapture::openLive(const std::string& interface,
     }
 
     applyFilter(bpf_filter);
-    LOG_INFO("Live capture opened on interface: " + interface);
+    LOG_INFO("Live capture opened on: " + interface +
+             " | buffer=32MB | timeout=10ms");
     return true;
 }
 
@@ -97,25 +113,64 @@ void PacketCapture::startCapture(PacketCallback callback) {
         LOG_ERROR("Cannot start capture: handle not open");
         return;
     }
+    if (running_.load()) {
+        LOG_WARN("Capture already running");
+        return;
+    }
 
     callback_ = std::move(callback);
     running_  = true;
-    LOG_INFO("Capture started");
 
-    pcap_loop(handle_, 0,
-              PacketCapture::pcapCallback,
-              reinterpret_cast<u_char*>(this));
+    capture_thread_ = std::thread(&PacketCapture::captureLoop, this);
+    LOG_INFO("Capture thread started");
+}
+
+void PacketCapture::logStats() const {
+    if (!handle_) return;
+    struct pcap_stat ps {};
+    if (pcap_stats(handle_, &ps) == 0) {
+        LOG_INFO("pcap stats | recv=" + std::to_string(ps.ps_recv)
+                 + " | kernel_drop=" + std::to_string(ps.ps_drop)
+                 + " | iface_drop="  + std::to_string(ps.ps_ifdrop));
+    }
+}
+
+// ─── captureLoop (chạy trên capture_thread_) ─────────────────────────────────
+void PacketCapture::captureLoop() {
+    LOG_INFO("Capture loop running");
+
+    // pcap_loop trả về khi:
+    //   -2 → pcap_breakloop() được gọi
+    //   -1 → lỗi
+    //    0 → đọc hết file (offline mode)
+    const int ret = pcap_loop(handle_, 0,
+                              PacketCapture::pcapCallback,
+                              reinterpret_cast<u_char*>(this));
+
+    if (ret == -1)
+        LOG_ERROR("pcap_loop error: " + std::string(pcap_geterr(handle_)));
+    else if (ret == -2)
+        LOG_INFO("pcap_loop stopped by breakloop");
+    else
+        LOG_INFO("pcap_loop finished (offline EOF)");
 
     running_ = false;
-    LOG_INFO("Capture stopped");
+    LOG_INFO("Capture loop exited");
 }
 
 // ─── stopCapture ──────────────────────────────────────────────────────────────
 void PacketCapture::stopCapture() {
+    logStats();
     if (running_.load() && handle_) {
         pcap_breakloop(handle_);
-        running_ = false;
+        // running_ = false sẽ được set bởi captureLoop() sau khi pcap_loop trả về
     }
+}
+
+// ─── waitForStop ──────────────────────────────────────────────────────────────
+void PacketCapture::waitForStop() {
+    if (capture_thread_.joinable())
+        capture_thread_.join();
 }
 
 // ─── pcapCallback (static) ────────────────────────────────────────────────────
@@ -124,8 +179,7 @@ void PacketCapture::pcapCallback(u_char*                   user,
                                   const u_char*             packet) {
     auto* self = reinterpret_cast<PacketCapture*>(user);
     if (!self->running_.load()) return;
-
-    PacketInfo pkt = parsePacket(packet, header);
+    PacketInfo pkt = PacketCapture::parsePacket(packet, header);
 
     METRICS.packets_captured.fetch_add(1, std::memory_order_relaxed);
 
@@ -133,13 +187,10 @@ void PacketCapture::pcapCallback(u_char*                   user,
         self->callback_(std::move(pkt));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// parseTransport — parse TCP/UDP/ICMP chung cho cả IPv4 và IPv6
-// ─────────────────────────────────────────────────────────────────────────────
 static void parseTransport(PacketInfo&   pkt,
                             const u_char* ptr,
                             size_t        remaining,
-                            const u_char* data_start) {
+                            const u_char* frame_start) {
     switch (pkt.protocol) {
 
         // ── TCP ───────────────────────────────────────────────────────────────
@@ -157,8 +208,9 @@ static void parseTransport(PacketInfo&   pkt,
             pkt.ack_num   = ntohl(tcp->th_ack);
             pkt.win_size  = ntohs(tcp->th_win);
 
+            // payload_offset = bytes từ đầu frame đến đầu payload
             pkt.payload_offset = static_cast<uint32_t>(
-                ptr - data_start + tcp_hdr_len);
+                (ptr - frame_start) + tcp_hdr_len);
             pkt.payload_len = static_cast<uint32_t>(
                 remaining - tcp_hdr_len);
             break;
@@ -172,17 +224,17 @@ static void parseTransport(PacketInfo&   pkt,
             pkt.src_port       = ntohs(udp->uh_sport);
             pkt.dst_port       = ntohs(udp->uh_dport);
             pkt.payload_offset = static_cast<uint32_t>(
-                ptr - data_start + sizeof(struct udphdr));
+                (ptr - frame_start) + sizeof(struct udphdr));
             pkt.payload_len    = (remaining > sizeof(struct udphdr))
                 ? static_cast<uint32_t>(remaining - sizeof(struct udphdr))
                 : 0;
             break;
         }
 
-        // ── ICMP / ICMPv6 — ghi nhận, không parse sâu ────────────────────────
+        // ── ICMP / ICMPv6 ─────────────────────────────────────────────────────
         case IPPROTO_ICMP:
-        case 58: {   // IPPROTO_ICMPV6
-            pkt.payload_offset = static_cast<uint32_t>(ptr - data_start);
+        case IPPROTO_ICMPV6: {
+            pkt.payload_offset = static_cast<uint32_t>(ptr - frame_start);
             pkt.payload_len    = static_cast<uint32_t>(remaining);
             break;
         }
@@ -195,10 +247,15 @@ static void parseTransport(PacketInfo&   pkt,
 PacketInfo PacketCapture::parsePacket(const u_char*             data,
                                        const struct pcap_pkthdr* header) {
     PacketInfo pkt {};
-    pkt.timestamp = header->ts;
-    pkt.pkt_len   = header->len;
-    pkt.cap_len   = header->caplen;
-    pkt.raw_data.assign(data, data + header->caplen);
+    pkt.timestamp  = header->ts;
+    pkt.timestamp_d = static_cast<double>(header->ts.tv_sec)
+                    + static_cast<double>(header->ts.tv_usec) / 1e6;
+    pkt.orig_len    = header->len;
+    pkt.cap_len    = header->caplen;
+
+    // FIX BUG 2: raw_data là shared_ptr<vector<uint8_t>>
+    pkt.raw_data = std::make_shared<std::vector<uint8_t>>(
+        data, data + header->caplen);
 
     const u_char* ptr       = data;
     size_t        remaining = header->caplen;
@@ -206,15 +263,14 @@ PacketInfo PacketCapture::parsePacket(const u_char*             data,
     // ── Ethernet Header (14 bytes) ────────────────────────────────────────────
     if (remaining < sizeof(struct ether_header)) return pkt;
 
-    const auto* eth  = reinterpret_cast<const struct ether_header*>(ptr);
+    const auto* eth = reinterpret_cast<const struct ether_header*>(ptr);
     uint16_t eth_type = ntohs(eth->ether_type);
-
     pkt.eth_type = eth_type;
 
     ptr       += sizeof(struct ether_header);
     remaining -= sizeof(struct ether_header);
 
-    // ── VLAN 802.1Q (0x8100) ─────────────────────────────────────────────────
+    // ── VLAN 802.1Q ───────────────────────────────────────────────────────────
     if (eth_type == 0x8100) {
         if (remaining < 4) return pkt;
         eth_type     = ntohs(*reinterpret_cast<const uint16_t*>(ptr + 2));
@@ -223,7 +279,7 @@ PacketInfo PacketCapture::parsePacket(const u_char*             data,
         remaining -= 4;
     }
 
-    // ── IPv4 (0x0800) ─────────────────────────────────────────────────────────
+    // ── IPv4 ──────────────────────────────────────────────────────────────────
     if (eth_type == ETHERTYPE_IP) {
         if (remaining < sizeof(struct ip)) return pkt;
 
@@ -233,8 +289,8 @@ PacketInfo PacketCapture::parsePacket(const u_char*             data,
         const size_t ip_hdr_len = ip_hdr->ip_hl * 4;
         if (ip_hdr_len < 20 || ip_hdr_len > remaining) return pkt;
 
-        pkt.src_ip   = ip_hdr->ip_src.s_addr;   // network byte order
-        pkt.dst_ip   = ip_hdr->ip_dst.s_addr;   // network byte order
+        pkt.src_ip   = ip_hdr->ip_src.s_addr;
+        pkt.dst_ip   = ip_hdr->ip_dst.s_addr;
         pkt.protocol = ip_hdr->ip_p;
         pkt.ttl      = ip_hdr->ip_ttl;
 
@@ -245,40 +301,30 @@ PacketInfo PacketCapture::parsePacket(const u_char*             data,
         return pkt;
     }
 
-    // ── IPv6 (0x86DD) ─────────────────────────────────────────────────────────
+    // ── IPv6 ──────────────────────────────────────────────────────────────────
     if (eth_type == 0x86DD) {
-        // IPv6 fixed header = 40 bytes
         constexpr size_t IP6_HDR_LEN = 40;
         if (remaining < IP6_HDR_LEN) return pkt;
 
         const auto* ip6 = reinterpret_cast<const struct ip6_hdr*>(ptr);
 
-        // ✅ Copy 128-bit src/dst address
-        std::memcpy(pkt.src_ip6.data(),
-                    &ip6->ip6_src,
-                    16);
-        std::memcpy(pkt.dst_ip6.data(),
-                    &ip6->ip6_dst,
-                    16);
+        std::memcpy(pkt.src_ip6.data(), &ip6->ip6_src, 16);
+        std::memcpy(pkt.dst_ip6.data(), &ip6->ip6_dst, 16);
 
-        pkt.protocol  = ip6->ip6_nxt;   // next header (TCP=6, UDP=17, ICMPv6=58)
-        pkt.hop_limit = ip6->ip6_hlim;  // IPv6 hop limit (≈ TTL)
-        pkt.ttl       = ip6->ip6_hlim;  // alias cho compatibility
+        pkt.protocol  = ip6->ip6_nxt;
+        pkt.hop_limit = ip6->ip6_hlim;
+        pkt.ttl       = ip6->ip6_hlim;
 
         ptr       += IP6_HDR_LEN;
         remaining -= IP6_HDR_LEN;
 
         // ── IPv6 Extension Headers ────────────────────────────────────────────
-        // Bỏ qua các extension header cho đến khi gặp TCP/UDP/ICMPv6
-        // Các extension header: Hop-by-Hop(0), Routing(43),
-        //                       Fragment(44), Dest Options(60)
         bool parsing_ext = true;
         while (parsing_ext && remaining >= 2) {
             switch (pkt.protocol) {
                 case 0:    // Hop-by-Hop Options
                 case 43:   // Routing
                 case 60: { // Destination Options
-                    // Byte 0: next header, Byte 1: length (units of 8 bytes, +1)
                     const uint8_t next_hdr = ptr[0];
                     const size_t  ext_len  = (ptr[1] + 1) * 8;
                     if (ext_len > remaining) { parsing_ext = false; break; }
@@ -295,7 +341,6 @@ PacketInfo PacketCapture::parsePacket(const u_char*             data,
                     break;
                 }
                 default:
-                    // TCP(6), UDP(17), ICMPv6(58), IGMP(2), etc.
                     parsing_ext = false;
                     break;
             }
@@ -305,6 +350,6 @@ PacketInfo PacketCapture::parsePacket(const u_char*             data,
         return pkt;
     }
 
-    // ── ARP / VLAN / khác — đã có eth_type, không parse sâu hơn ─────────────
+    // ── ARP / khác ────────────────────────────────────────────────────────────
     return pkt;
 }

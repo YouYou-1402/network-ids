@@ -21,7 +21,7 @@ void Dispatcher::start(AlertCallback on_alert) {
             i,
             flow_table_,
             on_alert,
-            ring_buf_);   // ✅ truyền ring_buf vào mỗi worker
+            ring_buf_);   
         worker->start();
         workers_.push_back(std::move(worker));
     }
@@ -53,10 +53,9 @@ void Dispatcher::cleanupFlows(double idle_timeout_sec) {
 
 // ─── hashToWorker — 5-tuple hash đảm bảo cùng flow → cùng worker ─────────────
 uint32_t Dispatcher::hashToWorker(const PacketInfo& pkt) const {
-    uint32_t h = pkt.src_ip;
-    h ^= pkt.dst_ip   * 2654435761U;
-    h ^= pkt.src_port * 40503U;
-    h ^= pkt.dst_port * 40503U;
-    h ^= pkt.protocol * 2246822519U;
+    uint32_t h = pkt.src_ip   * 2654435761U;
+    h ^= pkt.dst_ip            * 2246822519U;
+    h ^= pkt.dst_port          * 40503U;
+    h ^= pkt.protocol          * 22695477U;
     return h % static_cast<uint32_t>(num_workers_);
 }

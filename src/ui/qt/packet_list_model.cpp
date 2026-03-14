@@ -3,79 +3,73 @@
 #include <QFont>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <netinet/ip6.h>   // struct ip6_hdr
-#include <net/ethernet.h>  // ETH_HLEN
+#include <netinet/ip6.h>
+#include <net/ethernet.h>
+#include <algorithm>
+#include <stdexcept>
 
+// ─── Column headers ───────────────────────────────────────────────────────────
 static const QStringList HEADERS = {
     "No.", "Time", "Source", "Destination",
     "Protocol", "Length", "Info", "Threat"
 };
 
-// ─── evalOp ───────────────────────────────────────────────────────────────────
-static bool evalOp(DisplayFilter::Op op, uint16_t lhs, uint16_t rhs) {
-    switch (op) {
-        case DisplayFilter::Op::EQ:  return lhs == rhs;
-        case DisplayFilter::Op::NEQ: return lhs != rhs;
-        case DisplayFilter::Op::GT:  return lhs >  rhs;
-        case DisplayFilter::Op::LT:  return lhs <  rhs;
-        case DisplayFilter::Op::GTE: return lhs >= rhs;
-        case DisplayFilter::Op::LTE: return lhs <= rhs;
-        default:                     return false;
-    }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// File-scope helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ─── ipv4ToString ─────────────────────────────────────────────────────────────
-static QString ipv4ToString(uint32_t ip_net) {
-    if (ip_net == 0) return {};
+static QString ipv4ToString(uint32_t ip_host) {
+    // PacketInfo::src_ip / dst_ip được lưu dạng HOST byte order
+    // (sau ntohl() trong decodeIPv4) → cần hton lại trước khi inet_ntoa
+    if (ip_host == 0) return {};
     struct in_addr a{};
-    a.s_addr = ip_net;
+    a.s_addr = htonl(ip_host);   // ← host → network để inet_ntoa đúng
     return QString::fromLatin1(inet_ntoa(a));
 }
 
-// ─── ipv6ToString ─────────────────────────────────────────────────────────────
-// Đọc trực tiếp từ raw_data nếu src_ip6 chưa được parse
-static QString ipv6FromRaw(const PacketRecord& r, bool is_src) {
-    // Cần raw_data và đủ dài để chứa Ethernet + IPv6 header
+static QString ipv6FromRaw(const PacketInfo& r, bool is_src) {
     if (!r.raw_data) return {};
     const auto& raw = *r.raw_data;
 
-    // Ethernet header = 14 bytes, IPv6 header = 40 bytes → tối thiểu 54 bytes
-    constexpr size_t ETH_HDR  = 14;
-    constexpr size_t IP6_HDR  = 40;
-    constexpr size_t MIN_SIZE = ETH_HDR + IP6_HDR;
+    constexpr size_t ETH_HDR = 14;
+    constexpr size_t IP6_MIN = ETH_HDR + 40;
+    if (raw.size() < IP6_MIN) return {};
 
-    if (raw.size() < MIN_SIZE) return {};
-
-    // Kiểm tra eth_type = 0x86DD tại offset 12-13
     const uint16_t eth_type =
         (static_cast<uint16_t>(raw[12]) << 8) | raw[13];
     if (eth_type != 0x86DD) return {};
 
-    // IPv6 header bắt đầu tại offset 14
-    const uint8_t* ip6 = raw.data() + ETH_HDR;
-
-    // src = offset 8..23, dst = offset 24..39 (trong IPv6 header)
+    const uint8_t* ip6  = raw.data() + ETH_HDR;
     const uint8_t* addr = is_src ? (ip6 + 8) : (ip6 + 24);
 
-    char buf[INET6_ADDRSTRLEN] = {};
+    char buf[INET6_ADDRSTRLEN]{};
     if (inet_ntop(AF_INET6, addr, buf, sizeof(buf)))
         return QString::fromLatin1(buf);
     return {};
 }
 
-// ─── buildAddrString ──────────────────────────────────────────────────────────
-// Ưu tiên: IPv4 → IPv6 (từ raw_data) → fallback label
-static QString buildAddrString(const PacketRecord& r,
-                                bool                is_src) {
-    // 1. IPv4
+static QString buildAddrString(const PacketInfo& r, bool is_src) {
+    // 1. IPv4 (host byte order)
     const uint32_t ip4 = is_src ? r.src_ip : r.dst_ip;
     QString ip_str = ipv4ToString(ip4);
 
-    // 2. IPv6 — đọc từ raw_data (không cần thêm field mới vào PacketRecord)
+    // 2. IPv6 từ struct field
+    if (ip_str.isEmpty() && r.eth_type == 0x86DD) {
+        const auto& ip6arr = is_src ? r.src_ip6 : r.dst_ip6;
+        const bool has_ip6 = std::any_of(ip6arr.begin(), ip6arr.end(),
+                                          [](uint8_t b){ return b != 0; });
+        if (has_ip6) {
+            char buf[INET6_ADDRSTRLEN]{};
+            if (inet_ntop(AF_INET6, ip6arr.data(), buf, sizeof(buf)))
+                ip_str = QString::fromLatin1(buf);
+        }
+    }
+
+    // 3. IPv6 từ raw_data (fallback)
     if (ip_str.isEmpty() && r.eth_type == 0x86DD)
         ip_str = ipv6FromRaw(r, is_src);
 
-    // 3. Có địa chỉ → thêm port nếu có
+    // 4. Thêm port nếu có
     if (!ip_str.isEmpty()) {
         const uint16_t port = is_src ? r.src_port : r.dst_port;
         if (port != 0)
@@ -83,7 +77,7 @@ static QString buildAddrString(const PacketRecord& r,
         return ip_str;
     }
 
-    // 4. Fallback label theo eth_type
+    // 5. Fallback label
     switch (r.eth_type) {
         case 0x0806: return "ARP";
         case 0x8100: return "VLAN";
@@ -104,7 +98,6 @@ PacketListModel::PacketListModel(PacketRingBuffer& ring_buf, QObject* parent)
 int PacketListModel::rowCount(const QModelIndex&) const {
     return static_cast<int>(row_cache_.size());
 }
-
 int PacketListModel::columnCount(const QModelIndex&) const {
     return COL_COUNT;
 }
@@ -128,9 +121,9 @@ QVariant PacketListModel::data(const QModelIndex& index, int role) const {
 
     const RowCache& c = row_cache_[static_cast<size_t>(row)];
 
-    if (role == Qt::BackgroundRole)  return c.bg_color;
-    if (role == Qt::ForegroundRole)  return QColor("#dddddd");
-    if (role == Qt::FontRole)        return QFont("Monospace", 10);
+    if (role == Qt::BackgroundRole)    return c.bg_color;
+    if (role == Qt::ForegroundRole)    return QColor("#dddddd");
+    if (role == Qt::FontRole)          return QFont("Monospace", 10);
 
     if (role == Qt::TextAlignmentRole) {
         const int col = index.column();
@@ -142,7 +135,8 @@ QVariant PacketListModel::data(const QModelIndex& index, int role) const {
     if (role != Qt::DisplayRole) return {};
 
     switch (index.column()) {
-        case COL_NO:     return QString::number(c.pkt_idx + 1);
+        // ✅ frame_no = r.index + 1, cố định, không đổi khi filter
+        case COL_NO:     return QString::number(c.frame_no);
         case COL_TIME:   return c.time_str;
         case COL_SRC_IP: return c.src;
         case COL_DST_IP: return c.dst;
@@ -156,29 +150,27 @@ QVariant PacketListModel::data(const QModelIndex& index, int role) const {
 
 // ─── buildRowCache ────────────────────────────────────────────────────────────
 PacketListModel::RowCache
-PacketListModel::buildRowCache(const PacketRecord& r) const {
+PacketListModel::buildRowCache(const PacketInfo& r) const {
     RowCache c;
+    // frame_no = index + 1 (1-based), gán 1 lần, bất biến
+    c.frame_no = r.index + 1;
     c.pkt_idx  = r.index;
     c.orig_len = r.orig_len;
     c.bg_color = computeRowColor(r);
     c.proto    = computeProto(r);
     c.info     = computeInfo(r);
     c.threat   = QString::fromStdString(r.threat_type);
+    c.src      = buildAddrString(r, /*is_src=*/true);
+    c.dst      = buildAddrString(r, /*is_src=*/false);
 
-    // ✅ Dùng buildAddrString — tự động IPv4 → IPv6(raw) → fallback
-    c.src = buildAddrString(r, /*is_src=*/true);
-    c.dst = buildAddrString(r, /*is_src=*/false);
-
-    // ── Relative timestamp ────────────────────────────────────────────────────
     const double base = (base_timestamp_ >= 0.0) ? base_timestamp_
-                                                  : r.timestamp;
-    c.time_str = QString::number(r.timestamp - base, 'f', 6);
-
+                                                  : r.timestamp_d;
+    c.time_str = QString::number(r.timestamp_d - base, 'f', 6);
     return c;
 }
 
 // ─── appendRecords ────────────────────────────────────────────────────────────
-void PacketListModel::appendRecords(const std::vector<PacketRecord>& batch) {
+void PacketListModel::appendRecords(const std::vector<PacketInfo>& batch) {
     if (batch.empty()) return;
 
     std::vector<RowCache> new_cache;
@@ -186,13 +178,8 @@ void PacketListModel::appendRecords(const std::vector<PacketRecord>& batch) {
 
     for (const auto& r : batch) {
         if (base_timestamp_ < 0.0)
-            base_timestamp_ = r.timestamp;
-
-        bool pass = true;
-        if (current_filter_.valid && !current_filter_.conditions.empty())
-            pass = matchFilter(r.index, current_filter_);
-        if (!pass) continue;
-
+            base_timestamp_ = r.timestamp_d;
+        if (!matchRecord(r, current_filter_)) continue;
         new_cache.push_back(buildRowCache(r));
     }
 
@@ -204,7 +191,6 @@ void PacketListModel::appendRecords(const std::vector<PacketRecord>& batch) {
     const int overflow = static_cast<int>(row_cache_.size())
                        + static_cast<int>(new_cache.size())
                        - MAX_DISPLAY_ROWS;
-
     if (overflow > 0) {
         beginRemoveRows(QModelIndex{}, 0, overflow - 1);
         for (int i = 0; i < overflow; ++i) {
@@ -234,19 +220,20 @@ void PacketListModel::applyFilter(const DisplayFilter& filter) {
     row_cache_.clear();
     base_timestamp_ = -1.0;
 
-    const uint64_t total     = ring_buf_.totalReceived();
-    const uint64_t oldest    = ring_buf_.oldestIndex();
-    const uint64_t scan_from = (total > static_cast<uint64_t>(MAX_DISPLAY_ROWS))
-                             ? total - static_cast<uint64_t>(MAX_DISPLAY_ROWS)
-                             : oldest;
+    const uint64_t total  = ring_buf_.totalReceived();
+    const uint64_t oldest = ring_buf_.oldestIndex();
+    const uint64_t from   = (total > static_cast<uint64_t>(MAX_DISPLAY_ROWS))
+                          ? total - static_cast<uint64_t>(MAX_DISPLAY_ROWS)
+                          : oldest;
 
-    for (uint64_t i = scan_from; i < total; ++i) {
-        ring_buf_.withRecord(i, [&](const PacketRecord& r) {
-            if (!matchFilter(i, filter)) return;
-            if (base_timestamp_ < 0.0) base_timestamp_ = r.timestamp;
-            filtered_indices_.push_back(i);
-            row_cache_.push_back(buildRowCache(r));
-        });
+    const auto snapshot = ring_buf_.getSnapshot(from, total);
+
+    for (const auto& r : snapshot) {
+        if (!matchRecord(r, filter)) continue;
+        if (base_timestamp_ < 0.0) base_timestamp_ = r.timestamp_d;
+        filtered_indices_.push_back(r.index);
+        row_cache_.push_back(buildRowCache(r));
+        // frame_no = r.index + 1 → cố định, không phụ thuộc thứ tự filter
     }
 
     endResetModel();
@@ -262,118 +249,165 @@ void PacketListModel::clear() {
 }
 
 // ─── recordAt ─────────────────────────────────────────────────────────────────
-std::shared_ptr<PacketRecord> PacketListModel::recordAt(int row) const {
+std::shared_ptr<PacketInfo> PacketListModel::recordAt(int row) const {
     if (row < 0 || row >= static_cast<int>(filtered_indices_.size()))
         return nullptr;
     return ring_buf_.getByIndex(filtered_indices_[static_cast<size_t>(row)]);
 }
 
-// ─── matchFilter ──────────────────────────────────────────────────────────────
-bool PacketListModel::matchFilter(uint64_t             idx,
+// ─── evalOp ───────────────────────────────────────────────────────────────────
+/*static*/
+bool PacketListModel::evalOp(DisplayFilter::Op op,
+                               uint16_t lhs, uint16_t rhs) {
+    switch (op) {
+        case DisplayFilter::Op::EQ:  return lhs == rhs;
+        case DisplayFilter::Op::NEQ: return lhs != rhs;
+        case DisplayFilter::Op::GT:  return lhs >  rhs;
+        case DisplayFilter::Op::LT:  return lhs <  rhs;
+        case DisplayFilter::Op::GTE: return lhs >= rhs;
+        case DisplayFilter::Op::LTE: return lhs <= rhs;
+        default:                     return false;
+    }
+}
+
+// ─── applyOp ──────────────────────────────────────────────────────────────────
+/*static*/
+bool PacketListModel::applyOp(DisplayFilter::Op op, bool eq) {
+    if (op == DisplayFilter::Op::EQ)  return  eq;
+    if (op == DisplayFilter::Op::NEQ) return !eq;
+    return true;
+}
+
+// ─── matchRecord ──────────────────────────────────────────────────────────────
+bool PacketListModel::matchRecord(const PacketInfo&  pkt,
                                    const DisplayFilter& f) const {
-    if (!f.valid || f.conditions.empty()) return true;
+    if (!f.valid) return true;
 
-    bool result = false;
-    ring_buf_.withRecord(idx, [&](const PacketRecord& rec) {
-        if (f.proto_filter != DisplayFilter::Proto::ANY) {
-            const QString proto = computeProto(rec);
-            switch (f.proto_filter) {
-                case DisplayFilter::Proto::TCP:
-                    if (proto != "TCP")  return; break;
-                case DisplayFilter::Proto::UDP:
-                    if (proto != "UDP")  return; break;
-                case DisplayFilter::Proto::ICMP:
-                    if (proto != "ICMP") return; break;
-                case DisplayFilter::Proto::HTTP:
-                    if (proto != "HTTP") return; break;
-                case DisplayFilter::Proto::DNS:
-                    if (proto != "DNS")  return; break;
-                default: break;
-            }
+    // ── Protocol shortcut ─────────────────────────────────────────────────────
+    if (f.proto_filter != DisplayFilter::Proto::ANY) {
+        const QString proto = computeProto(pkt);
+        bool proto_match = false;
+        switch (f.proto_filter) {
+            case DisplayFilter::Proto::TCP:
+                proto_match = (proto == "TCP");         break;
+            case DisplayFilter::Proto::UDP:
+                proto_match = (proto == "UDP");         break;
+            case DisplayFilter::Proto::ICMP:
+                proto_match = (proto == "ICMP");        break;
+            case DisplayFilter::Proto::HTTP:
+                proto_match = (proto == "HTTP");        break;
+            case DisplayFilter::Proto::DNS:
+                proto_match = (proto == "DNS");         break;
+            case DisplayFilter::Proto::ARP:
+                proto_match = (pkt.eth_type == 0x0806); break;
+            default:
+                proto_match = true;                     break;
         }
+        if (!proto_match) return false;
+        if (f.conditions.empty()) return true;
+    }
 
-        for (const auto& cond : f.conditions) {
-            switch (cond.field) {
-                case DisplayFilter::Field::SRC_IP: {
-                    // ✅ Tự detect IPv4 vs IPv6 từ chuỗi filter
-                    if (cond.value.find(':') != std::string::npos) {
-                        // IPv6 filter — so sánh với raw_data
-                        const QString rec_ip6 = ipv6FromRaw(rec, true);
-                        const bool eq = (rec_ip6.toStdString() == cond.value);
-                        if (cond.op == DisplayFilter::Op::EQ  && !eq) return;
-                        if (cond.op == DisplayFilter::Op::NEQ &&  eq) return;
-                    } else {
-                        // IPv4 filter
-                        struct in_addr a{};
-                        inet_pton(AF_INET, cond.value.c_str(), &a);
-                        const bool eq = (rec.src_ip == a.s_addr);
-                        if (cond.op == DisplayFilter::Op::EQ  && !eq) return;
-                        if (cond.op == DisplayFilter::Op::NEQ &&  eq) return;
-                    }
-                    break;
+    // ── Conditions — AND logic ────────────────────────────────────────────────
+    for (const auto& cond : f.conditions) {
+        switch (cond.field) {
+
+            // ── ip.src ────────────────────────────────────────────────────────
+            case DisplayFilter::Field::SRC_IP: {
+                bool eq = false;
+                if (cond.value.find(':') != std::string::npos) {
+                    // IPv6
+                    char buf[INET6_ADDRSTRLEN]{};
+                    inet_ntop(AF_INET6, pkt.src_ip6.data(), buf, sizeof(buf));
+                    eq = (std::string(buf) == cond.value);
+                } else {
+                    // IPv4: pkt.src_ip là HOST byte order (sau ntohl trong decoder)
+                    // inet_pton trả về NETWORK byte order → cần htonl để so sánh
+                    struct in_addr a{};
+                    if (inet_pton(AF_INET, cond.value.c_str(), &a) == 1)
+                        eq = (pkt.src_ip == ntohl(a.s_addr));  // ✅ fix byte order
                 }
-                case DisplayFilter::Field::DST_IP: {
-                    if (cond.value.find(':') != std::string::npos) {
-                        const QString rec_ip6 = ipv6FromRaw(rec, false);
-                        const bool eq = (rec_ip6.toStdString() == cond.value);
-                        if (cond.op == DisplayFilter::Op::EQ  && !eq) return;
-                        if (cond.op == DisplayFilter::Op::NEQ &&  eq) return;
-                    } else {
-                        struct in_addr a{};
-                        inet_pton(AF_INET, cond.value.c_str(), &a);
-                        const bool eq = (rec.dst_ip == a.s_addr);
-                        if (cond.op == DisplayFilter::Op::EQ  && !eq) return;
-                        if (cond.op == DisplayFilter::Op::NEQ &&  eq) return;
-                    }
-                    break;
-                }
-                case DisplayFilter::Field::SRC_PORT: {
-                    const uint16_t port = static_cast<uint16_t>(
-                        std::stoul(cond.value));
-                    if (!evalOp(cond.op, rec.src_port, port)) return;
-                    break;
-                }
-                case DisplayFilter::Field::DST_PORT: {
-                    const uint16_t port = static_cast<uint16_t>(
-                        std::stoul(cond.value));
-                    if (!evalOp(cond.op, rec.dst_port, port)) return;
-                    break;
-                }
-                case DisplayFilter::Field::PROTOCOL: {
-                    const bool eq = (computeProto(rec).toStdString()
-                                     == cond.value);
-                    if (cond.op == DisplayFilter::Op::EQ  && !eq) return;
-                    if (cond.op == DisplayFilter::Op::NEQ &&  eq) return;
-                    break;
-                }
-                case DisplayFilter::Field::TCP_FLAGS: {
-                    const uint8_t mask = static_cast<uint8_t>(
-                        std::stoul(cond.value, nullptr, 16));
-                    const bool has = (rec.tcp_flags & mask) != 0;
-                    if (cond.op == DisplayFilter::Op::EQ  && !has) return;
-                    if (cond.op == DisplayFilter::Op::NEQ &&  has) return;
-                    break;
-                }
-                case DisplayFilter::Field::THREAT: {
-                    const bool has = !rec.threat_type.empty() &&
-                                     rec.threat_type.find(cond.value)
-                                         != std::string::npos;
-                    if (cond.op == DisplayFilter::Op::EQ  && !has) return;
-                    if (cond.op == DisplayFilter::Op::NEQ &&  has) return;
-                    break;
-                }
-                default: break;
+                if (!applyOp(cond.op, eq)) return false;
+                break;
             }
-        }
-        result = true;
-    });
 
-    return result;
+            // ── ip.dst ────────────────────────────────────────────────────────
+            case DisplayFilter::Field::DST_IP: {
+                bool eq = false;
+                if (cond.value.find(':') != std::string::npos) {
+                    char buf[INET6_ADDRSTRLEN]{};
+                    inet_ntop(AF_INET6, pkt.dst_ip6.data(), buf, sizeof(buf));
+                    eq = (std::string(buf) == cond.value);
+                } else {
+                    struct in_addr a{};
+                    if (inet_pton(AF_INET, cond.value.c_str(), &a) == 1)
+                        eq = (pkt.dst_ip == ntohl(a.s_addr));  // ✅ fix byte order
+                }
+                if (!applyOp(cond.op, eq)) return false;
+                break;
+            }
+
+            // ── src port ──────────────────────────────────────────────────────
+            case DisplayFilter::Field::SRC_PORT: {
+                try {
+                    const uint16_t port =
+                        static_cast<uint16_t>(std::stoul(cond.value));
+                    if (!evalOp(cond.op, pkt.src_port, port)) return false;
+                } catch (const std::exception&) { return false; }
+                break;
+            }
+
+            // ── dst port ──────────────────────────────────────────────────────
+            case DisplayFilter::Field::DST_PORT: {
+                try {
+                    const uint16_t port =
+                        static_cast<uint16_t>(std::stoul(cond.value));
+                    if (!evalOp(cond.op, pkt.dst_port, port)) return false;
+                } catch (const std::exception&) { return false; }
+                break;
+            }
+
+            // ── protocol ──────────────────────────────────────────────────────
+            case DisplayFilter::Field::PROTOCOL: {
+                const bool eq =
+                    (computeProto(pkt).toLower().toStdString() == cond.value);
+                if (!applyOp(cond.op, eq)) return false;
+                break;
+            }
+
+            // ── tcp.flags.* ───────────────────────────────────────────────────
+            case DisplayFilter::Field::TCP_FLAGS: {
+                uint8_t mask = 0;
+                if      (cond.value == "SYN") mask = 0x02;
+                else if (cond.value == "ACK") mask = 0x10;
+                else if (cond.value == "RST") mask = 0x04;
+                else if (cond.value == "FIN") mask = 0x01;
+                else if (cond.value == "PSH") mask = 0x08;
+                else if (cond.value == "URG") mask = 0x20;
+                if (mask == 0) return false;
+                const bool has = (pkt.tcp_flags & mask) != 0;
+                if (!applyOp(cond.op, has)) return false;
+                break;
+            }
+
+            // ── threat ────────────────────────────────────────────────────────
+            case DisplayFilter::Field::THREAT: {
+                std::string threat = pkt.threat_type;
+                std::transform(threat.begin(), threat.end(),
+                               threat.begin(), ::tolower);
+                const bool has = !threat.empty() &&
+                                  threat.find(cond.value) != std::string::npos;
+                if (!applyOp(cond.op, has)) return false;
+                break;
+            }
+
+            default: break;
+        }
+    }
+    return true;
 }
 
 // ─── computeProto ─────────────────────────────────────────────────────────────
-QString PacketListModel::computeProto(const PacketRecord& r) const {
-    // ── Non-IP / special frames ───────────────────────────────────────────────
+QString PacketListModel::computeProto(const PacketInfo& r) const {
     if (r.protocol == 0) {
         switch (r.eth_type) {
             case 0x0806: return "ARP";
@@ -383,18 +417,19 @@ QString PacketListModel::computeProto(const PacketRecord& r) const {
             default:
                 if (r.eth_type != 0)
                     return QString("ETH(0x%1)")
-                        .arg(r.eth_type, 4, 16, QChar('0'));
+                               .arg(r.eth_type, 4, 16, QChar('0'));
                 return "UNKNOWN";
         }
     }
 
-    // ── IPv6 với next-header ──────────────────────────────────────────────────
-    // ✅ ICMPv6 (next header = 58) phân biệt với ICMP (1)
-    if (r.eth_type == 0x86DD) {
-        if (r.protocol == 58) return "ICMPv6";
-    }
+    // ARP sentinel từ decoder
+    if (r.protocol == 0xFE) return "ARP";
+    // IPv6 sentinel từ decoder
+    if (r.protocol == 0xFF) return "IPv6";
 
-    // ── IPv4 / IPv6 transport ─────────────────────────────────────────────────
+    if (r.eth_type == 0x86DD && r.protocol == 58)
+        return "ICMPv6";
+
     switch (r.protocol) {
         case IPPROTO_TCP: {
             if (r.src_port == 80   || r.dst_port == 80   ||
@@ -407,11 +442,11 @@ QString PacketListModel::computeProto(const PacketRecord& r) const {
             return "TCP";
         }
         case IPPROTO_UDP: {
-            if (r.src_port == 53  || r.dst_port == 53)   return "DNS";
+            if (r.src_port == 53  || r.dst_port == 53)    return "DNS";
             if (r.src_port == 67  || r.dst_port == 67 ||
-                r.src_port == 68  || r.dst_port == 68)   return "DHCP";
-            if (r.src_port == 123 || r.dst_port == 123)  return "NTP";
-            if (r.src_port == 161 || r.dst_port == 161)  return "SNMP";
+                r.src_port == 68  || r.dst_port == 68)    return "DHCP";
+            if (r.src_port == 123 || r.dst_port == 123)   return "NTP";
+            if (r.src_port == 161 || r.dst_port == 161)   return "SNMP";
             return "UDP";
         }
         case IPPROTO_ICMP: return "ICMP";
@@ -422,8 +457,8 @@ QString PacketListModel::computeProto(const PacketRecord& r) const {
 }
 
 // ─── computeInfo ──────────────────────────────────────────────────────────────
-QString PacketListModel::computeInfo(const PacketRecord& r) const {
-    if (r.eth_type == 0x0806)
+QString PacketListModel::computeInfo(const PacketInfo& r) const {
+    if (r.eth_type == 0x0806 || r.protocol == 0xFE)
         return "ARP";
 
     if (r.protocol == IPPROTO_TCP) {
@@ -437,14 +472,14 @@ QString PacketListModel::computeInfo(const PacketRecord& r) const {
 
         const QString flag_str = flags.isEmpty()
             ? QString{} : '[' + flags.join(", ") + "] ";
-        return QString("%1%2 → %3  len=%4")
+        return QString("%1%2 \u2192 %3  len=%4")
             .arg(flag_str)
             .arg(r.src_port)
             .arg(r.dst_port)
             .arg(r.payload_len);
     }
     if (r.protocol == IPPROTO_UDP)
-        return QString("UDP  %1 → %2  len=%3")
+        return QString("UDP  %1 \u2192 %2  len=%3")
             .arg(r.src_port).arg(r.dst_port).arg(r.payload_len);
     if (r.protocol == IPPROTO_ICMP)
         return "ICMP message";
@@ -455,7 +490,7 @@ QString PacketListModel::computeInfo(const PacketRecord& r) const {
 }
 
 // ─── computeRowColor ──────────────────────────────────────────────────────────
-QColor PacketListModel::computeRowColor(const PacketRecord& r) const {
+QColor PacketListModel::computeRowColor(const PacketInfo& r) const {
     if (!r.threat_type.empty()) {
         if (r.threat_type.find("DDOS_VOLUMETRIC") != std::string::npos)
             return QColor(60, 15, 15);
@@ -485,7 +520,7 @@ QColor PacketListModel::computeRowColor(const PacketRecord& r) const {
                 return QColor(35, 20, 45);
             return QColor(20, 20, 35);
         case IPPROTO_ICMP: return QColor(10, 35, 35);
-        case 58:           return QColor(10, 30, 30);  // ICMPv6
+        case 58:           return QColor(10, 30, 30);
         default:           return QColor(15, 15, 15);
     }
 }

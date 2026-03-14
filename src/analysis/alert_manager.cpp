@@ -1,3 +1,5 @@
+//src/analysis/alert_manager.cpp
+
 #include "alert_manager.hpp"
 #include "../common/logger.hpp"
 #include <arpa/inet.h>
@@ -56,16 +58,38 @@ void AlertManager::addL2Alert(const MLResult& result) {
     addAlert(std::move(alert));
 }
 
-// ─── addAlert (private) ───────────────────────────────────────────────────────
 void AlertManager::addAlert(UnifiedAlert alert) {
-    // ── Build dedup key: src_ip:src_port→dst_ip:dst_port|threat ──────────────
     std::ostringstream oss;
-    oss << alert.src_ip   << ":"  << alert.src_port << "->"
-        << alert.dst_ip   << ":"  << alert.dst_port << "|"
+    oss << alert.src_ip   << ":" << alert.src_port << "->"
+        << alert.dst_ip   << ":" << alert.dst_port << "|"
         << static_cast<int>(alert.result);
     const std::string dedup_key = oss.str();
 
-    // ── Cập nhật atomic counters (trước lock) ─────────────────────────────────
+    LOG_INFO(alert.colorCode()
+             + "[ALERT] " + threatToString(alert.result)
+             + " | " + alert.srcIpString()
+             + ":" + std::to_string(alert.src_port)
+             + " | " + alert.detail + "\033[0m");
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        // Suppress check TRƯỚC khi tăng counter
+        if (shouldSuppress(dedup_key))
+            return;
+
+        // Lấy thời gian thực để suppress
+        double now_sec = std::chrono::duration<double>(
+            Clock::now().time_since_epoch()).count();
+        suppress_map_[dedup_key] = now_sec;
+
+        if (alerts_.size() >= max_alerts_)
+            alerts_.pop_front();
+
+        alerts_.push_back(alert); // copy trước khi move
+    }
+
+    // Tăng counter SAU KHI đã push thành công
     total_alerts_++;
     switch (alert.result) {
         case DetectionResult::DDOS_VOLUMETRIC: ddos_alerts_++;      break;
@@ -73,55 +97,27 @@ void AlertManager::addAlert(UnifiedAlert alert) {
         case DetectionResult::PORT_SCAN:       scan_alerts_++;      break;
         default: break;
     }
-
-    // ── Log với màu ───────────────────────────────────────────────────────────
-    LOG_INFO(alert.colorCode()
-             + "[ALERT] "
-             + threatToString(alert.result)
-             + " | " + alert.srcIpString()
-             + ":" + std::to_string(alert.src_port)
-             + " | " + alert.detail
-             + "\033[0m");
-
-    // ── Lưu vào deque (với suppress check) ───────────────────────────────────
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (shouldSuppress(dedup_key))
-        return;
-
-    // Cập nhật suppress map
-    suppress_map_[dedup_key] = alert.timestamp;
-
-    // Evict cũ nếu vượt giới hạn
-    if (alerts_.size() >= max_alerts_)
-        alerts_.pop_front();
-
-    alerts_.push_back(std::move(alert));
 }
 
-// ─── shouldSuppress — gọi khi đang giữ mutex_ ────────────────────────────────
 bool AlertManager::shouldSuppress(const std::string& key) {
+    // Gọi khi đang giữ mutex_
     auto it = suppress_map_.find(key);
-    if (it == suppress_map_.end())
-        return false;
+    if (it == suppress_map_.end()) return false;
 
-    // Lấy timestamp của alert mới nhất trong deque để so sánh
-    if (!alerts_.empty()) {
-        double last_time = it->second;
-        double now       = alerts_.back().timestamp;
-        if ((now - last_time) < static_cast<double>(SUPPRESS_SEC))
-            return true;
-    }
-    return false;
+    // Dùng Clock::now() thay vì alerts_.back().timestamp
+    double now_sec = std::chrono::duration<double>(
+        Clock::now().time_since_epoch()).count();
+
+    return (now_sec - it->second) < static_cast<double>(SUPPRESS_SEC);
 }
+
 
 // ─── getRecent ────────────────────────────────────────────────────────────────
 std::vector<UnifiedAlert> AlertManager::getRecent(size_t n) const {
-    std::lock_guard<std::mutex> lock(mutex_);
-
+    std::lock_guard lock(mutex_);
     size_t count = std::min(n, alerts_.size());
     return std::vector<UnifiedAlert>(
-        alerts_.end() - static_cast<std::ptrdiff_t>(count),
+        alerts_.end() - count,   // ← luôn lấy từ cuối deque
         alerts_.end()
     );
 }
@@ -132,4 +128,29 @@ std::vector<UnifiedAlert> AlertManager::getLatest(size_t n) const {
     return std::vector<UnifiedAlert>(
         alerts_.end() - static_cast<ptrdiff_t>(count),
         alerts_.end());
+}
+
+std::vector<UnifiedAlert> AlertManager::getRecentFrom(uint64_t from_seq,
+                                                        size_t   max_n) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // total_alerts_ là số alert đã push thành công vào deque
+    // alerts_[0] tương ứng với seq = (total_alerts_ - alerts_.size())
+    const uint64_t base_seq = total_alerts_.load() - alerts_.size();
+
+    if (from_seq <= base_seq) {
+        // Lấy từ đầu deque
+        size_t count = std::min(max_n, alerts_.size());
+        return std::vector<UnifiedAlert>(
+            alerts_.begin(),
+            alerts_.begin() + static_cast<std::ptrdiff_t>(count));
+    }
+
+    const size_t offset = static_cast<size_t>(from_seq - base_seq);
+    if (offset >= alerts_.size()) return {};
+
+    size_t count = std::min(max_n, alerts_.size() - offset);
+    return std::vector<UnifiedAlert>(
+        alerts_.begin() + static_cast<std::ptrdiff_t>(offset),
+        alerts_.begin() + static_cast<std::ptrdiff_t>(offset + count));
 }

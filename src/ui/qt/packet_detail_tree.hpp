@@ -13,7 +13,7 @@ public:
     explicit PacketDetailTree(QWidget* parent = nullptr);
 
     /// Hiển thị chi tiết một packet
-    void showPacket(const PacketRecord& record);
+    void showPacket(const PacketInfo& record);
 
     /// Xóa toàn bộ nội dung
     void clearDetail();
@@ -37,8 +37,8 @@ private:
     void showDNS  (QTreeWidgetItem* parent, const uint8_t* data, uint32_t len);
 
     // ── Fallback khi raw_data đã bị evict ────────────────────────────────────
-    void showFromFields (const PacketRecord& rec);
-    void showThreat     (const PacketRecord& record);
+    void showFromFields (const PacketInfo& pkt);
+    void showThreat     (const PacketInfo& record);
 
     // ── Utilities ────────────────────────────────────────────────────────────
     static QString flagsToString (uint8_t        flags);

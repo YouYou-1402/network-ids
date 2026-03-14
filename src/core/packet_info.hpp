@@ -2,11 +2,12 @@
 #pragma once
 #include <vector>
 #include <array>
+#include <memory>
+#include <string>
 #include <cstdint>
 #include <sys/time.h>
-#include <string>
 
-// ─── TCP Flag bitmasks ────────────────────────────────────────────────────────
+//  TCP Flag bitmasks  
 namespace TCPFlags {
     constexpr uint8_t FIN = 0x01;
     constexpr uint8_t SYN = 0x02;
@@ -16,7 +17,7 @@ namespace TCPFlags {
     constexpr uint8_t URG = 0x20;
 }
 
-// ─── EtherType constants ──────────────────────────────────────────────────────
+//   EtherType constants  
 namespace EtherType {
     constexpr uint16_t IPv4 = 0x0800;
     constexpr uint16_t ARP  = 0x0806;
@@ -24,47 +25,65 @@ namespace EtherType {
     constexpr uint16_t IPv6 = 0x86DD;
 }
 
-// ─── PacketInfo ───────────────────────────────────────────────────────────────
+//   PacketInfo 
 struct PacketInfo {
-    // ── Raw data ──────────────────────────────────────────────────────────────
-    std::vector<uint8_t> raw_data;
-    struct timeval       timestamp {};
 
-    // ── Link layer (L2) ───────────────────────────────────────────────────────
-    uint16_t eth_type = 0;   // 0x0800=IPv4, 0x0806=ARP, 0x86DD=IPv6
+    //   Ring buffer metadata  
+    uint64_t  index       = 0;       
+    uint64_t  capture_seq = 0;      
 
-    // ── Network layer (L3) ────────────────────────────────────────────────────
-    uint32_t src_ip   = 0;   // network byte order
-    uint32_t dst_ip   = 0;   // network byte order
-    uint8_t  protocol = 0;   // IPPROTO_TCP=6, IPPROTO_UDP=17, IPPROTO_ICMP=1
-    uint8_t  ttl      = 0;
-    std::array<uint8_t, 16> src_ip6{};
-    std::array<uint8_t, 16> dst_ip6{};
-    uint8_t  hop_limit = 0; 
+    struct timeval timestamp {};     
+    double    timestamp_d   = 0.0;  // = tv_sec + tv_usec/1e6
 
-    // ── Transport layer (L4) ──────────────────────────────────────────────────
-    uint16_t src_port  = 0;
-    uint16_t dst_port  = 0;
-    uint8_t  tcp_flags = 0;
-    uint32_t seq_num   = 0;
-    uint32_t ack_num   = 0;
-    uint16_t win_size  = 0;
+    //   Frame sizes     
+    uint32_t  cap_len   = 0;         // bytes thực sự captured
+    uint32_t  orig_len  = 0;         // bytes trên dây 
 
-    // ── Payload ───────────────────────────────────────────────────────────────
-    uint32_t pkt_len        = 0;
-    uint32_t cap_len        = 0;
-    uint32_t payload_len    = 0;
-    uint32_t payload_offset = 0;
+    //   Layer 2       
+    uint16_t  eth_type  = 0;
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    //   Layer 3       
+    uint32_t  src_ip    = 0;
+    uint32_t  dst_ip    = 0;
+    std::array<uint8_t, 16> src_ip6 {};
+    std::array<uint8_t, 16> dst_ip6 {};
+    uint8_t   protocol  = 0;
+    uint8_t   ttl       = 0;
+    uint8_t   hop_limit = 0;         // IPv6
+
+    //   Layer 4       
+    uint16_t  src_port  = 0;
+    uint16_t  dst_port  = 0;
+    uint8_t   tcp_flags = 0;
+    uint32_t  seq_num   = 0;
+    uint32_t  ack_num   = 0;
+    uint16_t  win_size  = 0;
+
+    //   Payload       
+    uint32_t  payload_len    = 0;
+    uint32_t  payload_offset = 0;
+
+    //   IDS result      
+
+    std::string threat_type;
+    std::string action;
+
+    //   File offset (offline pcap)                
+    int64_t   file_offset = -1;
+
+    std::shared_ptr<std::vector<uint8_t>> raw_data;
+
+
     const uint8_t* payload() const {
-        if (payload_len == 0 || payload_offset >= raw_data.size())
+        if (!raw_data || payload_len == 0
+            || payload_offset >= raw_data->size())
             return nullptr;
-        return raw_data.data() + payload_offset;
+        return raw_data->data() + payload_offset;
     }
 
     std::string flowKey() const;
 
+    // TCP flag helpers
     bool hasSYN() const { return tcp_flags & TCPFlags::SYN; }
     bool hasACK() const { return tcp_flags & TCPFlags::ACK; }
     bool hasRST() const { return tcp_flags & TCPFlags::RST; }
@@ -72,11 +91,11 @@ struct PacketInfo {
     bool hasPSH() const { return tcp_flags & TCPFlags::PSH; }
     bool hasURG() const { return tcp_flags & TCPFlags::URG; }
 
+    // EtherType helpers
     bool isIPv4() const { return eth_type == EtherType::IPv4; }
     bool isARP()  const { return eth_type == EtherType::ARP;  }
     bool isIPv6() const { return eth_type == EtherType::IPv6; }
 
-    double timestampSeconds() const {
-        return timestamp.tv_sec + timestamp.tv_usec / 1e6;
-    }
+    // Timestamp helpers
+    double timestampSeconds() const { return timestamp_d; }
 };

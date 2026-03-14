@@ -1,4 +1,4 @@
-//src/detection/flow_state.hpp
+//src/detection/flow_table.hpp
 #pragma once
 #include "flow_state.hpp"
 #include <unordered_map>

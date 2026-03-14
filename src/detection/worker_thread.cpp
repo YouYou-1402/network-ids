@@ -1,7 +1,8 @@
-// src/layer1/worker_thread.cpp
+// src/detection/worker_thread.cpp
 #include "worker_thread.hpp"
 #include "../common/logger.hpp"
 #include "../common/metrics.hpp"
+#include "../common/engine_config.hpp"
 #include <arpa/inet.h>
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -45,15 +46,15 @@ bool PacketQueue::empty() const {
 // WorkerThread
 // ═══════════════════════════════════════════════════════════════════════════════
 
-WorkerThread::WorkerThread(int              id,
-                            FlowTable&       flow_table,
-                            AlertCallback    on_alert,
-                            PacketRingBuffer& ring_buf)
+WorkerThread::WorkerThread(int               id,
+                           FlowTable&        flow_table,
+                           AlertCallback     on_alert,
+                           PacketRingBuffer& ring_buf)
     : id_(id)
     , flow_table_(flow_table)
     , on_alert_(std::move(on_alert))
     , ring_buf_(ring_buf)
-    , queue_(4096)
+    , queue_(65536)
 {}
 
 WorkerThread::~WorkerThread() { stop(); }
@@ -86,96 +87,52 @@ void WorkerThread::run() {
     }
 }
 
-// ─── makeRecord: PacketInfo → PacketRecord ────────────────────────────────────
-PacketRecord WorkerThread::makeRecord(const PacketInfo& pkt) {
-    PacketRecord r;
-
-    // Timing & size
-    r.timestamp = pkt.timestampSeconds();
-    r.orig_len  = pkt.pkt_len;
-    r.cap_len   = static_cast<uint32_t>(pkt.raw_data.size());
-
-    // ✅ Layer 2 — eth_type là field quan trọng nhất
-    r.eth_type  = pkt.eth_type;
-
-    // Layer 3
-    r.src_ip    = pkt.src_ip;
-    r.dst_ip    = pkt.dst_ip;
-    r.protocol  = pkt.protocol;
-    r.ttl       = pkt.ttl;
-    r.src_ip6   = pkt.src_ip6;
-    r.dst_ip6   = pkt.dst_ip6;
-    
-    // Layer 4
-    r.src_port  = pkt.src_port;
-    r.dst_port  = pkt.dst_port;
-    r.tcp_flags = pkt.tcp_flags;
-    r.seq_num   = pkt.seq_num;
-    r.ack_num   = pkt.ack_num;
-    r.win_size  = pkt.win_size;
-
-    // Payload
-    r.payload_len    = pkt.payload_len;
-    r.payload_offset = pkt.payload_offset;
-
-    // Raw bytes — share ownership, ring buffer tự evict sau keep_raw_last_n
-    if (!pkt.raw_data.empty())
-        r.raw_data = std::make_shared<std::vector<uint8_t>>(pkt.raw_data);
-
-    return r;
-}
-
 // ─── processPacket ────────────────────────────────────────────────────────────
 void WorkerThread::processPacket(PacketInfo& pkt) {
-    // 1. Lấy hoặc tạo flow state
+
     const std::string key  = pkt.flowKey();
     FlowState*        flow = flow_table_.getOrCreate(key, pkt);
 
     if (!flow) {
-        // Flow table đầy — drop nhưng vẫn ghi vào ring_buf để UI thấy
         METRICS.packets_dropped++;
-        PacketRecord rec = makeRecord(pkt);
-        rec.action       = "DROP";
-        ring_buf_.push(std::move(rec));
+        pkt.action = "DROP";
+        ring_buf_.push(pkt);
         return;
     }
 
-    // 2. Signature Engine (Aho-Corasick + DDoS/Scan rules)
-    const auto sig_result = sig_engine_.analyze(pkt, *flow);
-    if (sig_result != DetectionResult::NORMAL) {
-        handleDetection(sig_result, pkt, *flow);
+    // ── Detection engine (bật/tắt runtime) ───────────────────────────────────
+    if (ENGINE_CFG.detection_enabled.load(std::memory_order_relaxed)) {
 
-        PacketRecord rec = makeRecord(pkt);
-        rec.threat_type  = threatToString(sig_result);
-        rec.action       = (sig_result == DetectionResult::DDOS_VOLUMETRIC)
-                           ? "DROP" : "ALERT";
-        ring_buf_.push(std::move(rec));
-        return;
+        const auto sig_result = sig_engine_.analyze(pkt, *flow);
+        if (sig_result != DetectionResult::NORMAL) {
+            handleDetection(sig_result, pkt, *flow);
+            pkt.threat_type = threatToString(sig_result);
+            pkt.action      = (sig_result == DetectionResult::DDOS_VOLUMETRIC)
+                              ? "DROP" : "ALERT";
+            ring_buf_.push(pkt);
+            return;
+        }
+
+        const auto anomaly_result = anomaly_engine_.analyze(pkt, *flow);
+        if (anomaly_result != DetectionResult::NORMAL) {
+            handleDetection(anomaly_result, pkt, *flow);
+            pkt.threat_type = threatToString(anomaly_result);
+            pkt.action      = "ALERT";
+            ring_buf_.push(pkt);
+            return;
+        }
     }
 
-    // 3. Protocol Anomaly Engine (Slow DDoS)
-    const auto anomaly_result = anomaly_engine_.analyze(pkt, *flow);
-    if (anomaly_result != DetectionResult::NORMAL) {
-        handleDetection(anomaly_result, pkt, *flow);
-
-        PacketRecord rec = makeRecord(pkt);
-        rec.threat_type  = threatToString(anomaly_result);
-        rec.action       = "ALERT";
-        ring_buf_.push(std::move(rec));
-        return;
-    }
-
-    // 4. Normal packet — PASS
+    // ── Normal packet ─────────────────────────────────────────────────────────
     METRICS.packets_passed++;
-    PacketRecord rec = makeRecord(pkt);
-    rec.action       = "PASS";
-    ring_buf_.push(std::move(rec));
+    pkt.action = "PASS";
+    ring_buf_.push(pkt);
 }
 
 // ─── handleDetection ──────────────────────────────────────────────────────────
 void WorkerThread::handleDetection(const DetectionResult& result,
-                                    const PacketInfo&      pkt,
-                                    FlowState&             flow) {
+                                   const PacketInfo&      pkt,
+                                   FlowState&             flow) {
     // Cập nhật metrics
     switch (result) {
         case DetectionResult::DDOS_VOLUMETRIC:

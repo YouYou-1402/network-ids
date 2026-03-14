@@ -1,5 +1,7 @@
 // src/ui/qt/ui_bridge.cpp
 #include "ui_bridge.hpp"
+#include "../../common/engine_config.hpp"
+#include "../../common/logger.hpp"
 #include <algorithm>
 
 UiBridge::UiBridge(AlertManager&     alert_manager,
@@ -30,23 +32,20 @@ void UiBridge::onTimer() {
 
     // ── 3. Alerts — chỉ lấy PHẦN MỚI, không copy toàn bộ ───────────────────
     {
-        // ✅ Chỉ lấy tối đa 20 alert mới nhất mỗi tick
-        // Không dùng last_alert_count_ index vì deque có thể pop_front
         const uint64_t total_now = alert_manager_.totalAlerts();
 
         if (total_now > last_alert_seq_) {
-            // Chỉ lấy phần mới — tối đa 20 để không flood UI
             const size_t want = static_cast<size_t>(
                 std::min<uint64_t>(total_now - last_alert_seq_, 20));
 
-            auto new_alerts = alert_manager_.getRecent(want);
+            // ✅ Dùng getRecentFrom thay vì getRecent
+            auto new_alerts = alert_manager_.getRecentFrom(last_alert_seq_, want);
             last_alert_seq_ = total_now;
 
             if (!new_alerts.empty())
                 emit newAlerts(std::move(new_alerts));
         }
     }
-
     // ── 4. Live packets ───────────────────────────────────────────────────────
     {
         const uint64_t total_now = ring_buf_.totalReceived();
@@ -85,7 +84,7 @@ void UiBridge::onTimer() {
             //     r.raw_data = nullptr;
 
             last_sent_seq_ += static_cast<uint64_t>(records.size());
-            emit newPacketRecords(std::move(records));
+            emit newPacketInfos(std::move(records));
         }
     }
 }
@@ -144,3 +143,20 @@ TrafficPoint UiBridge::buildTrafficPoint() {
     return p;
 }
 
+void UiBridge::setDetectionEnabled(bool enabled) {
+    const bool prev = ENGINE_CFG.detection_enabled.exchange(enabled);
+    if (prev != enabled) {
+        LOG_INFO(std::string("Detection engine: ")
+                 + (enabled ? "ENABLED" : "DISABLED"));
+        emit detectionStatusChanged(enabled);
+    }
+}
+
+void UiBridge::setMlEnabled(bool enabled) {
+    const bool prev = ENGINE_CFG.ml_enabled.exchange(enabled);
+    if (prev != enabled) {
+        LOG_INFO(std::string("ML engine: ")
+                 + (enabled ? "ENABLED" : "DISABLED"));
+        emit mlStatusChanged(enabled);
+    }
+}

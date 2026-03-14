@@ -1,3 +1,4 @@
+//src/ui/qt/alert_panel.hpp
 #pragma once
 #include <QWidget>
 #include <QTableWidget>

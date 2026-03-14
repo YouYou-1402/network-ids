@@ -95,7 +95,7 @@ DetectionResult SignatureEngine::analyze(const PacketInfo& pkt,
                                           FlowState&        flow) {
     // 1. Cập nhật flow state
     flow.total_packets++;
-    flow.total_bytes += pkt.pkt_len;
+    flow.total_bytes += pkt.orig_len;
     flow.last_seen    = Clock::now();
 
     // Cập nhật TCP flag counters

@@ -42,6 +42,7 @@ public:
     void addL2Alert(const MLResult& result);
 
     std::vector<UnifiedAlert> getRecent(size_t n) const;
+    std::vector<UnifiedAlert> getRecentFrom(uint64_t from_seq, size_t max_n) const;
 
     uint64_t ddosAlerts()     const { return ddos_alerts_.load();      }
     uint64_t slowDdosAlerts() const { return slow_ddos_alerts_.load(); }
@@ -67,4 +68,5 @@ private:
     std::atomic<uint64_t> scan_alerts_      {0};
 
     std::vector<UnifiedAlert> getLatest(size_t n) const;
+
 };

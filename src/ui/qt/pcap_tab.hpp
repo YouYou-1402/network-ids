@@ -49,10 +49,10 @@ public:
     void    loadFile(const QString& filepath);
 
     // Live — nhận batch từ UiBridge (1 lần lock thay vì N lần)
-    void    appendLivePackets(std::vector<PacketRecord> records);
+    void    appendLivePackets(std::vector<PacketInfo> records);
 
     // Compat: nhận từng packet (wrap thành batch)
-    void    appendLivePacket(const PacketRecord& record);
+    void    appendLivePacket(const PacketInfo& record);
 
     void    saveToFile(const QString& filepath);
     QString tabTitle()    const { return tab_title_; }
@@ -82,7 +82,7 @@ private:
     void setupUI();
     void setupToolbar();
     void flushPendingToModel();
-    void loadRawBytesForRecord(PacketRecord& record);
+    void loadRawBytesForRecord(PacketInfo& record);
     void updateAdaptiveInterval(double pps);
 
     
@@ -106,7 +106,7 @@ private:
     QTimer             pps_check_timer_;  // đo PPS → điều chỉnh interval
 
     mutable std::mutex          live_mutex_;
-    std::vector<PacketRecord>   live_pending_;
+    std::vector<PacketInfo>   live_pending_;
 
     // PPS tracking
     uint64_t pps_last_count_    { 0 };

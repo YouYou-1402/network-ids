@@ -1,4 +1,4 @@
-// ── pcap_tab.cpp ──────────────────────────────────────────────────────────────
+// src/ui/qt/pcap_tab.cpp
 #include "pcap_tab.hpp"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -29,7 +29,7 @@ PcapTab::PcapTab(Mode mode, QWidget* parent)
 
     if (mode_ == Mode::LIVE) {
         // Mở file buffer tạm ngay khi tạo tab — ghi song song với capture
-        live_buffer_path_ = QString("/tmp/live_%1.pcap")
+        live_buffer_path_ = QString("/media/linhlinh/learn/nckh/network-ids/data/raw/live_%1.pcap")
                                 .arg(QDateTime::currentSecsSinceEpoch());
         current_filepath_ = live_buffer_path_;   // lazy load dùng cái này
         if (!writer_->open(live_buffer_path_.toStdString()))
@@ -244,7 +244,7 @@ void PcapTab::setRenderPaused(bool paused) {
 
 // ─── appendLivePackets — batch API (ưu tiên dùng cái này) ────────────────────
 // Gọi từ UiBridge (Qt queued connection) — đã ở main thread
-void PcapTab::appendLivePackets(std::vector<PacketRecord> records) {
+void PcapTab::appendLivePackets(std::vector<PacketInfo> records) {
     if (records.empty()) return;
 
     {
@@ -265,7 +265,7 @@ void PcapTab::appendLivePackets(std::vector<PacketRecord> records) {
 }
 
 // ─── appendLivePacket — single packet (backward compat) ──────────────────────
-void PcapTab::appendLivePacket(const PacketRecord& record) {
+void PcapTab::appendLivePacket(const PacketInfo& record) {
     std::lock_guard<std::mutex> lock(live_mutex_);
     live_pending_.push_back(record);
 
@@ -283,9 +283,8 @@ void PcapTab::onLiveTimer() {
     flushPendingToModel();
 }
 
-// ─── flushPendingToModel — core render logic ──────────────────────────────────
 void PcapTab::flushPendingToModel() {
-    std::vector<PacketRecord> batch;
+    std::vector<PacketInfo> batch;
     {
         std::lock_guard<std::mutex> lock(live_mutex_);
         if (live_pending_.empty()) return;
@@ -308,7 +307,9 @@ void PcapTab::flushPendingToModel() {
     if (batch.empty()) return;
 
     for (auto& r : batch) {
-        // ✅ Ghi ra disk TRƯỚC — lưu offset để lazy load sau khi raw_data bị evict
+        // Gán index từ PcapTab::ring_buf_ — đúng owner
+        r.index = ring_buf_.newestIndex() + 1;
+
         if (writer_->isOpen()) {
             r.file_offset = writer_->currentOffset();
             writer_->writePacket(r);
@@ -435,7 +436,7 @@ void PcapTab::onPacketSelected(const QModelIndex& index) {
     auto record_ptr = list_model_->recordAt(index.row());
     if (!record_ptr) return;
 
-    PacketRecord record = *record_ptr;
+    PacketInfo record = *record_ptr;
 
     if (!record.raw_data) {
         if (record.file_offset >= 0) {
@@ -460,7 +461,7 @@ void PcapTab::onPacketSelected(const QModelIndex& index) {
 
 
 
-void PcapTab::loadRawBytesForRecord(PacketRecord& record) {
+void PcapTab::loadRawBytesForRecord(PacketInfo& record) {
     if (current_filepath_.isEmpty()) return;
     reader_->loadRawBytes(record, current_filepath_.toStdString());
 }
@@ -497,12 +498,12 @@ void PcapTab::saveToFile(const QString& filepath) {
     auto     records = ring_buf_.getRange(
         ring_buf_.oldestIndex(), ring_buf_.newestIndex() + 1);
 
-    for (auto& rec : records) {
-        if (!rec.raw_data && rec.file_offset >= 0)
-            reader_->loadRawBytes(rec, current_filepath_.toStdString());
+    for (auto& pkt : records) {
+        if (!pkt.raw_data && pkt.file_offset >= 0)
+            reader_->loadRawBytes(pkt, current_filepath_.toStdString());
 
-        if (rec.raw_data && !rec.raw_data->empty()) {
-            writer.writePacket(rec);
+        if (pkt.raw_data && !pkt.raw_data->empty()) {
+            writer.writePacket(pkt);
             ++saved;
         }
     }
@@ -534,7 +535,7 @@ void PcapTab::onClearClicked() {
 
     if (mode_ == Mode::LIVE) {
         writer_->close();
-        live_buffer_path_ = QString("/tmp/live_%1.pcap")
+        live_buffer_path_ = QString("/media/linhlinh/learn/nckh/network-ids/data/raw/live_%1.pcap")
                                 .arg(QDateTime::currentSecsSinceEpoch());
         current_filepath_ = live_buffer_path_;
         writer_->open(live_buffer_path_.toStdString());

@@ -10,8 +10,7 @@
 
 class Dispatcher {
 public:
-    explicit Dispatcher(int               num_workers = 4,
-                        PacketRingBuffer& ring_buf    = *defaultRingBuf());
+    explicit Dispatcher(int num_workers = 4, PacketRingBuffer& ring_buf = *defaultRingBuf());
     ~Dispatcher();
 
     void start(AlertCallback on_alert);
@@ -29,8 +28,6 @@ public:
 private:
     uint32_t hashToWorker(const PacketInfo& pkt) const;
 
-    // ── Không dùng defaultRingBuf() trong production ──────────────────────────
-    // Chỉ để tránh lỗi compile khi không truyền ring_buf
     static PacketRingBuffer* defaultRingBuf() {
         static PacketRingBuffer fallback;
         return &fallback;

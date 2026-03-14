@@ -7,7 +7,6 @@ std::string PacketInfo::flowKey() const {
     char src_buf[INET_ADDRSTRLEN] {};
     char dst_buf[INET_ADDRSTRLEN] {};
 
-    // ✅ Dùng inet_ntop thay vì inet_ntoa (thread-safe)
     struct in_addr src_addr {}, dst_addr {};
     src_addr.s_addr = src_ip;
     dst_addr.s_addr = dst_ip;

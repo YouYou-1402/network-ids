@@ -1,3 +1,4 @@
+//src/ui/qt/metrics_widget.cpp
 #include "metrics_widget.hpp"
 #include <QFont>
 #include <QPalette>
@@ -14,7 +15,6 @@ void MetricsWidget::setupUI() {
     root_layout->setSpacing(8);
     root_layout->setContentsMargins(8, 8, 8, 8);
 
-    // ── Packet Counters ───────────────────────────────────────────────────────
     auto* pkt_group  = new QGroupBox("📦 Packet Counters", this);
     auto* pkt_layout = new QVBoxLayout(pkt_group);
 
@@ -49,7 +49,6 @@ void MetricsWidget::setupUI() {
 
     root_layout->addWidget(pkt_group);
 
-    // ── Threat Breakdown ──────────────────────────────────────────────────────
     auto* threat_group  = new QGroupBox("🚨 Threat Breakdown", this);
     auto* threat_layout = new QVBoxLayout(threat_group);
 
@@ -95,7 +94,6 @@ void MetricsWidget::setupUI() {
 
     root_layout->addWidget(threat_group);
 
-    // ── System Info ───────────────────────────────────────────────────────────
     auto* sys_group  = new QGroupBox("⚙️ System", this);
     auto* sys_layout = new QVBoxLayout(sys_group);
 
@@ -140,7 +138,6 @@ void MetricsWidget::onMetricsUpdated(MetricsSnapshot s) {
     lcd_dropped_ ->display(static_cast<double>(s.packets_dropped));
     lcd_pps_     ->display(static_cast<double>(s.packets_alerted));
 
-    // Threat bars — normalize theo tổng alerts
     uint64_t total = s.ddos_count + s.slow_ddos_count + s.port_scan_count;
     if (total > 0) {
         bar_ddos_->setValue(
@@ -155,7 +152,6 @@ void MetricsWidget::onMetricsUpdated(MetricsSnapshot s) {
     lbl_slow_count_->setText(QString::number(s.slow_ddos_count));
     lbl_scan_count_->setText(QString::number(s.port_scan_count));
 
-    // System info
     lbl_active_flows_->setText(QString::number(s.active_flows));
     lbl_ml_jobs_     ->setText(QString::number(s.ml_jobs));
     lbl_ml_anomalies_->setText(QString::number(s.ml_anomalies));

@@ -11,6 +11,7 @@
 
 #include "common/logger.hpp"
 #include "common/metrics.hpp"
+#include "common/engine_config.hpp"   
 #include "core/packet_info.hpp"
 #include "capture/packet_capture.hpp"
 #include "detection/dispatcher.hpp"
@@ -22,9 +23,6 @@
 #include "ui/qt/main_window.hpp"
 #include "capture/io/packet_ring_buffer.hpp"
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Global state
-// ─────────────────────────────────────────────────────────────────────────────
 std::atomic<bool>  g_running { true };
 PacketCapture*     g_capture_ptr = nullptr;
 
@@ -34,9 +32,6 @@ void signalHandler(int) {
         g_capture_ptr->stopCapture();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Engine thread — chỉ chạy khi UI gọi startEngineCapture()
-// ─────────────────────────────────────────────────────────────────────────────
 void engineThread(const std::string& mode,
                   const std::string& target,
                   Dispatcher&        dispatcher,
@@ -48,7 +43,6 @@ void engineThread(const std::string& mode,
     PacketCapture    capture;
     g_capture_ptr = &capture;
 
-    // ── Mở capture source ────────────────────────────────────────────────────
     const bool opened = (mode == "-i")
         ? capture.openLive(target, "tcp or udp")
         : capture.openOffline(target, "");
@@ -60,10 +54,14 @@ void engineThread(const std::string& mode,
     }
     LOG_INFO("Engine: capture opened → " + target);
 
-    // ── L2 feeder thread ─────────────────────────────────────────────────────
     std::thread l2_feeder([&]() {
         while (g_running) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+            // ── ML engine bị tắt → không feed job ────────────────────────────────
+            if (!ENGINE_CFG.ml_enabled.load(std::memory_order_relaxed))
+                continue;
+
             dispatcher.forEachFlow([&](FlowState& flow) {
                 if (flow.total_packets < 5) return;
                 if (flow.is_malicious)      return;
@@ -84,7 +82,6 @@ void engineThread(const std::string& mode,
         }
     });
 
-    // ── Flow cleanup thread ───────────────────────────────────────────────────
     std::thread cleanup([&]() {
         while (g_running) {
             for (int i = 0; i < 60 && g_running; ++i)
@@ -94,25 +91,18 @@ void engineThread(const std::string& mode,
         }
     });
 
-    // ── Blocking capture loop ─────────────────────────────────────────────────
     capture.startCapture([&](PacketInfo pkt) {
         if (!g_running) return;
         dispatcher.dispatch(std::move(pkt));
     });
 
-    // ── Shutdown ──────────────────────────────────────────────────────────────
     g_running = false;
     if (l2_feeder.joinable()) l2_feeder.join();
     if (cleanup.joinable())   cleanup.join();
     LOG_INFO("Engine thread exited cleanly");
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main
-// ─────────────────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
-
-    // ✅ QApplication PHẢI là object đầu tiên
     QApplication app(argc, argv);
     app.setApplicationName("Network IDS/IPS");
     app.setOrganizationName("HVKTQS");
@@ -141,21 +131,17 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--no-mock") {
             use_mock = false;
         }
-        // arg không nhận ra → bỏ qua (không crash)
     }
 
-    // ── Khởi tạo shared objects ───────────────────────────────────────────────
     MLJobQueue       ml_queue;
     AlertManager     alert_manager(1000);
     PacketRingBuffer ring_buf(100'000, 65'535);
 
-    // ── Layer 1 ───────────────────────────────────────────────────────────────
     Dispatcher dispatcher(4, ring_buf);
     dispatcher.start([&](const DetectionEvent& event) {
         alert_manager.addL1Alert(event);
     });
 
-    // ── Layer 2 ───────────────────────────────────────────────────────────────
     FeedbackLoop feedback_loop([](const RuleProposal& p) {
         LOG_INFO("Rule update: " + p.detail);
     });
@@ -165,14 +151,11 @@ int main(int argc, char* argv[]) {
     });
     ml_engine.start(use_mock);
 
-    // ── MainWindow ────────────────────────────────────────────────────────────
     MainWindow window(alert_manager, dispatcher, ml_engine, ring_buf);
     window.show();
 
-    // ── Engine thread handle ──────────────────────────────────────────────────
     std::thread engine_thread;
 
-    // ── Hàm start engine — dùng cho cả auto_start và UI-triggered ────────────
     auto startEngine = [&](const std::string& m, const std::string& t) {
         if (engine_thread.joinable()) return;   // đang chạy rồi
         g_running = true;
@@ -185,7 +168,6 @@ int main(int argc, char* argv[]) {
             std::ref(ring_buf));
     };
 
-    // ── Nếu truyền arg CLI → auto start sau frame đầu tiên ───────────────────
     if (auto_start) {
         QTimer::singleShot(0, [&]() {
             startEngine(mode, target);
@@ -202,10 +184,7 @@ int main(int argc, char* argv[]) {
             g_capture_ptr->stopCapture();
     });
 
-    // ── Qt event loop (blocking) ──────────────────────────────────────────────
     const int ret = app.exec();
-
-    // ── Shutdown ──────────────────────────────────────────────────────────────
     g_running = false;
     if (g_capture_ptr)
         g_capture_ptr->stopCapture();

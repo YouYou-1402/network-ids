@@ -2,6 +2,7 @@
 #include "ml_engine.hpp"
 #include "../common/logger.hpp"
 #include "../common/metrics.hpp"
+#include "../common/engine_config.hpp" 
 #include <arpa/inet.h>
 #include <sstream>
 
@@ -59,17 +60,16 @@ void MLEngine::run() {
     LOG_INFO("MLEngine inference loop running");
 
     while (running_) {
-        // Pop job từ queue (blocking 200ms)
         auto job_opt = job_queue_.pop(200);
         if (!job_opt.has_value()) continue;
 
-        const MLJob& job = job_opt.value();
+        if (!ENGINE_CFG.ml_enabled.load(std::memory_order_relaxed))
+            continue;
 
-        // Chạy inference
-        MLResult result = processJob(job);
+        const MLJob& job = job_opt.value();
+        MLResult result  = processJob(job);
         jobs_processed_++;
 
-        // Chỉ callback khi phát hiện bất thường
         if (result.final_result != DetectionResult::NORMAL) {
             anomalies_found_++;
             if (on_ml_alert_)

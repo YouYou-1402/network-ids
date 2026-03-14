@@ -6,6 +6,7 @@
 #include <functional>
 #include <string>
 #include <atomic>
+#include <thread>   // FIX BUG 3
 
 using PacketCallback = std::function<void(PacketInfo)>;
 
@@ -14,7 +15,6 @@ public:
     PacketCapture();
     ~PacketCapture();
 
-    // Không cho copy
     PacketCapture(const PacketCapture&)            = delete;
     PacketCapture& operator=(const PacketCapture&) = delete;
 
@@ -27,29 +27,41 @@ public:
     bool openOffline(const std::string& pcap_file,
                      const std::string& bpf_filter = "");
 
-    /// Bắt đầu capture (blocking) — gọi callback cho mỗi gói tin
+    // FIX BUG 3: startCapture() không blocking — pcap_loop chạy trên thread riêng
+    // Trả về ngay sau khi thread được spawn
+    // Gọi stopCapture() + waitForStop() để dừng sạch
     void startCapture(PacketCallback callback);
 
-    /// Dừng capture (thread-safe)
+    /// Dừng capture (thread-safe, non-blocking)
     void stopCapture();
 
-    bool isOpen()    const { return handle_  != nullptr; }
+    /// Chờ capture thread kết thúc (blocking)
+    void waitForStop();
+
+    void logStats() const;
+
+    bool isOpen()    const { return handle_   != nullptr; }
     bool isRunning() const { return running_.load(); }
 
 private:
-    // libpcap static callback
+    // libpcap static callback — được gọi từ pcap_loop trên capture_thread_
     static void pcapCallback(u_char*                   user,
                               const struct pcap_pkthdr* header,
                               const u_char*             packet);
 
     // Parse raw bytes → PacketInfo
+    // payload_offset tính từ đầu frame (= đầu raw_data)
     static PacketInfo parsePacket(const u_char*             data,
                                    const struct pcap_pkthdr* header);
 
     // Áp dụng BPF filter lên handle_ đang mở
     bool applyFilter(const std::string& bpf_filter);
 
-    pcap_t*           handle_   = nullptr;
+    // Thread body — chạy pcap_loop
+    void captureLoop();
+
+    pcap_t*           handle_          = nullptr;
     PacketCallback    callback_;
-    std::atomic<bool> running_  {false};
+    std::atomic<bool> running_         {false};
+    std::thread       capture_thread_;   // FIX BUG 3
 };

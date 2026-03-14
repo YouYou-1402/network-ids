@@ -1,4 +1,3 @@
-//src/ui/qt/main_window.cpp
 #include "main_window.hpp"
 
 #include "pcap_tab.hpp"
@@ -22,17 +21,20 @@
 #include <QStatusBar>
 #include <QFileDialog>
 #include <QDateTime>
+#include <QDir>
 
-// ─── Constructor ──────────────────────────────────────────────────────────────
+
 MainWindow::MainWindow(AlertManager&     alert_manager,
                        Dispatcher&       dispatcher,
                        MLEngine&         ml_engine,
                        PacketRingBuffer& ring_buf,
                        QWidget*          parent)
     : QMainWindow(parent)
+    , ring_buf_(ring_buf)
     , bridge_(std::make_unique<UiBridge>(
           alert_manager, dispatcher, ml_engine, ring_buf, this))
     , start_time_(QTime::currentTime())
+    , self_ref_(std::make_shared<MainWindow*>(this))
 {
     setWindowTitle("🛡️  Network IDS/IPS Monitor — HVKTQS 2025");
     setMinimumSize(1200, 700);
@@ -43,7 +45,7 @@ MainWindow::MainWindow(AlertManager&     alert_manager,
     setupMenuBar();
     setupStatusBar();
 
-    // ── UiBridge → Widgets ────────────────────────────────────────────────────
+    // ── UiBridge → Widgets 
     connect(bridge_.get(), &UiBridge::metricsUpdated,
             metrics_widget_, &MetricsWidget::onMetricsUpdated);
     connect(bridge_.get(), &UiBridge::metricsUpdated,
@@ -55,11 +57,38 @@ MainWindow::MainWindow(AlertManager&     alert_manager,
     connect(bridge_.get(), &UiBridge::systemStatusChanged,
             this, &MainWindow::onSystemStatusChanged);
 
-    // ── Live packets từ IDS engine → PcapTab ─────────────────────────────────
-    connect(bridge_.get(), &UiBridge::newPacketRecords,
+    // ── Live packets từ IDS engine → PcapTab 
+    connect(bridge_.get(), &UiBridge::newPacketInfos,
             live_tab_, &PcapTab::appendLivePackets);
 
-    // ── Uptime ────────────────────────────────────────────────────────────────
+
+    connect(act_toggle_detection_, &QAction::toggled,
+            bridge_.get(), &UiBridge::setDetectionEnabled);
+
+    connect(bridge_.get(), &UiBridge::detectionStatusChanged,
+            this, [this](bool enabled) {
+                // Tránh vòng lặp signal: block signal khi setChecked
+                QSignalBlocker blocker(act_toggle_detection_);
+                act_toggle_detection_->setChecked(enabled);
+                statusBar()->showMessage(
+                    QString("Detection engine %1")
+                        .arg(enabled ? "● ENABLED" : "○ DISABLED"), 3000);
+            });
+
+    // ── Toggle ML ─────────────────────────────────────────────────────────────
+    connect(act_toggle_ml_, &QAction::toggled,
+            bridge_.get(), &UiBridge::setMlEnabled);
+
+    connect(bridge_.get(), &UiBridge::mlStatusChanged,
+            this, [this](bool enabled) {
+                QSignalBlocker blocker(act_toggle_ml_);
+                act_toggle_ml_->setChecked(enabled);
+                statusBar()->showMessage(
+                    QString("ML engine %1")
+                        .arg(enabled ? "● ENABLED" : "○ DISABLED"), 3000);
+            });
+
+    // ── Uptime timer 
     connect(&uptime_timer_, &QTimer::timeout,
             this, &MainWindow::updateUptime);
     uptime_timer_.start(1000);
@@ -67,21 +96,20 @@ MainWindow::MainWindow(AlertManager&     alert_manager,
     bridge_->startPolling(200);
 }
 
-// ─── Destructor ───────────────────────────────────────────────────────────────
 MainWindow::~MainWindow() {
-    // Dừng capture trước khi destroy
-    if (capture_running_) {
-        capture_running_ = false;
-        if (active_capture_)
-            active_capture_->stopCapture();
-    }
+    capture_running_ = false;
+
+    self_ref_.reset();
+
+    if (active_capture_)
+        active_capture_->stopCapture();
+
     if (capture_thread_ && capture_thread_->joinable())
         capture_thread_->join();
 
     bridge_->stopPolling();
 }
 
-// ─── setupUI ──────────────────────────────────────────────────────────────────
 void MainWindow::setupUI() {
     auto* central = new QWidget(this);
     setCentralWidget(central);
@@ -92,7 +120,8 @@ void MainWindow::setupUI() {
 
     auto* h_splitter = new QSplitter(Qt::Horizontal, central);
     h_splitter->setHandleWidth(4);
-    h_splitter->setStyleSheet("QSplitter::handle { background: #333344; }");
+    h_splitter->setStyleSheet(
+        "QSplitter::handle { background: #333344; }");
 
     metrics_widget_ = new MetricsWidget(h_splitter);
     metrics_widget_->setFixedWidth(240);
@@ -101,12 +130,13 @@ void MainWindow::setupUI() {
     tab_widget_->setTabsClosable(true);
     tab_widget_->setMovable(true);
     tab_widget_->setStyleSheet(
-        "QTabWidget::pane { border: 1px solid #333; background: #0f0f1a; }"
-        "QTabBar::tab { background: #1a1a2e; color: #aaaaaa; "
-        "border: 1px solid #333; padding: 5px 12px; margin-right: 2px; }"
+        "QTabWidget::pane  { border: 1px solid #333; background: #0f0f1a; }"
+        "QTabBar::tab      { background: #1a1a2e; color: #aaaaaa; "
+        "                    border: 1px solid #333; padding: 5px 12px; "
+        "                    margin-right: 2px; }"
         "QTabBar::tab:selected { background: #2a2a4a; color: #ffffff; "
-        "border-bottom: 2px solid #4488ff; }"
-        "QTabBar::tab:hover { background: #252540; }");
+        "                        border-bottom: 2px solid #4488ff; }"
+        "QTabBar::tab:hover    { background: #252540; }");
 
     live_tab_ = new PcapTab(PcapTab::Mode::LIVE, tab_widget_);
     tab_widget_->addTab(live_tab_, "🔴 Live Capture");
@@ -137,22 +167,42 @@ void MainWindow::setupUI() {
                 delete w;
             });
 
+    connect(tab_widget_, &QTabWidget::currentChanged,
+            this, [this](int index) {
+                if (tab_widget_->widget(index) == traffic_chart_)
+                    traffic_chart_->forceResize();
+            });
+
+    // // ── Toggle Detection ──────────────────────────────────────────────────────────
+
+
+    // connect(ui_bridge_.get(), &UiBridge::detectionStatusChanged,
+    //         this, [this](bool enabled) {
+    //             act_toggle_detection_->setChecked(enabled);
+    //             statusBar()->showMessage(
+    //                 QString("Detection engine %1")
+    //                     .arg(enabled ? "● ENABLED" : "○ DISABLED"), 3000);
+    //         });
+
+    // // ── Toggle ML ─────────────────────────────────────────────────────────────────
+
+    // connect(ui_bridge_.get(), &UiBridge::mlStatusChanged,
+    //         this, [this](bool enabled) {
+    //             act_toggle_ml_->setChecked(enabled);
+    //             statusBar()->showMessage(
+    //                 QString("ML engine %1")
+    //                     .arg(enabled ? "● ENABLED" : "○ DISABLED"), 3000);
+    //         });
+
     h_splitter->addWidget(metrics_widget_);
     h_splitter->addWidget(tab_widget_);
     h_splitter->setSizes({240, 1160});
-    root_layout->addWidget(h_splitter);
 
-    connect(tab_widget_, &QTabWidget::currentChanged,
-        this, [this](int index) {
-            if (tab_widget_->widget(index) == traffic_chart_)
-                traffic_chart_->forceResize();
-        });
+    root_layout->addWidget(h_splitter);
 }
 
-// ─── addPcapTab ───────────────────────────────────────────────────────────────
 void MainWindow::addPcapTab(const QString& filepath) {
     auto* tab = new PcapTab(PcapTab::Mode::OFFLINE, tab_widget_);
-
     const int idx = tab_widget_->addTab(tab, "📂 New Tab");
     tab_widget_->setCurrentIndex(idx);
 
@@ -173,11 +223,9 @@ void MainWindow::addPcapTab(const QString& filepath) {
         tab->onOpenClicked();
 }
 
-// ─── setupMenuBar ─────────────────────────────────────────────────────────────
 void MainWindow::setupMenuBar() {
     auto* file_menu = menuBar()->addMenu("&File");
 
-    // ── Capture submenu ───────────────────────────────────────────────────────
     auto* cap_menu = file_menu->addMenu("🎛  Live Capture");
 
     act_start_cap_ = new QAction("▶  Start Capture…", this);
@@ -189,7 +237,7 @@ void MainWindow::setupMenuBar() {
 
     act_stop_cap_ = new QAction("■  Stop Capture", this);
     act_stop_cap_->setShortcut(QKeySequence("Ctrl+Shift+X"));
-    act_stop_cap_->setEnabled(false);   // disabled cho đến khi capture chạy
+    act_stop_cap_->setEnabled(false);
     connect(act_stop_cap_, &QAction::triggered,
             this, &MainWindow::onStopCaptureClicked);
     cap_menu->addAction(act_stop_cap_);
@@ -198,14 +246,30 @@ void MainWindow::setupMenuBar() {
 
     act_save_cap_ = new QAction("💾  Save Capture As…", this);
     act_save_cap_->setShortcut(QKeySequence("Ctrl+Shift+W"));
-    act_save_cap_->setEnabled(false);   // disabled cho đến khi có packet
+    act_save_cap_->setEnabled(false);
     connect(act_save_cap_, &QAction::triggered,
             this, &MainWindow::onSaveCaptureClicked);
     cap_menu->addAction(act_save_cap_);
 
     file_menu->addSeparator();
 
-    // ── Open PCAP ─────────────────────────────────────────────────────────────
+    // ── Engine toggles ────────────────────────────────────────────────────────
+    auto* engine_menu = menuBar()->addMenu("&Engine");   // menu mới
+
+    act_toggle_detection_ = new QAction("🔍 Detection Engine", this);
+    act_toggle_detection_->setCheckable(true);
+    act_toggle_detection_->setChecked(true);             // mặc định ON
+    act_toggle_detection_->setShortcut(QKeySequence("Ctrl+D"));
+    act_toggle_detection_->setToolTip("Bật/tắt Signature + Protocol Anomaly engine");
+    engine_menu->addAction(act_toggle_detection_);
+
+    act_toggle_ml_ = new QAction("🤖 ML Engine", this);
+    act_toggle_ml_->setCheckable(true);
+    act_toggle_ml_->setChecked(true);                    // mặc định ON
+    act_toggle_ml_->setShortcut(QKeySequence("Ctrl+M"));
+    act_toggle_ml_->setToolTip("Bật/tắt Isolation Forest + Autoencoder engine");
+    engine_menu->addAction(act_toggle_ml_);
+
     auto* open_act = new QAction("📂 Open PCAP File…", this);
     open_act->setShortcut(QKeySequence::Open);
     connect(open_act, &QAction::triggered,
@@ -234,11 +298,11 @@ void MainWindow::setupMenuBar() {
         "QMenuBar { background: #1a1a2e; color: #cccccc; "
         "border-bottom: 1px solid #333; }"
         "QMenuBar::item:selected { background: #2a2a4a; }"
-        "QMenu { background: #1a1a2e; color: #cccccc; border: 1px solid #444; }"
+        "QMenu { background: #1a1a2e; color: #cccccc; "
+        "border: 1px solid #444; }"
         "QMenu::item:selected { background: #2a2a4a; }");
 }
 
-// ─── setupStatusBar ───────────────────────────────────────────────────────────
 void MainWindow::setupStatusBar() {
     status_running_ = new QLabel("  ● RUNNING  ", this);
     status_running_->setStyleSheet(
@@ -247,7 +311,6 @@ void MainWindow::setupStatusBar() {
     status_pps_ = new QLabel("  0 pkt/s  ", this);
     status_pps_->setStyleSheet("color: #aaaaaa; font-size: 11px;");
 
-    // ← interface label — ẩn khi chưa capture
     status_iface_ = new QLabel("", this);
     status_iface_->setStyleSheet(
         "color: #44aaff; font-size: 11px; font-weight: bold;");
@@ -267,12 +330,11 @@ void MainWindow::setupStatusBar() {
         "border-top: 1px solid #333; font-size: 11px; }");
 }
 
-// ─── applyDarkTheme ───────────────────────────────────────────────────────────
 void MainWindow::applyDarkTheme() {
     setStyleSheet(
         "QMainWindow { background: #0f0f1a; }"
-        "QWidget { background: #0f0f1a; color: #cccccc; }"
-        "QChartView { background: transparent; }"   // ✅ không override chart bg
+        "QWidget     { background: #0f0f1a; color: #cccccc; }"
+        "QChartView  { background: transparent; }"
         "QScrollBar:vertical { background: #1a1a2e; width: 8px; }"
         "QScrollBar::handle:vertical { background: #444; "
         "border-radius: 4px; min-height: 20px; }"
@@ -280,12 +342,6 @@ void MainWindow::applyDarkTheme() {
         "QScrollBar::sub-line:vertical { height: 0; }");
 }
 
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// CAPTURE CONTROL
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ─── onStartCaptureClicked ────────────────────────────────────────────────────
 void MainWindow::onStartCaptureClicked() {
     if (capture_running_) {
         QMessageBox::information(this, "Capture Already Running",
@@ -310,13 +366,15 @@ void MainWindow::onStartCaptureClicked() {
     startLiveCapture(iface, filter);
 }
 
-// ─── startLiveCapture ─────────────────────────────────────────────────────────
 void MainWindow::startLiveCapture(const QString& iface,
                                    const QString& filter) {
+    if (capture_thread_ && capture_thread_->joinable())
+        capture_thread_->join();
+    capture_thread_.reset();
+
     capture_iface_   = iface;
     capture_running_ = true;
 
-    // ── Update UI state ───────────────────────────────────────────────────────
     act_start_cap_->setEnabled(false);
     act_stop_cap_ ->setEnabled(true);
     act_save_cap_ ->setEnabled(true);
@@ -326,108 +384,113 @@ void MainWindow::startLiveCapture(const QString& iface,
             .arg(iface)
             .arg(filter.isEmpty() ? "" : "  |  " + filter));
     status_iface_->show();
-
-    // Switch sang live tab
     tab_widget_->setCurrentIndex(0);
 
-    // ── Tạo PacketCapture instance ────────────────────────────────────────────
     active_capture_ = std::make_shared<PacketCapture>();
 
-    // ── Capture thread ────────────────────────────────────────────────────────
+    std::weak_ptr<MainWindow*> weak_self = self_ref_;
+
     capture_thread_ = std::make_unique<std::thread>(
-        [this, iface, filter,
-         capture = active_capture_]()          // capture by value (shared_ptr)
+        [weak_self,
+        iface,
+        filter,
+        capture        = active_capture_,
+        live_tab       = live_tab_,
+        &cap_running   = capture_running_]()
     {
-        // Mở interface
-        if (!capture->openLive(iface.toStdString(),
-                               filter.toStdString()))
-        {
-            QMetaObject::invokeMethod(this, [this, iface]() {
-                capture_running_ = false;
-                active_capture_.reset();
+        auto invoke_safe = [&weak_self](auto fn) {
+            auto wp = weak_self;
+            QMetaObject::invokeMethod(
+                qApp,
+                [wp, fn = std::move(fn)]() mutable {
+                    if (!wp.expired()) fn();
+                },
+                Qt::QueuedConnection);
+        };
 
-                act_start_cap_->setEnabled(true);
-                act_stop_cap_ ->setEnabled(false);
-                status_iface_->hide();
-
-                QMessageBox::critical(this, "Capture Error",
-                    QString(
-                        "Failed to open interface: <b>%1</b><br><br>"
-                        "Common causes:<br>"
-                        "• No permission — run with <code>sudo</code> or:<br>"
-                        "<code>sudo setcap cap_net_raw+eip &lt;binary&gt;</code><br>"
-                        "• Interface does not exist or is down")
-                    .arg(iface));
-            }, Qt::QueuedConnection);
+        if (!capture->openLive(iface.toStdString(), filter.toStdString())) {
+            invoke_safe([wp = weak_self, iface]() {
+                if (wp.expired()) return;
+                MainWindow* self = *wp.lock();
+                self->capture_running_ = false;
+                self->active_capture_.reset();
+                self->act_start_cap_->setEnabled(true);
+                self->act_stop_cap_ ->setEnabled(false);
+                self->status_iface_->hide();
+                QMessageBox::critical(self, "Capture Error",
+                    QString("Failed to open interface: <b>%1</b>").arg(iface));
+            });
             return;
         }
 
-        // Callback: mỗi packet từ pcap → PacketRecord → live_tab_
-        capture->startCapture([this](PacketInfo pkt) {
-            if (!capture_running_) return;
+        capture->startCapture(
+            [&cap_running, live_tab, wp = weak_self]
+            (PacketInfo pkt)
+        {
+            if (!cap_running) return;
 
-            // PacketInfo → PacketRecord
-            PacketRecord rec;
-            rec.timestamp   = pkt.timestampSeconds();
-            rec.orig_len    = pkt.pkt_len;
-            rec.cap_len     = pkt.cap_len; 
-            rec.src_ip      = pkt.src_ip;
-            rec.dst_ip      = pkt.dst_ip;
-            rec.src_port    = pkt.src_port;
-            rec.dst_port    = pkt.dst_port;
-            rec.protocol    = pkt.protocol;
-            rec.eth_type    = pkt.eth_type;
-            rec.tcp_flags   = pkt.tcp_flags;
-            rec.payload_len = pkt.payload_len;
-            rec.file_offset = -1;   // live — không có file offset
+            PacketInfo out;
+            out.timestamp   = pkt.timestamp;
+            out.timestamp_d = pkt.timestamp_d;
+            out.orig_len    = pkt.orig_len;
+            out.cap_len     = pkt.cap_len;
+            out.src_ip      = pkt.src_ip;
+            out.dst_ip      = pkt.dst_ip;
+            out.src_port    = pkt.src_port;
+            out.dst_port    = pkt.dst_port;
+            out.protocol    = pkt.protocol;
+            out.eth_type    = pkt.eth_type;
+            out.tcp_flags   = pkt.tcp_flags;
+            out.payload_len = pkt.payload_len;
+            out.src_ip6     = pkt.src_ip6;
+            out.dst_ip6     = pkt.dst_ip6;
+            out.ttl         = pkt.ttl;
+            out.file_offset = -1;
 
-            if (!pkt.raw_data.empty())
-                rec.raw_data = std::make_shared<std::vector<uint8_t>>(
-                    std::move(pkt.raw_data));
+            if (pkt.raw_data && !pkt.raw_data->empty())
+                out.raw_data = std::move(pkt.raw_data);
 
-            // Gửi lên UI thread (thread-safe, non-blocking)
-            QMetaObject::invokeMethod(live_tab_,
-                [this, r = std::move(rec)]() mutable {
-                    live_tab_->appendLivePackets({r});
-                }, Qt::QueuedConnection);
+            if (wp.expired()) return;
+            QMetaObject::invokeMethod(
+                live_tab,
+                [live_tab, r = std::move(out)]() mutable {
+                    live_tab->appendLivePackets({ std::move(r) });
+                },
+                Qt::QueuedConnection);
         });
 
-        // startCapture() blocking — thoát sau stopCapture() / pcap_breakloop()
-        QMetaObject::invokeMethod(this, [this]() {
-            capture_running_ = false;
-            active_capture_.reset();
+        capture->waitForStop();  
 
-            act_start_cap_->setEnabled(true);
-            act_stop_cap_ ->setEnabled(false);
-            status_iface_->hide();
-
-            onSystemStatusChanged(false);
-            statusBar()->showMessage(
+        invoke_safe([wp = weak_self]() {
+            if (wp.expired()) return;
+            MainWindow* self = *wp.lock();
+            self->capture_running_ = false;
+            self->active_capture_.reset();
+            self->act_start_cap_->setEnabled(true);
+            self->act_stop_cap_ ->setEnabled(false);
+            self->status_iface_->hide();
+            self->onSystemStatusChanged(false);
+            self->statusBar()->showMessage(
                 QString("■  Capture stopped  —  %1")
-                    .arg(capture_iface_), 5000);
-        }, Qt::QueuedConnection);
+                    .arg(self->capture_iface_), 5000);
+        });
     });
 
-    capture_thread_->detach();
 }
 
-// ─── onStopCaptureClicked ─────────────────────────────────────────────────────
 void MainWindow::onStopCaptureClicked() {
     stopLiveCapture();
 }
 
 void MainWindow::stopLiveCapture() {
     if (!capture_running_) return;
-
     capture_running_ = false;
 
     if (active_capture_)
-        active_capture_->stopCapture();   // pcap_breakloop() — thread-safe
+        active_capture_->stopCapture();  
 }
 
-// ─── onSaveCaptureClicked ─────────────────────────────────────────────────────
 void MainWindow::onSaveCaptureClicked() {
-    // Gợi ý tên file theo thời gian
     const QString default_name =
         QString("capture_%1.pcap")
             .arg(QDateTime::currentDateTime()
@@ -441,16 +504,10 @@ void MainWindow::onSaveCaptureClicked() {
 
     if (path.isEmpty()) return;
 
-    // Delegate sang live_tab_ — nó có ring_buf và PcapWriter
-    live_tab_->saveToFile(path);
-
+    live_tab_->saveToFile("/media/linhlinh/learn/nckh/network-ids/data/raw");
     statusBar()->showMessage(
         QString("💾  Saved: %1").arg(path), 5000);
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// EXISTING SLOTS — giữ nguyên
-// ═══════════════════════════════════════════════════════════════════════════════
 
 void MainWindow::onMetricsUpdated(MetricsSnapshot snapshot) {
     status_pps_->setText(
@@ -501,12 +558,15 @@ void MainWindow::onAbout() {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
-    // Dừng capture sạch trước khi thoát
-    if (capture_running_) {
-        capture_running_ = false;
-        if (active_capture_)
-            active_capture_->stopCapture();
-    }
+    capture_running_ = false;
+    self_ref_.reset();          
+
+    if (active_capture_)
+        active_capture_->stopCapture();
+
+    if (capture_thread_ && capture_thread_->joinable())
+        capture_thread_->join();
+
     bridge_->stopPolling();
     event->accept();
 }
