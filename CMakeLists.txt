@@ -128,6 +128,7 @@ set(COMMON_SOURCES
 set(COMMON_HEADERS
     src/common/logger.hpp
     src/common/metrics.hpp
+    src/common/engine_config.hpp
     src/common/config_loader.hpp
 )
 
@@ -158,15 +159,18 @@ set(CAPTURE_IO_HEADERS
 # ── detection/ — IDS engine rule-based ───────────────────────────────────────
 set(DETECTION_SOURCES
     src/detection/flow_table.cpp
+    src/detection/ip_tracker.cpp
     src/detection/signature_engine.cpp
     src/detection/behavioral_engine.cpp
     src/detection/protocol_anomaly.cpp
     src/detection/worker_thread.cpp
     src/detection/dispatcher.cpp
+    src/detection/action_handler.cpp
 )
 set(DETECTION_HEADERS
     src/detection/flow_state.hpp
     src/detection/flow_table.hpp
+    src/detection/ip_tracker.hpp
     src/detection/signature_engine.hpp
     src/detection/behavioral_engine.hpp
     src/detection/protocol_anomaly.hpp
@@ -205,6 +209,7 @@ set(ANALYSIS_HEADERS
 set(UI_SOURCES
     src/ui/qt/ui_bridge.cpp
     src/ui/qt/main_window.cpp
+    src/ui/qt/ips_control_widget.cpp
     src/ui/qt/pcap_tab.cpp
     src/ui/qt/packet_list_model.cpp
     src/ui/qt/packet_detail_tree.cpp
@@ -218,6 +223,7 @@ set(UI_SOURCES
 set(UI_HEADERS
     src/ui/qt/ui_bridge.hpp
     src/ui/qt/main_window.hpp
+    src/ui/qt/ips_control_widget.hpp
     src/ui/qt/pcap_tab.hpp
     src/ui/qt/packet_list_model.hpp
     src/ui/qt/packet_detail_tree.hpp

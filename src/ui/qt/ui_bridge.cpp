@@ -16,29 +16,32 @@ UiBridge::UiBridge(AlertManager&     alert_manager,
     , ring_buf_(ring_buf)
 {
     connect(&timer_, &QTimer::timeout, this, &UiBridge::onTimer);
+
+    // Khởi tạo last_sent_seq_ = totalPushed() hiện tại
+    // → không emit packet cũ khi UI vừa mở
+    last_sent_seq_ = ring_buf_.totalPushed();
 }
 
-void UiBridge::startPolling(int interval_ms) { timer_.start(interval_ms);  }
-void UiBridge::stopPolling()                 { timer_.stop();               }
+void UiBridge::startPolling(int interval_ms) { timer_.start(interval_ms); }
+void UiBridge::stopPolling()                 { timer_.stop();              }
 
-
+// ─── onTimer ──────────────────────────────────────────────────────────────────
 void UiBridge::onTimer() {
 
-    // ── 1. Metrics — atomic reads, không lock ────────────────────────────────
+    // ── 1. Metrics ────────────────────────────────────────────────────────────
     emit metricsUpdated(buildMetricsSnapshot());
 
-    // ── 2. Traffic chart ─────────────────────────────────────────────────────
+    // ── 2. Traffic chart ──────────────────────────────────────────────────────
+    // buildTrafficPoint() push vào pps_window_ → currentPps() đọc sau
     emit trafficUpdated(buildTrafficPoint());
 
-    // ── 3. Alerts — chỉ lấy PHẦN MỚI, không copy toàn bộ ───────────────────
+    // ── 3. Alerts — chỉ lấy phần mới ─────────────────────────────────────────
     {
         const uint64_t total_now = alert_manager_.totalAlerts();
-
         if (total_now > last_alert_seq_) {
             const size_t want = static_cast<size_t>(
                 std::min<uint64_t>(total_now - last_alert_seq_, 20));
 
-            // ✅ Dùng getRecentFrom thay vì getRecent
             auto new_alerts = alert_manager_.getRecentFrom(last_alert_seq_, want);
             last_alert_seq_ = total_now;
 
@@ -46,57 +49,60 @@ void UiBridge::onTimer() {
                 emit newAlerts(std::move(new_alerts));
         }
     }
+
     // ── 4. Live packets ───────────────────────────────────────────────────────
     {
-        const uint64_t total_now = ring_buf_.totalReceived();
+        const uint64_t total_now = ring_buf_.totalPushed();
         if (total_now <= last_sent_seq_) return;
 
-        const uint64_t pending = total_now - last_sent_seq_;
+        // ── Adaptive batch: điều chỉnh max_batch_per_tick_ theo PPS ──────────
+        // currentPps() đọc pps_window_ đã được buildTrafficPoint() cập nhật
+        const uint64_t pps = currentPps();
+        if      (pps > 5000) max_batch_per_tick_ = 30;
+        else if (pps > 2000) max_batch_per_tick_ = 60;
+        else if (pps > 500)  max_batch_per_tick_ = 100;
+        else                 max_batch_per_tick_ = 150;
 
-        // Adaptive batch
-        uint64_t to_send = std::min(pending, max_batch_per_tick_);
+        // ── FIX: dùng pollRange thay vì pollNew + rollback ────────────────────
+        //
+        // Trước đây (BUG):
+        //   pollNew(last_sent_seq_)  → advance last_sent_seq_ lên write_seq_
+        //   records.resize(batch)    → cắt bớt
+        //   last_sent_seq_ -= skip   → rollback thủ công
+        //   → race: capture thread push thêm trong lúc rollback
+        //   → có thể bỏ sót hoặc duplicate packet
+        //
+        // Bây giờ (FIX):
+        //   Tính to_fetch trước
+        //   pollRange(from, count)   → KHÔNG thay đổi state
+        //   last_sent_seq_ += to_fetch → advance chính xác SAU khi lấy xong
+        //   → không race, không bỏ sót, không duplicate
 
-        if (pps_window_.size() >= 2) {
-            const auto& oldest   = pps_window_.front();
-            const auto& newest   = pps_window_.back();
-            const qint64 elapsed = newest.time_ms - oldest.time_ms;
+        const uint64_t available = total_now - last_sent_seq_;
+        const uint64_t to_fetch  = std::min(
+            available,
+            static_cast<uint64_t>(max_batch_per_tick_));
 
-            if (elapsed > 0) {
-                const uint64_t pps =
-                    (newest.captured > oldest.captured)
-                    ? (newest.captured - oldest.captured) * 1000ULL
-                      / static_cast<uint64_t>(elapsed)
-                    : 0ULL;
+        auto records = ring_buf_.pollRange(last_sent_seq_, to_fetch);
 
-                if      (pps > 5000) max_batch_per_tick_ = 30;
-                else if (pps > 2000) max_batch_per_tick_ = 60;
-                else if (pps > 500)  max_batch_per_tick_ = 100;
-                else                 max_batch_per_tick_ = 150;
+        // Advance đúng số lượng đã fetch — kể cả khi ring buffer trả về
+        // ít hơn to_fetch (do oldest_seq_ đã vượt qua một số slot)
+        // → dùng to_fetch (không dùng records.size()) để tránh re-fetch
+        //   các slot đã bị overwrite mà không bao giờ lấy được
+        last_sent_seq_ += to_fetch;
 
-                to_send = std::min(pending, max_batch_per_tick_);
-            }
-        }
-
-        auto records = ring_buf_.getRange(last_sent_seq_,
-                                          last_sent_seq_ + to_send);
-        if (!records.empty()) {
-            // for (auto& r : records)
-            //     r.raw_data = nullptr;
-
-            last_sent_seq_ += static_cast<uint64_t>(records.size());
+        if (!records.empty())
             emit newPacketInfos(std::move(records));
-        }
     }
 }
 
-
-// ─── buildMetricsSnapshot ────────────────────────────────────────────────────
+// ─── buildMetricsSnapshot ─────────────────────────────────────────────────────
 MetricsSnapshot UiBridge::buildMetricsSnapshot() const {
     MetricsSnapshot s;
-    s.packets_captured = METRICS.packets_captured.load();
-    s.packets_dropped  = METRICS.packets_dropped.load();
-    s.packets_passed   = METRICS.packets_passed.load();
-    s.packets_alerted  = METRICS.packets_alerted.load();
+    s.packets_captured = METRICS.packets_captured.load(std::memory_order_relaxed);
+    s.packets_dropped  = METRICS.packets_dropped .load(std::memory_order_relaxed);
+    s.packets_passed   = METRICS.packets_passed  .load(std::memory_order_relaxed);
+    s.packets_alerted  = METRICS.packets_alerted .load(std::memory_order_relaxed);
     s.ddos_count       = alert_manager_.ddosAlerts();
     s.slow_ddos_count  = alert_manager_.slowDdosAlerts();
     s.port_scan_count  = alert_manager_.scanAlerts();
@@ -106,14 +112,17 @@ MetricsSnapshot UiBridge::buildMetricsSnapshot() const {
     return s;
 }
 
-// ─── buildTrafficPoint — sliding window PPS ───────────────────────────────────
+// ─── buildTrafficPoint ────────────────────────────────────────────────────────
+// Push PpsPoint mới vào window, tính PPS từ oldest → newest
 TrafficPoint UiBridge::buildTrafficPoint() {
     const qint64   now_ms   = QDateTime::currentMSecsSinceEpoch();
-    const uint64_t captured = METRICS.packets_captured.load();
-    const uint64_t dropped  = METRICS.packets_dropped.load();
-    const uint64_t alerted  = METRICS.packets_alerted.load();
+    const uint64_t captured = METRICS.packets_captured.load(std::memory_order_relaxed);
+    const uint64_t dropped  = METRICS.packets_dropped .load(std::memory_order_relaxed);
+    const uint64_t alerted  = METRICS.packets_alerted .load(std::memory_order_relaxed);
 
     pps_window_.push_back({now_ms, captured, dropped, alerted});
+
+    // Evict điểm cũ hơn PPS_WINDOW_MS
     while (pps_window_.size() > 1 &&
            now_ms - pps_window_.front().time_ms > PPS_WINDOW_MS)
         pps_window_.pop_front();
@@ -125,14 +134,15 @@ TrafficPoint UiBridge::buildTrafficPoint() {
     p.alert_pps = 0;
 
     if (pps_window_.size() >= 2) {
-        const auto& oldest   = pps_window_.front();
-        const auto& newest   = pps_window_.back();
+        const auto&  oldest  = pps_window_.front();
+        const auto&  newest  = pps_window_.back();
         const qint64 elapsed = newest.time_ms - oldest.time_ms;
 
-        if (elapsed >= 100) {  
-            auto pps = [&](uint64_t a, uint64_t b) -> uint64_t {
-                return (a > b)
-                    ? (a - b) * 1000ULL / static_cast<uint64_t>(elapsed)
+        if (elapsed >= 100) {
+            auto pps = [&](uint64_t newer, uint64_t older) -> uint64_t {
+                return (newer > older)
+                    ? (newer - older) * 1000ULL
+                      / static_cast<uint64_t>(elapsed)
                     : 0ULL;
             };
             p.total_pps = pps(newest.captured, oldest.captured);
@@ -143,6 +153,24 @@ TrafficPoint UiBridge::buildTrafficPoint() {
     return p;
 }
 
+// ─── currentPps ───────────────────────────────────────────────────────────────
+// Đọc PPS từ pps_window_ hiện tại — không push thêm
+// Gọi SAU buildTrafficPoint() để window đã có điểm mới nhất
+uint64_t UiBridge::currentPps() const {
+    if (pps_window_.size() < 2) return 0;
+
+    const auto&  oldest  = pps_window_.front();
+    const auto&  newest  = pps_window_.back();
+    const qint64 elapsed = newest.time_ms - oldest.time_ms;
+
+    if (elapsed <= 0) return 0;
+    if (newest.captured <= oldest.captured) return 0;
+
+    return (newest.captured - oldest.captured) * 1000ULL
+           / static_cast<uint64_t>(elapsed);
+}
+
+// ─── setDetectionEnabled ──────────────────────────────────────────────────────
 void UiBridge::setDetectionEnabled(bool enabled) {
     const bool prev = ENGINE_CFG.detection_enabled.exchange(enabled);
     if (prev != enabled) {
@@ -152,6 +180,7 @@ void UiBridge::setDetectionEnabled(bool enabled) {
     }
 }
 
+// ─── setMlEnabled ─────────────────────────────────────────────────────────────
 void UiBridge::setMlEnabled(bool enabled) {
     const bool prev = ENGINE_CFG.ml_enabled.exchange(enabled);
     if (prev != enabled) {

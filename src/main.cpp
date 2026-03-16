@@ -145,9 +145,9 @@ void flowCleanupThread(Dispatcher& dispatcher) {
 struct Config {
     std::string mode;
     std::string target;
-    bool        use_mock    = true;
-    bool        enable_l2   = true;
-    int         num_workers = 4;
+    bool        use_mock      = true;
+    bool        enable_l2     = true;
+    int         num_workers   = 4;
     std::string if_model_path = "models/isolation_forest.onnx";
     std::string ae_model_path = "models/autoencoder.onnx";
 };
@@ -234,7 +234,7 @@ int main(int argc, char* argv[]) {
     AlertManager alert_manager(1000);
 
     // ── Layer 1 ───────────────────────────────────────────────────────────────
-    // ✅ main.cpp (CLI) không dùng ring_buf — worker_thread tự push
+    // CLI mode: dùng constructor 1 tham số — không cần ring_buf
     Dispatcher dispatcher(cfg.num_workers);
     g_dispatcher_ptr = &dispatcher;
 
@@ -250,6 +250,8 @@ int main(int argc, char* argv[]) {
         LOG_INFO("Rule update applied: " + p.detail);
     });
 
+    // CLI mode: MLEngine nhận ml_queue + callback trực tiếp
+    // KHÔNG inject AlertManager qua setAlertCallback() như UI mode
     MLEngine ml_engine(ml_queue, [&](const MLResult& result) {
         onL2Alert(result, alert_manager);
         feedback_loop.onMLResult(result);
@@ -318,7 +320,6 @@ int main(int argc, char* argv[]) {
     // ── Capture loop (blocking) ───────────────────────────────────────────────
     LOG_INFO("Capture loop started. Press Ctrl+C to stop.");
 
-    // ✅ CLI mode: chỉ dispatch — worker_thread.cpp tự push vào ring_buf
     capture.startCapture([&](PacketInfo pkt) {
         if (g_running)
             dispatcher.dispatch(std::move(pkt));

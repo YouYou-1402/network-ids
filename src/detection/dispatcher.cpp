@@ -2,38 +2,48 @@
 #include "dispatcher.hpp"
 #include "../common/logger.hpp"
 
-// ─── Constructor ──────────────────────────────────────────────────────────────
+// ── UI mode ───────────────────────────────────────────────────────────────────
 Dispatcher::Dispatcher(int num_workers, PacketRingBuffer& ring_buf)
-    : num_workers_(num_workers)
-    , ring_buf_(ring_buf)
-    , flow_table_(10000)
+    : num_workers_   (num_workers)
+    , dummy_ring_buf_(1)        // không dùng, size=1 tránh assert
+    , ring_buf_      (ring_buf)
+    , flow_table_    (100000)
+{}
+
+// ── CLI mode ──────────────────────────────────────────────────────────────────
+Dispatcher::Dispatcher(int num_workers)
+    : num_workers_   (num_workers)
+    , dummy_ring_buf_(1)
+    , ring_buf_      (dummy_ring_buf_)  // trỏ vào dummy
+    , flow_table_    (100000)
 {}
 
 Dispatcher::~Dispatcher() { stop(); }
 
 // ─── start ────────────────────────────────────────────────────────────────────
 void Dispatcher::start(AlertCallback on_alert) {
-    running_ = true;
+    if (running_.exchange(true)) return;
     workers_.clear();
+    workers_.reserve(num_workers_);
 
-    for (int i = 0; i < num_workers_; i++) {
-        auto worker = std::make_unique<WorkerThread>(
+    for (int i = 0; i < num_workers_; ++i) {
+        workers_.push_back(std::make_unique<WorkerThread>(
             i,
             flow_table_,
+            ip_tracker_,
             on_alert,
-            ring_buf_);   
-        worker->start();
-        workers_.push_back(std::move(worker));
+            ring_buf_));
+        workers_.back()->start();
     }
 
-    LOG_INFO("Dispatcher started with "
-             + std::to_string(num_workers_) + " workers");
+    LOG_INFO("Dispatcher started: " + std::to_string(num_workers_)
+             + " workers, flow_table=100000, ip_tracker="
+             + std::to_string(IpTracker::MAX_TRACKED_IP));
 }
 
 // ─── stop ─────────────────────────────────────────────────────────────────────
 void Dispatcher::stop() {
-    if (!running_) return;
-    running_ = false;
+    if (!running_.exchange(false)) return;
     for (auto& w : workers_) w->stop();
     workers_.clear();
     LOG_INFO("Dispatcher stopped");
@@ -41,21 +51,43 @@ void Dispatcher::stop() {
 
 // ─── dispatch ─────────────────────────────────────────────────────────────────
 void Dispatcher::dispatch(PacketInfo pkt) {
-    if (!running_) return;
+    if (!running_.load(std::memory_order_relaxed)) return;
+
+    // ── Push vào ring_buf_ TRƯỚC khi gửi vào worker ──────────────────────────
+    // ring_buf_.push() trả về index đã gán → gán lại vào pkt
+    // WorkerThread::processPacket() dùng pkt.index để updateRecord()
+    // UiBridge::onTimer() dùng ring_buf_.pollNew() để lấy packet lên UI
+    pkt.index = ring_buf_.push(pkt);   // ← THÊM DÒNG NÀY
+
     const uint32_t idx = hashToWorker(pkt);
-    workers_[idx]->enqueue(std::move(pkt));
+    if (!workers_[idx]->enqueue(std::move(pkt)))
+        LOG_WARN("Worker " + std::to_string(idx)
+                 + " queue full, packet dropped");
 }
 
 // ─── cleanupFlows ─────────────────────────────────────────────────────────────
 void Dispatcher::cleanupFlows(double idle_timeout_sec) {
-    flow_table_.cleanup(idle_timeout_sec);
+    const size_t removed = flow_table_.cleanup(idle_timeout_sec);
+    if (removed > 0)
+        LOG_INFO("FlowTable cleanup: " + std::to_string(removed)
+                 + " removed, active=" + std::to_string(flow_table_.size()));
 }
 
-// ─── hashToWorker — 5-tuple hash đảm bảo cùng flow → cùng worker ─────────────
+// ─── cleanupIps ───────────────────────────────────────────────────────────────
+void Dispatcher::cleanupIps(double idle_timeout_sec) {
+    const size_t removed = ip_tracker_.cleanup(idle_timeout_sec);
+    if (removed > 0)
+        LOG_INFO("IpTracker cleanup: " + std::to_string(removed)
+                 + " removed, active=" + std::to_string(ip_tracker_.size()));
+}
+
+// ─── hashToWorker ─────────────────────────────────────────────────────────────
 uint32_t Dispatcher::hashToWorker(const PacketInfo& pkt) const {
-    uint32_t h = pkt.src_ip   * 2654435761U;
-    h ^= pkt.dst_ip            * 2246822519U;
-    h ^= pkt.dst_port          * 40503U;
-    h ^= pkt.protocol          * 22695477U;
+    uint32_t h = 2166136261U;
+    h ^= pkt.src_ip;    h *= 16777619U;
+    h ^= pkt.dst_ip;    h *= 16777619U;
+    h ^= pkt.src_port;  h *= 16777619U;
+    h ^= pkt.dst_port;  h *= 16777619U;
+    h ^= pkt.protocol;  h *= 16777619U;
     return h % static_cast<uint32_t>(num_workers_);
 }

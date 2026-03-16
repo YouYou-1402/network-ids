@@ -1,28 +1,23 @@
+// src/ui/qt/main_window.hpp
 #pragma once
 #include <QMainWindow>
 #include <QTabWidget>
 #include <QLabel>
 #include <QTimer>
 #include <QTime>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QStatusBar>
 #include <QAction>
 #include <memory>
 #include <atomic>
 #include <thread>
 
-class UiBridge;
+#include "ui_bridge.hpp"
+#include "../../detection/dispatcher.hpp"
+#include "../../analysis/alert_manager.hpp"
+#include "../../ml/ml_engine.hpp"
+#include "../../capture/io/packet_ring_buffer.hpp"
+
 class PcapTab;
-class AlertPanel;
-class MetricsWidget;
-class TrafficChart;
-class AlertManager;
-class Dispatcher;
-class MLEngine;
-class PacketRingBuffer;
 class PacketCapture;
-struct MetricsSnapshot;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -39,54 +34,56 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private slots:
-    void onMetricsUpdated     (MetricsSnapshot snapshot);
-    void onSystemStatusChanged(bool running);
-    void onToggleCapture      ();
-    void updateUptime         ();
-    void onAbout              ();
-
     void onStartCaptureClicked();
-    void onStopCaptureClicked ();
-    void onSaveCaptureClicked ();
+    void onStopCaptureClicked();
+    void onSaveCaptureClicked();
+    void onAbout();
+    void updateUptime();
+    void onDetectionToggled(bool enabled);
+    void onMlToggled       (bool enabled);
+    void updateIpsModeBadge();
 
 private:
-    void setupUI        ();
-    void setupMenuBar   ();
-    void setupStatusBar ();
-    void applyDarkTheme ();
-    void addPcapTab     (const QString& filepath = {});
-
+    void setupUI();
+    void setupMenuBar();
+    void setupStatusBar();
+    void applyDarkTheme();
+    void addPcapTab(const QString& filepath = {});
     void startLiveCapture(const QString& iface, const QString& filter);
-    void stopLiveCapture ();
+    void stopLiveCapture();
 
-    PacketRingBuffer&         ring_buf_;
-    std::unique_ptr<UiBridge> bridge_;
-    QTime                     start_time_;
-    bool                      is_running_ { true };
+    // ── Backend refs ──────────────────────────────────────────────────────────
+    AlertManager&     alert_manager_;
+    Dispatcher&       dispatcher_;
+    MLEngine&         ml_engine_;
+    PacketRingBuffer& ring_buf_;
 
+    // ── UiBridge ──────────────────────────────────────────────────────────────
+    std::unique_ptr<UiBridge> ui_bridge_;
+
+    // ── Capture state ─────────────────────────────────────────────────────────
     std::shared_ptr<PacketCapture> active_capture_;
     std::unique_ptr<std::thread>   capture_thread_;
-    std::atomic<bool>              capture_running_ { false };
+    std::atomic<bool>              capture_running_{ false };
     QString                        capture_iface_;
 
-    std::shared_ptr<MainWindow*>   self_ref_;
+    // ── Widgets ───────────────────────────────────────────────────────────────
+    QTabWidget* tab_widget_  { nullptr };
+    PcapTab*    live_tab_    { nullptr };
 
-    QTabWidget*    tab_widget_     { nullptr };
-    PcapTab*       live_tab_       { nullptr };
-    AlertPanel*    alert_panel_    { nullptr };
-    MetricsWidget* metrics_widget_ { nullptr };
-    TrafficChart*  traffic_chart_  { nullptr };
+    // ── Menu actions ──────────────────────────────────────────────────────────
+    QAction* act_start_cap_      { nullptr };
+    QAction* act_stop_cap_       { nullptr };
+    QAction* act_save_cap_       { nullptr };
+    QAction* act_toggle_det_     { nullptr };   // IPS menu
+    QAction* act_toggle_ml_      { nullptr };   // IPS menu
 
-    QAction* act_start_cap_ { nullptr };
-    QAction* act_stop_cap_  { nullptr };
-    QAction* act_save_cap_  { nullptr };
-    QAction* act_toggle_detection_  { nullptr };   
-    QAction* act_toggle_ml_         { nullptr }; 
+    // ── Status bar ────────────────────────────────────────────────────────────
+    QLabel* status_state_    { nullptr };
+    QLabel* status_iface_    { nullptr };
+    QLabel* status_uptime_   { nullptr };
+    QLabel* status_ips_mode_ { nullptr };   // "IPS" / "IDS" / "MONITOR"
 
-    QLabel* status_running_ { nullptr };
-    QLabel* status_pps_     { nullptr };
-    QLabel* status_uptime_  { nullptr };
-    QLabel* status_iface_   { nullptr };
-
-    QTimer uptime_timer_;
+    QTimer  uptime_timer_;
+    QTime   start_time_;
 };

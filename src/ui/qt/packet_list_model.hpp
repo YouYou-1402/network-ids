@@ -1,18 +1,20 @@
 // src/ui/qt/packet_list_model.hpp
 #pragma once
+#include "filter_bar.hpp"                              // ← DisplayFilter từ đây
+#include "../../capture/io/packet_ring_buffer.hpp"
+#include "../../core/packet_info.hpp"
+#include "../../core/threat_types.hpp"
+
 #include <QAbstractTableModel>
 #include <QColor>
-#include <QFont>
+#include <QString>
 #include <deque>
-#include <mutex>
 #include <vector>
 #include <memory>
-#include "../../capture/io/packet_ring_buffer.hpp"
-#include "filter_bar.hpp"
 
+// ─── PacketListModel ──────────────────────────────────────────────────────────
 class PacketListModel : public QAbstractTableModel {
     Q_OBJECT
-
 public:
     enum Column {
         COL_NO = 0, COL_TIME, COL_SRC_IP, COL_DST_IP,
@@ -20,8 +22,7 @@ public:
         COL_COUNT
     };
 
-    static constexpr int MAX_DISPLAY_ROWS = 50000;
-    static constexpr int SCROLL_CHUNK     = 200;
+    static constexpr int MAX_DISPLAY_ROWS = 500'000;
 
     explicit PacketListModel(PacketRingBuffer& ring_buf,
                               QObject*          parent = nullptr);
@@ -30,50 +31,49 @@ public:
     int      rowCount   (const QModelIndex& parent = {}) const override;
     int      columnCount(const QModelIndex& parent = {}) const override;
     QVariant headerData (int section, Qt::Orientation, int role) const override;
-    QVariant data       (const QModelIndex&, int role)           const override;
+    QVariant data       (const QModelIndex& index, int role) const override;
 
-    // ── Mutators (main thread only) ───────────────────────────────────────────
+    // ── Public API ────────────────────────────────────────────────────────────
     void appendRecords(const std::vector<PacketInfo>& batch);
     void applyFilter  (const DisplayFilter& filter);
     void clear        ();
 
-    std::shared_ptr<PacketInfo> recordAt(int row) const;
+    bool getRecord(int row, PacketInfo& out) const;
 
 private:
-    // ── Pre-computed display cache ────────────────────────────────────────────
     struct RowCache {
-        // frame_no = r.index + 1  (1-based, cố định suốt vòng đời packet)
-        // Gán 1 lần khi buildRowCache, không bao giờ thay đổi dù filter/clear
-        uint64_t frame_no  = 0;
-        uint64_t pkt_idx   = 0;   // r.index — dùng cho recordAt()
-        uint32_t orig_len  = 0;
+        uint64_t frame_no = 0;
+        uint64_t pkt_idx  = 0;
+        uint32_t orig_len = 0;
+        QColor   bg_color;
         QString  time_str;
         QString  src;
         QString  dst;
         QString  proto;
         QString  info;
         QString  threat;
-        QColor   bg_color;
+
+        // Cache PacketInfo — giữ raw_data alive qua shared_ptr
+        std::shared_ptr<PacketInfo> cached_pkt;
     };
 
-    // ── Pure helpers ──────────────────────────────────────────────────────────
-    RowCache buildRowCache  (const PacketInfo& r)                        const;
+    RowCache buildRowCache  (const PacketInfo& pkt) const;
     bool     matchRecord    (const PacketInfo& pkt,
-                              const DisplayFilter& f)                      const;
-    QString  computeProto   (const PacketInfo& r)                        const;
-    QString  computeInfo    (const PacketInfo& r)                        const;
-    QColor   computeRowColor(const PacketInfo& r)                        const;
+                              const DisplayFilter& f) const;
+    QString  computeProto   (const PacketInfo& pkt) const;
+    QString  computeInfo    (const PacketInfo& pkt) const;
+    QColor   computeRowColor(const PacketInfo& pkt) const;
+
+    static QString ipv4Str(uint32_t ip_net);
+    static QString ipv6Str(const std::array<uint8_t, 16>& ip6);
+    static QString addrStr(const PacketInfo& pkt, bool is_src);
 
     static bool evalOp (DisplayFilter::Op op, uint16_t lhs, uint16_t rhs);
     static bool applyOp(DisplayFilter::Op op, bool eq);
 
-    // ── Data ──────────────────────────────────────────────────────────────────
-    PacketRingBuffer&      ring_buf_;
-    DisplayFilter          current_filter_;
-    double                 base_timestamp_ = -1.0;
-
-    std::deque<RowCache>   row_cache_;
-    std::deque<uint64_t>   filtered_indices_;
-
-    mutable std::mutex     mutex_;
+    PacketRingBuffer&    ring_buf_;
+    std::deque<RowCache> row_cache_;
+    std::deque<uint64_t> pkt_indices_;
+    DisplayFilter        current_filter_;
+    double               base_ts_ = -1.0;
 };

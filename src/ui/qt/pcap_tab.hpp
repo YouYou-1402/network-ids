@@ -3,123 +3,84 @@
 #include <QWidget>
 #include <QSplitter>
 #include <QTableView>
-#include <QLabel>
 #include <QPushButton>
-#include <QProgressBar>
-#include <QScrollBar>
-#include <QToolBar>
+#include <QLabel>
+#include <QLineEdit>
+#include <QComboBox>
 #include <QTimer>
-#include <QFileInfo>
-#include <QDir>
-#include <QDateTime>  
-
-#include <memory>
-#include <atomic>
-#include <mutex>
 #include <vector>
-#include <chrono>
+#include <memory>
 
-#include "filter_bar.hpp"
-#include "packet_list_model.hpp"
-#include "packet_detail_tree.hpp"
-#include "hex_view.hpp"
-#include "../../common/logger.hpp"   
+#include "../../core/packet_info.hpp"
 #include "../../capture/io/pcap_reader.hpp"
 #include "../../capture/io/pcap_writer.hpp"
 #include "../../capture/io/packet_ring_buffer.hpp"
+
+class PacketListModel;
+class PacketDetailTree;
+class HexView;
+class FilterBar;
+class MetricsWidget;
+class TrafficChart;
+class AlertPanel;
+class IpsControlWidget;
+class UiBridge;
 
 class PcapTab : public QWidget {
     Q_OBJECT
 
 public:
-    enum class Mode { OFFLINE, LIVE };
-
-    // Ngưỡng tự động điều chỉnh render interval
-    static constexpr int    RENDER_INTERVAL_NORMAL_MS  = 200;   // < 500 pps
-    static constexpr int    RENDER_INTERVAL_FAST_MS    = 500;   // 500–2000 pps
-    static constexpr int    RENDER_INTERVAL_TURBO_MS   = 1000;  // > 2000 pps
-    static constexpr size_t MAX_ROWS_PER_FLUSH         = 300;   // rows/tick tối đa
-    static constexpr size_t MAX_PENDING_BUFFER         = 10000; // pending tối đa
-    static constexpr size_t DROP_TO_SIZE               = 5000;  // khi tràn, giữ lại
+    enum class Mode { LIVE, OFFLINE };
 
     explicit PcapTab(Mode mode, QWidget* parent = nullptr);
-    ~PcapTab() override;
 
-    // Offline
-    void    loadFile(const QString& filepath);
-
-    // Live — nhận batch từ UiBridge (1 lần lock thay vì N lần)
-    void    appendLivePackets(std::vector<PacketInfo> records);
-
-    // Compat: nhận từng packet (wrap thành batch)
-    void    appendLivePacket(const PacketInfo& record);
-
-    void    saveToFile(const QString& filepath);
-    QString tabTitle()    const { return tab_title_; }
-    int     visibleCount() const;
-
-    // Wireshark-style: tạm dừng render (vẫn capture)
-    void    setRenderPaused(bool paused);
-    bool    isRenderPaused() const { return render_paused_; }
+    void setUiBridge(UiBridge* bridge);
+    // appendLivePackets đã bị xóa — live packet đi qua UiBridge::newPacketInfos
+    void loadFile   (const QString& path);
+    void saveToFile (const QString& path);
+    void onOpenClicked();
 
 signals:
-    void titleChanged  (QString title);
-    void statusMessage (QString msg);
-
-public slots:
-    void onOpenClicked();
-    void onSaveClicked();
-    void onClearClicked();
-    void onPacketSelected (const QModelIndex& index);
-    void onFilterChanged  (DisplayFilter filter);
-    void onLoadProgress   (uint64_t loaded, uint64_t total, double pct);
+    void titleChanged  (const QString& title);
+    void statusMessage (const QString& msg);
 
 private slots:
-    void onLiveTimer();
-    void onPpsCheckTimer();   // đo PPS mỗi 1s → tự chỉnh render interval
+    void onPacketSelected (const QModelIndex& index);
+    void onFilterApplied  (const QString& filter);
+    void onFilterCleared  ();
+    void onExportClicked  ();
+    void onNewPacketInfos (std::vector<PacketInfo> records);  // từ UiBridge
 
 private:
-    void setupUI();
-    void setupToolbar();
-    void flushPendingToModel();
-    void loadRawBytesForRecord(PacketInfo& record);
-    void updateAdaptiveInterval(double pps);
+    void setupLiveLayout   ();
+    void setupOfflineLayout();
+    void setupPacketTable  ();
+    void connectBridgeSignals();
 
-    
-    // ── Mode & state ──────────────────────────────────────────────────────────
-    Mode              mode_;
-    QString           tab_title_;
-    QString           current_filepath_;
-    QString           live_buffer_path_; 
-    std::atomic<bool> cancel_scan_    { false };
-    bool              render_paused_  { false };
-    bool              auto_scroll_    { true  };
+    Mode      mode_;
+    UiBridge* bridge_ = nullptr;
 
-    // ── Backend ───────────────────────────────────────────────────────────────
-    PacketRingBuffer                  ring_buf_;
-    std::unique_ptr<PacketListModel>  list_model_;
-    std::unique_ptr<PcapReader>       reader_;
-    std::unique_ptr<PcapWriter>       writer_;
+    // dummy_ring_buf_ dùng cho:
+    //   - LIVE mode: PacketListModel tạm thời trước khi setUiBridge() được gọi
+    //   - OFFLINE mode: PcapReader scan vào đây, PacketListModel đọc từ đây
+    PacketRingBuffer dummy_ring_buf_{500'000, 50'000};
 
-    // ── Live mode ─────────────────────────────────────────────────────────────
-    QTimer             live_timer_;       // flush pending → model
-    QTimer             pps_check_timer_;  // đo PPS → điều chỉnh interval
+    // ── Packet view ───────────────────────────────────────────────────────────
+    QTableView*       packet_table_  = nullptr;
+    PacketListModel*  packet_model_  = nullptr;
+    PacketDetailTree* detail_tree_   = nullptr;
+    HexView*          hex_view_      = nullptr;
+    FilterBar*        filter_bar_    = nullptr;
 
-    mutable std::mutex          live_mutex_;
-    std::vector<PacketInfo>   live_pending_;
+    // ── Live-only widgets ─────────────────────────────────────────────────────
+    MetricsWidget*    metrics_widget_  = nullptr;
+    TrafficChart*     traffic_chart_   = nullptr;
+    AlertPanel*       alert_panel_     = nullptr;
+    IpsControlWidget* ips_control_     = nullptr;
 
-    // PPS tracking
-    uint64_t pps_last_count_    { 0 };
-    double   current_pps_       { 0.0 };
+    // ── Offline ───────────────────────────────────────────────────────────────
+    std::unique_ptr<PcapReader> pcap_reader_;
+    std::unique_ptr<PcapWriter> pcap_writer_;
 
-    // ── Widgets ───────────────────────────────────────────────────────────────
-    QToolBar*         toolbar_      { nullptr };
-    FilterBar*        filter_bar_   { nullptr };
-    QProgressBar*     progress_bar_ { nullptr };
-    QTableView*       packet_table_ { nullptr };
-    PacketDetailTree* detail_tree_  { nullptr };
-    HexView*          hex_view_     { nullptr };
-    QLabel*           stats_label_  { nullptr };
-    QLabel*           pps_label_    { nullptr };  // hiển thị PPS realtime
-    QAction*          pause_act_    { nullptr };  // nút Pause render
+    bool auto_scroll_ = true;
 };
