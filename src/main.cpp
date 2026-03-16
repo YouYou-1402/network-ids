@@ -1,4 +1,3 @@
-// src/main.cpp
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -24,10 +23,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Global state
 // ─────────────────────────────────────────────────────────────────────────────
-std::atomic<bool>  g_running{true};
-PacketCapture*     g_capture_ptr    = nullptr;
-Dispatcher*        g_dispatcher_ptr = nullptr;
-MLEngine*          g_ml_engine_ptr  = nullptr;
+std::atomic<bool> g_running{true};
+PacketCapture*    g_capture_ptr    = nullptr;
+Dispatcher*       g_dispatcher_ptr = nullptr;
+MLEngine*         g_ml_engine_ptr  = nullptr;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Signal handler
@@ -214,7 +213,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Signal handlers
     struct sigaction sa{};
     sa.sa_handler = signalHandler;
     sigemptyset(&sa.sa_mask);
@@ -234,7 +232,6 @@ int main(int argc, char* argv[]) {
     AlertManager alert_manager(1000);
 
     // ── Layer 1 ───────────────────────────────────────────────────────────────
-    // CLI mode: dùng constructor 1 tham số — không cần ring_buf
     Dispatcher dispatcher(cfg.num_workers);
     g_dispatcher_ptr = &dispatcher;
 
@@ -250,8 +247,6 @@ int main(int argc, char* argv[]) {
         LOG_INFO("Rule update applied: " + p.detail);
     });
 
-    // CLI mode: MLEngine nhận ml_queue + callback trực tiếp
-    // KHÔNG inject AlertManager qua setAlertCallback() như UI mode
     MLEngine ml_engine(ml_queue, [&](const MLResult& result) {
         onL2Alert(result, alert_manager);
         feedback_loop.onMLResult(result);
@@ -272,7 +267,7 @@ int main(int argc, char* argv[]) {
     g_capture_ptr = &capture;
 
     const bool opened = (cfg.mode == "-i")
-        ? capture.openLive(cfg.target, "tcp or udp")
+        ? capture.openLive   (cfg.target, "tcp or udp")
         : capture.openOffline(cfg.target, "");
 
     if (!opened) {
@@ -283,13 +278,13 @@ int main(int argc, char* argv[]) {
     }
 
     // ── Background threads ────────────────────────────────────────────────────
-    std::thread stats_thread(statsPrinterThread,
-                             std::ref(dispatcher),
-                             std::ref(ml_engine),
-                             std::ref(alert_manager));
+    std::thread stats_thread  (statsPrinterThread,
+                                std::ref(dispatcher),
+                                std::ref(ml_engine),
+                                std::ref(alert_manager));
 
     std::thread cleanup_thread(flowCleanupThread,
-                               std::ref(dispatcher));
+                                std::ref(dispatcher));
 
     // ── L2 feeder thread ──────────────────────────────────────────────────────
     FeatureExtractor extractor;
@@ -320,9 +315,18 @@ int main(int argc, char* argv[]) {
     // ── Capture loop (blocking) ───────────────────────────────────────────────
     LOG_INFO("Capture loop started. Press Ctrl+C to stop.");
 
-    capture.startCapture([&](PacketInfo pkt) {
-        if (g_running)
-            dispatcher.dispatch(std::move(pkt));
+    capture.startCapture([&](PacketInfo        pkt,
+                              const uint8_t*    raw_bytes,
+                              uint32_t          raw_len)
+    {
+        if (!g_running) return;
+
+        // CLI mode: copy raw_data vào pkt để detection engine có payload
+        // (không có disk writer — raw_data là nguồn duy nhất)
+        pkt.raw_data = std::make_shared<std::vector<uint8_t>>(
+                           raw_bytes, raw_bytes + raw_len);
+
+        dispatcher.dispatch(std::move(pkt));
     });
 
     // ── Shutdown ──────────────────────────────────────────────────────────────

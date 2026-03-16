@@ -57,7 +57,7 @@ public:
                       PacketRingBuffer& ring_buf,
                       QObject*          parent = nullptr);
 
-    void startPolling(int interval_ms = 200);
+    void startPolling(int interval_ms = 20);
     void stopPolling();
 
     void setMaxBatchPerTick(uint64_t n) { max_batch_per_tick_ = n; }
@@ -111,5 +111,5 @@ private:
         uint64_t alerted  = 0;
     };
     std::deque<PpsPoint> pps_window_;
-    static constexpr int PPS_WINDOW_MS = 1000;
+    static constexpr int PPS_WINDOW_MS = 10000;
 };

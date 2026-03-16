@@ -1,18 +1,14 @@
-// src/ui/qt/packet_list_model.hpp
 #pragma once
-#include "filter_bar.hpp"                              // ← DisplayFilter từ đây
+#include "filter_bar.hpp"
 #include "../../capture/io/packet_ring_buffer.hpp"
 #include "../../core/packet_info.hpp"
-#include "../../core/threat_types.hpp"
 
 #include <QAbstractTableModel>
 #include <QColor>
 #include <QString>
 #include <deque>
 #include <vector>
-#include <memory>
 
-// ─── PacketListModel ──────────────────────────────────────────────────────────
 class PacketListModel : public QAbstractTableModel {
     Q_OBJECT
 public:
@@ -27,24 +23,29 @@ public:
     explicit PacketListModel(PacketRingBuffer& ring_buf,
                               QObject*          parent = nullptr);
 
-    // ── QAbstractTableModel interface ─────────────────────────────────────────
     int      rowCount   (const QModelIndex& parent = {}) const override;
     int      columnCount(const QModelIndex& parent = {}) const override;
     QVariant headerData (int section, Qt::Orientation, int role) const override;
-    QVariant data       (const QModelIndex& index, int role) const override;
+    QVariant data       (const QModelIndex& index, int role)     const override;
 
-    // ── Public API ────────────────────────────────────────────────────────────
     void appendRecords(const std::vector<PacketInfo>& batch);
     void applyFilter  (const DisplayFilter& filter);
     void clear        ();
 
+    // Trả về metadata packet tại row
+    // raw_data = nullptr — caller tự lazy-load nếu cần
     bool getRecord(int row, PacketInfo& out) const;
 
+    // Cập nhật raw_data sau khi lazy-load (cache lại để click tiếp không đọc disk)
+    void updateRawData(int row,
+                       std::shared_ptr<std::vector<uint8_t>> raw_data);
+
 private:
+    // RowCache chỉ lưu metadata — KHÔNG giữ raw_data
     struct RowCache {
-        uint64_t frame_no = 0;
-        uint64_t pkt_idx  = 0;
-        uint32_t orig_len = 0;
+        uint64_t frame_no   = 0;
+        uint64_t pkt_idx    = 0;   // ring_buf index (dùng cho applyFilter)
+        uint32_t orig_len   = 0;
         QColor   bg_color;
         QString  time_str;
         QString  src;
@@ -53,8 +54,9 @@ private:
         QString  info;
         QString  threat;
 
-        // Cache PacketInfo — giữ raw_data alive qua shared_ptr
-        std::shared_ptr<PacketInfo> cached_pkt;
+        // Metadata đầy đủ để getRecord() không cần đọc ring_buf
+        // raw_data = nullptr (lazy-load khi click)
+        PacketInfo meta;
     };
 
     RowCache buildRowCache  (const PacketInfo& pkt) const;

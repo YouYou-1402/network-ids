@@ -1,4 +1,3 @@
-// src/ui/qt/main_window.cpp
 #include "main_window.hpp"
 #include "pcap_tab.hpp"
 #include "capture_control_dialog.hpp"
@@ -16,6 +15,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QStandardPaths>
 
 // ─── Constructor ──────────────────────────────────────────────────────────────
 MainWindow::MainWindow(AlertManager&     alert_manager,
@@ -39,12 +39,10 @@ MainWindow::MainWindow(AlertManager&     alert_manager,
     setupMenuBar();
     setupStatusBar();
 
-    // ── UiBridge — single source of truth cho live packets ────────────────────
+    // ── UiBridge ──────────────────────────────────────────────────────────────
     ui_bridge_ = std::make_unique<UiBridge>(
         alert_manager_, dispatcher_, ml_engine_, ring_buf_, this);
 
-    // Inject bridge vào live tab
-    // setUiBridge() sẽ: rebuild PacketListModel + connectBridgeSignals()
     live_tab_->setUiBridge(ui_bridge_.get());
 
     connect(ui_bridge_.get(), &UiBridge::detectionStatusChanged,
@@ -105,7 +103,7 @@ void MainWindow::setupUI() {
 
     connect(tab_widget_, &QTabWidget::tabCloseRequested,
             this, [this](int index) {
-                if (index == 0) return;
+                if (index == 0) return;   // live tab không đóng được
                 delete tab_widget_->widget(index);
             });
 
@@ -175,6 +173,7 @@ void MainWindow::setupMenuBar() {
     connect(quit_act, &QAction::triggered, qApp, &QApplication::quit);
     file_menu->addAction(quit_act);
 
+    // ── IPS menu ──────────────────────────────────────────────────────────────
     auto* ips_menu = menuBar()->addMenu("🛡️ &IPS");
 
     act_toggle_det_ = new QAction("🔍  Detection Engine: ENABLED", this);
@@ -215,6 +214,7 @@ void MainWindow::setupMenuBar() {
     });
     ips_menu->addAction(disable_all);
 
+    // ── Help menu ─────────────────────────────────────────────────────────────
     auto* help_menu = menuBar()->addMenu("&Help");
     auto* about_act = new QAction("&About", this);
     connect(about_act, &QAction::triggered, this, &MainWindow::onAbout);
@@ -316,7 +316,7 @@ void MainWindow::updateIpsModeBadge() {
     }
 }
 
-// ─── Capture ──────────────────────────────────────────────────────────────────
+// ─── onStartCaptureClicked ────────────────────────────────────────────────────
 void MainWindow::onStartCaptureClicked() {
     if (capture_running_) {
         QMessageBox::information(this, "Capture Running",
@@ -336,28 +336,28 @@ void MainWindow::onStartCaptureClicked() {
             "Please select a network interface.");
         return;
     }
+
     startLiveCapture(iface, filter);
 }
 
 // ─── startLiveCapture ─────────────────────────────────────────────────────────
 //
-//  Packet flow (sau fix):
-//    pcapCallback → parsePacket → callback_(pkt)
-//                                      ↓
-//                              ring_buf_.push(pkt)   ← gán pkt.index
-//                                      ↓
-//                              UiBridge::onTimer() polls ring_buf_
-//                                      ↓
-//                              emit newPacketInfos(records)
-//                                      ↓
-//                              PcapTab::onNewPacketInfos()
-//                                      ↓
-//                              packet_model_->appendRecords()
+//  Packet flow:
+//    pcapCallback → RawPacketCallback(pkt, raw_bytes, raw_len)
+//         │
+//         ├─ 1. live_tab_->writeLivePacket() → disk → pkt.file_offset
+//         ├─ 2. pkt.source_file = temp_path (std::string, captured by value)
+//         ├─ 3. pkt.raw_data = copy(raw_bytes) → detection payload
+//         └─ 4. ring_buf_.push(pkt)
+//                   │
+//                   ├─ Dispatcher → WorkerThread → detection
+//                   └─ UiBridge polls → emit newPacketInfos → PcapTab (metadata only)
 //
-//  Không còn batch/flush trực tiếp vào UI — UiBridge là single source
+//  temp_path được tạo TRƯỚC khi spawn thread → capture bằng value vào lambda
 // ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::startLiveCapture(const QString& iface,
                                    const QString& filter) {
+    // Join thread cũ nếu còn
     if (capture_thread_ && capture_thread_->joinable())
         capture_thread_->join();
     capture_thread_.reset();
@@ -365,6 +365,17 @@ void MainWindow::startLiveCapture(const QString& iface,
     capture_iface_   = iface;
     capture_running_ = true;
 
+    // ── Tạo temp_path TRƯỚC khi spawn thread ─────────────────────────────────
+    // Phải tạo ở đây (main thread) để:
+    //   1. live_tab_->startLiveWriter() chạy trên main thread (Qt-safe)
+    //   2. Lambda capture temp_path_str by value → không dangling reference
+    const QString temp_path = QDir::tempPath()
+        + QString("/ids_capture_%1.pcap")
+              .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
+
+    live_tab_->startLiveWriter(temp_path);   // mở PcapWriter trên main thread
+
+    // ── Update UI ─────────────────────────────────────────────────────────────
     act_start_cap_->setEnabled(false);
     act_stop_cap_ ->setEnabled(true);
     act_save_cap_ ->setEnabled(true);
@@ -381,16 +392,22 @@ void MainWindow::startLiveCapture(const QString& iface,
 
     active_capture_ = std::make_shared<PacketCapture>();
 
+    // ── Spawn capture thread ──────────────────────────────────────────────────
+    // Capture by value: iface_str, filter_str, temp_path_str, capture (shared_ptr)
+    // KHÔNG capture `this` bằng reference vào lambda bên trong thread
+    // (dùng QMetaObject::invokeMethod để marshal về main thread)
     capture_thread_ = std::make_unique<std::thread>(
         [this,
-         iface   = iface.toStdString(),
-         filter  = filter.toStdString(),
-         capture = active_capture_]()
+         iface_str    = iface.toStdString(),
+         filter_str   = filter.toStdString(),
+         temp_path_str = temp_path.toStdString(),   // ← fix: capture by value
+         capture      = active_capture_]()
     {
-        if (!capture->openLive(iface, filter)) {
-            QMetaObject::invokeMethod(this, [this, iface]() {
+        if (!capture->openLive(iface_str, filter_str)) {
+            QMetaObject::invokeMethod(this, [this, iface_str]() {
                 capture_running_ = false;
                 active_capture_.reset();
+                live_tab_->stopLiveWriter();
                 act_start_cap_->setEnabled(true);
                 act_stop_cap_ ->setEnabled(false);
                 act_save_cap_ ->setEnabled(false);
@@ -400,24 +417,44 @@ void MainWindow::startLiveCapture(const QString& iface,
                 status_iface_->hide();
                 QMessageBox::critical(this, "Capture Error",
                     QString("Cannot open interface: <b>%1</b>")
-                        .arg(QString::fromStdString(iface)));
+                        .arg(QString::fromStdString(iface_str)));
             }, Qt::QueuedConnection);
             return;
         }
 
-        // ── Callback: chỉ push vào ring_buf_ ──────────────────────────────────
-        // UiBridge poll ring_buf_ mỗi 200ms → emit newPacketInfos → PcapTab
-        // KHÔNG batch/flush trực tiếp vào UI → tránh duplicate + race condition
-        capture->startCapture([this](PacketInfo pkt) {
+        // ── RawPacketCallback ─────────────────────────────────────────────────
+        capture->startCapture(
+            [this, temp_path_str]
+            (PacketInfo        pkt,
+            const uint8_t*    raw_bytes,
+            uint32_t          raw_len)
+        {
             if (!capture_running_.load(std::memory_order_relaxed)) return;
-            ring_buf_.push(std::move(pkt));   // push() gán pkt.index bên trong
-        });
 
+            // 1. Ghi disk → lấy file_offset (UI lazy-load từ disk khi click)
+            const int64_t offset = live_tab_->writeLivePacket(
+                raw_bytes, raw_len, pkt.orig_len, pkt.timestamp);
+
+            pkt.file_offset = offset;
+            pkt.source_file = temp_path_str;
+
+            // 2. Copy raw_data cho detection engine
+            pkt.raw_data = std::make_shared<std::vector<uint8_t>>(
+                            raw_bytes, raw_bytes + raw_len);
+
+            // 3. KHÔNG push vào ring_buf ở đây
+            //    Dispatcher::dispatch() sẽ push → gán pkt.index đúng
+            //    Tránh double push → eviction x2
+            dispatcher_.dispatch(std::move(pkt));
+        });
+        // startCapture() blocking — chờ đến khi stopCapture() được gọi
         capture->waitForStop();
 
+        // ── Cleanup sau khi capture kết thúc ─────────────────────────────────
         QMetaObject::invokeMethod(this, [this]() {
             capture_running_ = false;
             active_capture_.reset();
+            live_tab_->stopLiveWriter();   // flush + close file tạm
             act_start_cap_->setEnabled(true);
             act_stop_cap_ ->setEnabled(false);
             status_state_->setText("  ■ STOPPED  ");
@@ -431,6 +468,7 @@ void MainWindow::startLiveCapture(const QString& iface,
     });
 }
 
+// ─── stopLiveCapture ──────────────────────────────────────────────────────────
 void MainWindow::stopLiveCapture() {
     if (!capture_running_) return;
     capture_running_ = false;
@@ -440,15 +478,20 @@ void MainWindow::stopLiveCapture() {
 
 void MainWindow::onStopCaptureClicked() { stopLiveCapture(); }
 
+// ─── onSaveCaptureClicked ─────────────────────────────────────────────────────
 void MainWindow::onSaveCaptureClicked() {
     const QString path = QFileDialog::getSaveFileName(
         this, "Save Capture",
-        QDir::homePath() + QString("/capture_%1.pcap")            .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")),
+        QDir::homePath()
+            + QString("/capture_%1.pcap")
+                  .arg(QDateTime::currentDateTime()
+                           .toString("yyyyMMdd_HHmmss")),
         "PCAP Files (*.pcap);;All Files (*)");
     if (path.isEmpty()) return;
     live_tab_->saveToFile(path);
 }
 
+// ─── updateUptime ─────────────────────────────────────────────────────────────
 void MainWindow::updateUptime() {
     const int s = start_time_.secsTo(QTime::currentTime());
     status_uptime_->setText(
@@ -458,6 +501,7 @@ void MainWindow::updateUptime() {
             .arg(s % 60,          2, 10, QChar('0')));
 }
 
+// ─── onAbout ──────────────────────────────────────────────────────────────────
 void MainWindow::onAbout() {
     QMessageBox::about(this, "About",
         "<b>Network IDS/IPS Monitor</b><br>"
@@ -471,6 +515,7 @@ void MainWindow::onAbout() {
         "⛔ OFF — Monitor only");
 }
 
+// ─── closeEvent ───────────────────────────────────────────────────────────────
 void MainWindow::closeEvent(QCloseEvent* event) {
     if (ui_bridge_) ui_bridge_->stopPolling();
     stopLiveCapture();
@@ -478,5 +523,3 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         capture_thread_->join();
     event->accept();
 }
-
-            

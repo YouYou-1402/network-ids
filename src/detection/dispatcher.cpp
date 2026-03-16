@@ -1,6 +1,7 @@
 // src/detection/dispatcher.cpp
 #include "dispatcher.hpp"
 #include "../common/logger.hpp"
+#include "../common/metrics.hpp"
 
 // ── UI mode ───────────────────────────────────────────────────────────────────
 Dispatcher::Dispatcher(int num_workers, PacketRingBuffer& ring_buf)
@@ -53,18 +54,19 @@ void Dispatcher::stop() {
 void Dispatcher::dispatch(PacketInfo pkt) {
     if (!running_.load(std::memory_order_relaxed)) return;
 
-    // ── Push vào ring_buf_ TRƯỚC khi gửi vào worker ──────────────────────────
-    // ring_buf_.push() trả về index đã gán → gán lại vào pkt
-    // WorkerThread::processPacket() dùng pkt.index để updateRecord()
-    // UiBridge::onTimer() dùng ring_buf_.pollNew() để lấy packet lên UI
-    pkt.index = ring_buf_.push(pkt);   // ← THÊM DÒNG NÀY
+    // Hash trước để biết worker nào
+    const uint32_t worker_idx = hashToWorker(pkt);
 
-    const uint32_t idx = hashToWorker(pkt);
-    if (!workers_[idx]->enqueue(std::move(pkt)))
-        LOG_WARN("Worker " + std::to_string(idx)
+    // Push vào ring_buf → gán index (single push, đúng chỗ)
+    pkt.index = ring_buf_.push(pkt);
+
+    // Enqueue vào worker với pkt.index đã đúng
+    if (!workers_[worker_idx]->enqueue(std::move(pkt))) {
+        METRICS.queue_drops.fetch_add(1, std::memory_order_relaxed);
+        LOG_WARN("Worker " + std::to_string(worker_idx)
                  + " queue full, packet dropped");
+    }
 }
-
 // ─── cleanupFlows ─────────────────────────────────────────────────────────────
 void Dispatcher::cleanupFlows(double idle_timeout_sec) {
     const size_t removed = flow_table_.cleanup(idle_timeout_sec);

@@ -1,4 +1,3 @@
-// src/core/packet_info.hpp
 #pragma once
 #include <vector>
 #include <array>
@@ -25,15 +24,12 @@ namespace EtherType {
 
 struct PacketInfo {
     // ── Ring buffer / sequence ────────────────────────────────────────────────
-    // capture_seq: số thứ tự tăng dần từ pcapCallback (atomic counter)
-    // index:       vị trí trong ring buffer (= capture_seq % capacity)
-    // Hai field KHÁC NHAU — không được dùng lẫn lộn
     uint64_t  capture_seq = 0;
     uint64_t  index       = 0;
 
     // ── Timestamp ─────────────────────────────────────────────────────────────
     struct timeval timestamp {};
-    double         timestamp_d = 0.0;   // tv_sec + tv_usec/1e6, cache sẵn
+    double         timestamp_d = 0.0;
 
     // ── Frame ─────────────────────────────────────────────────────────────────
     uint32_t  cap_len  = 0;
@@ -43,17 +39,15 @@ struct PacketInfo {
     uint16_t  eth_type = 0;
 
     // ── Layer 3 ───────────────────────────────────────────────────────────────
-    // src_ip / dst_ip lưu network byte order (big-endian)
-    // Truyền thẳng vào inet_ntoa/inet_ntop — KHÔNG ntohl trước
     uint32_t  src_ip   = 0;
     uint32_t  dst_ip   = 0;
     std::array<uint8_t, 16> src_ip6 {};
     std::array<uint8_t, 16> dst_ip6 {};
 
-    uint8_t   protocol    = 0;
-    uint8_t   ttl         = 0;
-    uint8_t   hop_limit   = 0;
-    bool      is_ipv6     = false;
+    uint8_t   protocol     = 0;
+    uint8_t   ttl          = 0;
+    uint8_t   hop_limit    = 0;
+    bool      is_ipv6      = false;
     bool      is_encrypted = false;
 
     // ── Layer 4 ───────────────────────────────────────────────────────────────
@@ -72,8 +66,18 @@ struct PacketInfo {
     std::string threat_type;
     std::string action;
 
-    // ── Storage ───────────────────────────────────────────────────────────────
-    int64_t file_offset = -1;
+    // ── Disk location (lazy-load) ─────────────────────────────────────────────
+    // file_offset: byte offset của packet data trong file pcap
+    //              (sau pcap packet header 16 bytes)
+    // source_file: đường dẫn file pcap đang ghi / đã load
+    // Hai field này là "địa chỉ" để PcapReader::loadRawBytes() đọc đúng packet
+    int64_t     file_offset = -1;
+    std::string source_file;
+
+    // ── Raw bytes (nullptr = chưa load) ──────────────────────────────────────
+    // Live capture  : nullptr — không copy vào ring_buf, lazy-load từ disk
+    // Detection     : populated tạm thời trong callback, drop sau khi xử lý
+    // Offline load  : populated khi user click row
     std::shared_ptr<std::vector<uint8_t>> raw_data;
 
     // ── Helpers ───────────────────────────────────────────────────────────────

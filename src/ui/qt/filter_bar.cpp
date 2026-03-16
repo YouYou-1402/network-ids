@@ -24,33 +24,37 @@ const QStringList FilterBar::SUGGESTIONS = {
 
 // ─── Stylesheet constants ─────────────────────────────────────────────────────
 static const char* STYLE_INPUT_NORMAL =
-    "QLineEdit { background:#1a1a2e; color:#cccccc; "
-    "border:2px solid #444; border-radius:4px; "
-    "padding:4px 8px; font-family:monospace; font-size:12px; }"
-    "QLineEdit:focus { border-color:#4488ff; }";
+    "QLineEdit { background: #1a1a2e; color: #cccccc; "
+    "border: 1px solid #444; border-radius: 3px; "
+    "padding: 1px 6px; font-family: monospace; font-size: 11px; }"
+    "QLineEdit:focus { border-color: #4488ff; }";
 
 static const char* STYLE_INPUT_OK =
-    "QLineEdit { background:#1a2a1a; color:#cccccc; "
-    "border:2px solid #44aa44; border-radius:4px; "
-    "padding:4px 8px; font-family:monospace; font-size:12px; }";
+    "QLineEdit { background: #1a2a1a; color: #cccccc; "
+    "border: 1px solid #44aa44; border-radius: 3px; "
+    "padding: 1px 6px; font-family: monospace; font-size: 11px; }";
 
 static const char* STYLE_INPUT_ERR =
-    "QLineEdit { background:#2a1a1a; color:#cccccc; "
-    "border:2px solid #aa4444; border-radius:4px; "
-    "padding:4px 8px; font-family:monospace; font-size:12px; }";
+    "QLineEdit { background: #2a1a1a; color: #cccccc; "
+    "border: 1px solid #aa4444; border-radius: 3px; "
+    "padding: 1px 6px; font-family: monospace; font-size: 11px; }";
 
 // ─── Constructor ──────────────────────────────────────────────────────────────
 FilterBar::FilterBar(QWidget* parent)
     : QWidget(parent)
 {
+    setFixedHeight(28);
+
     auto* layout = new QHBoxLayout(this);
-    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setContentsMargins(4, 2, 4, 2);
     layout->setSpacing(4);
 
-    auto* icon_lbl = new QLabel("\U0001F50D", this);
-    icon_lbl->setFixedWidth(20);
+    auto* icon_lbl = new QLabel("🔍", this);
+    icon_lbl->setFixedSize(18, 18);
+    icon_lbl->setStyleSheet("font-size: 11px;");
 
     input_ = new QLineEdit(this);
+    input_->setFixedHeight(22);
     input_->setPlaceholderText(
         "Display filter  "
         "(e.g.  tcp  |  ip.src == 10.0.0.1  |  tcp.flags.syn == 1  |  threat == ddos)");
@@ -62,25 +66,25 @@ FilterBar::FilterBar(QWidget* parent)
     input_->setCompleter(completer_);
 
     apply_btn_ = new QPushButton("Apply", this);
-    apply_btn_->setFixedWidth(60);
+    apply_btn_->setFixedSize(52, 22);
     apply_btn_->setStyleSheet(
-        "QPushButton { background:#2a3a5a; color:#88aaff; "
-        "border:1px solid #446; border-radius:4px; padding:4px; }"
-        "QPushButton:hover { background:#3a4a6a; }");
+        "QPushButton { background: #2a3a5a; color: #88aaff; "
+        "border: 1px solid #446; border-radius: 3px; font-size: 11px; }"
+        "QPushButton:hover { background: #3a4a6a; }");
 
-    clear_btn_ = new QPushButton("\u2715", this);
-    clear_btn_->setFixedWidth(28);
+    clear_btn_ = new QPushButton("✕", this);
+    clear_btn_->setFixedSize(22, 22);
     clear_btn_->setStyleSheet(
-        "QPushButton { background:#3a2a2a; color:#ff8888; "
-        "border:1px solid #644; border-radius:4px; padding:4px; }"
-        "QPushButton:hover { background:#4a3a3a; }");
+        "QPushButton { background: #3a2a2a; color: #ff8888; "
+        "border: 1px solid #644; border-radius: 3px; font-size: 11px; }"
+        "QPushButton:hover { background: #4a3a3a; }");
 
     status_lbl_ = new QLabel("", this);
-    status_lbl_->setFixedWidth(160);
-    status_lbl_->setStyleSheet("font-size:10px;");
+    status_lbl_->setFixedWidth(80);
+    status_lbl_->setStyleSheet("font-size: 9px;");
 
     layout->addWidget(icon_lbl);
-    layout->addWidget(input_);
+    layout->addWidget(input_, 1);
     layout->addWidget(apply_btn_);
     layout->addWidget(clear_btn_);
     layout->addWidget(status_lbl_);
@@ -161,12 +165,12 @@ void FilterBar::onDebounceTimeout() {
     const DisplayFilter test = parseFilter(text);
     if (test.valid) {
         input_->setStyleSheet(STYLE_INPUT_OK);
-        status_lbl_->setText("  syntax OK");
-        status_lbl_->setStyleSheet("color:#44aa44; font-size:10px;");
+        status_lbl_->setText("  ✔ OK");
+        status_lbl_->setStyleSheet("color: #44aa44; font-size: 9px;");
     } else {
         input_->setStyleSheet(STYLE_INPUT_ERR);
         status_lbl_->setText("  " + QString::fromStdString(test.error_msg));
-        status_lbl_->setStyleSheet("color:#ff6666; font-size:10px;");
+        status_lbl_->setStyleSheet("color: #ff6666; font-size: 9px;");
     }
 }
 
@@ -187,17 +191,15 @@ void FilterBar::setValidStyle(bool valid) {
 
 void FilterBar::setStatusOk(const QString& msg) {
     status_lbl_->setText(msg);
-    status_lbl_->setStyleSheet("color:#44ff88; font-size:10px;");
+    status_lbl_->setStyleSheet("color: #44ff88; font-size: 9px;");
 }
 
 void FilterBar::setStatusErr(const QString& msg) {
-    status_lbl_->setText("\u274C " + msg);
-    status_lbl_->setStyleSheet("color:#ff4444; font-size:10px;");
+    status_lbl_->setText("✕ " + msg);
+    status_lbl_->setStyleSheet("color: #ff4444; font-size: 9px;");
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// parseFilter
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── parseFilter ─────────────────────────────────────────────────────────────
 DisplayFilter FilterBar::parseFilter(const QString& expr) const {
     DisplayFilter f;
     f.raw_expr = expr.toStdString();
@@ -205,7 +207,6 @@ DisplayFilter FilterBar::parseFilter(const QString& expr) const {
 
     const QString e = expr.trimmed().toLower();
 
-    // Protocol-only shortcuts
     if (e == "tcp")   { f.proto_filter = DisplayFilter::Proto::TCP;  return f; }
     if (e == "udp")   { f.proto_filter = DisplayFilter::Proto::UDP;  return f; }
     if (e == "icmp")  { f.proto_filter = DisplayFilter::Proto::ICMP; return f; }
@@ -214,7 +215,6 @@ DisplayFilter FilterBar::parseFilter(const QString& expr) const {
     if (e == "dns")   { f.proto_filter = DisplayFilter::Proto::DNS;  return f; }
     if (e == "arp")   { f.proto_filter = DisplayFilter::Proto::ARP;  return f; }
 
-    // Compound filter — split by "&&" hoặc " and "
     QStringList tokens;
     if (e.contains("&&"))
         tokens = e.split("&&");
@@ -239,12 +239,9 @@ DisplayFilter FilterBar::parseFilter(const QString& expr) const {
     return f;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// parseCondition
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── parseCondition ──────────────────────────────────────────────────────────
 bool FilterBar::parseCondition(const QString&            token,
                                  DisplayFilter::Condition& cond) const {
-    // tcp.flags.* shortcut
     if (token.startsWith("tcp.flags.")) {
         cond.field = DisplayFilter::Field::TCP_FLAGS;
         cond.op    = DisplayFilter::Op::EQ;
@@ -263,7 +260,6 @@ bool FilterBar::parseCondition(const QString&            token,
         return true;
     }
 
-    // Operator table — thứ tự quan trọng (>= trước >)
     struct OpToken { QString str; DisplayFilter::Op op; };
     static const std::vector<OpToken> OPS = {
         {"!=",       DisplayFilter::Op::NEQ},
@@ -309,7 +305,3 @@ bool FilterBar::parseCondition(const QString&            token,
 
     return false;
 }
-
-// ─── NOTE ─────────────────────────────────────────────────────────────────────
-// DisplayFilter::matches() đã được inline trong filter_bar.hpp
-// → KHÔNG cần implement lại ở đây

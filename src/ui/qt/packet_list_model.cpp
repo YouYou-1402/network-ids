@@ -74,33 +74,28 @@ void PacketListModel::appendRecords(const std::vector<PacketInfo>& batch) {
     incoming.reserve(batch.size());
 
     for (const auto& pkt : batch) {
-        if (base_ts_ < 0.0)
-            base_ts_ = pkt.timestamp_d;
+        if (base_ts_ < 0.0) base_ts_ = pkt.timestamp_d;
         if (!matchRecord(pkt, current_filter_)) continue;
         incoming.push_back(buildRowCache(pkt));
     }
     if (incoming.empty()) return;
 
-    // Nếu incoming đã vượt MAX_DISPLAY_ROWS, cắt bớt phần đầu của incoming
     if (static_cast<int>(incoming.size()) > MAX_DISPLAY_ROWS) {
         const size_t keep_from = incoming.size()
                                - static_cast<size_t>(MAX_DISPLAY_ROWS);
         incoming.erase(incoming.begin(),
                        incoming.begin() + static_cast<ptrdiff_t>(keep_from));
         if (!row_cache_.empty()) {
-            beginRemoveRows({}, 0,
-                            static_cast<int>(row_cache_.size()) - 1);
-            row_cache_.clear();
-            pkt_indices_.clear();
+            beginRemoveRows({}, 0, static_cast<int>(row_cache_.size()) - 1);
+            row_cache_.clear(); pkt_indices_.clear();
             endRemoveRows();
         }
     } else {
         const int total_after = static_cast<int>(row_cache_.size())
                               + static_cast<int>(incoming.size());
         if (total_after > MAX_DISPLAY_ROWS) {
-            const int drop = std::min(
-                total_after - MAX_DISPLAY_ROWS,
-                static_cast<int>(row_cache_.size()));
+            const int drop = std::min(total_after - MAX_DISPLAY_ROWS,
+                                      static_cast<int>(row_cache_.size()));
             if (drop > 0) {
                 beginRemoveRows({}, 0, drop - 1);
                 for (int i = 0; i < drop; ++i) {
@@ -166,67 +161,61 @@ void PacketListModel::clear() {
 bool PacketListModel::getRecord(int row, PacketInfo& out) const {
     if (row < 0 || row >= static_cast<int>(row_cache_.size()))
         return false;
-
-    const RowCache& c = row_cache_[static_cast<size_t>(row)];
-
-    // Ưu tiên 1: dùng cached_pkt — raw_data luôn sống vì shared_ptr
-    if (c.cached_pkt) {
-        out = *c.cached_pkt;
-        return true;
-    }
-
-    // Ưu tiên 2: fallback về ring buffer
-    // (trường hợp cache bị clear hoặc packet rất cũ)
-    return ring_buf_.withRecord(c.pkt_idx, [&out](const PacketInfo& pkt) {
-        out = pkt;
-    });
+    out = row_cache_[static_cast<size_t>(row)].meta;
+    return true;
 }
 
+void PacketListModel::updateRawData(
+    int row,
+    std::shared_ptr<std::vector<uint8_t>> raw_data)
+{
+    if (row < 0 || row >= static_cast<int>(row_cache_.size())) return;
+    row_cache_[static_cast<size_t>(row)].meta.raw_data = std::move(raw_data);
+}
 // ─── ipv4Str ──────────────────────────────────────────────────────────────────
 QString PacketListModel::ipv4Str(uint32_t ip_net) {
-    char buf[INET_ADDRSTRLEN] {};
-    struct in_addr addr {};
-    addr.s_addr = ip_net;                         
-    if (inet_ntop(AF_INET, &addr, buf, sizeof(buf)))
-        return QString::fromLatin1(buf);
-    return QStringLiteral("0.0.0.0");
+    if (ip_net == 0) return {};
+    char buf[INET_ADDRSTRLEN]{};
+    struct in_addr a{};
+    a.s_addr = ip_net;
+    inet_ntop(AF_INET, &a, buf, sizeof(buf));
+    return QString::fromLatin1(buf);
 }
+
 // ─── ipv6Str ──────────────────────────────────────────────────────────────────
 QString PacketListModel::ipv6Str(const std::array<uint8_t, 16>& ip6) {
-    char buf[INET6_ADDRSTRLEN] {};
-    if (inet_ntop(AF_INET6, ip6.data(), buf, sizeof(buf)))
-        return QString::fromLatin1(buf);
-    return QStringLiteral("::");
+    const bool all_zero = std::all_of(ip6.begin(), ip6.end(),
+                                       [](uint8_t b){ return b == 0; });
+    if (all_zero) return {};
+    char buf[INET6_ADDRSTRLEN]{};
+    inet_ntop(AF_INET6, ip6.data(), buf, sizeof(buf));
+    return QString::fromLatin1(buf);
 }
 
 // ─── addrStr ──────────────────────────────────────────────────────────────────
 QString PacketListModel::addrStr(const PacketInfo& pkt, bool is_src) {
     QString ip;
-    uint16_t port = 0;
 
     if (pkt.is_ipv6) {
-        // IPv6
-        ip   = ipv6Str(is_src ? pkt.src_ip6 : pkt.dst_ip6);
-        port = is_src ? pkt.src_port : pkt.dst_port;
-    }
-    else if (pkt.eth_type == EtherType::IPv4) {
-        // IPv4 — src_ip/dst_ip đang là network byte order, inet_ntop xử lý đúng
-        ip   = ipv4Str(is_src ? pkt.src_ip : pkt.dst_ip);
-        port = is_src ? pkt.src_port : pkt.dst_port;
-    }
-    else if (pkt.eth_type == EtherType::ARP) {
-        return QStringLiteral("ARP");
-    }
-    else {
-        return QString("0x%1").arg(pkt.eth_type, 4, 16, QChar('0')).toUpper();
+        ip = ipv6Str(is_src ? pkt.src_ip6 : pkt.dst_ip6);
+    } else if (pkt.eth_type == EtherType::IPv4) {
+        ip = ipv4Str(is_src ? pkt.src_ip : pkt.dst_ip);
+    } else {
+        switch (pkt.eth_type) {
+            case EtherType::ARP:  return "ARP";
+            case EtherType::VLAN: return "VLAN";
+            default:
+                if (pkt.eth_type != 0)
+                    return QString("0x%1").arg(pkt.eth_type, 4, 16, QChar('0'));
+                return {};
+        }
     }
 
-    // Append port nếu có
-    if (port != 0) {
-        if (pkt.is_ipv6)
-            return QString("[%1]:%2").arg(ip).arg(port);   // IPv6: [addr]:port
-        return QString("%1:%2").arg(ip).arg(port);
-    }
+    if (ip.isEmpty()) return {};
+
+    const uint16_t port = is_src ? pkt.src_port : pkt.dst_port;
+    if (port != 0)
+        ip += ':' + QString::number(port);
     return ip;
 }
 
@@ -249,13 +238,12 @@ PacketListModel::buildRowCache(const PacketInfo& pkt) const {
     const double base = (base_ts_ >= 0.0) ? base_ts_ : pkt.timestamp_d;
     c.time_str = QString::number(pkt.timestamp_d - base, 'f', 6);
 
-    // FIX: cache bản copy PacketInfo — raw_data (shared_ptr) được giữ sống
-    // ngay cả sau khi ring buffer gọi raw_data.reset() cho slot đó
-    c.cached_pkt = std::make_shared<PacketInfo>(pkt);
+    // Lưu metadata — raw_data bị drop ở đây (reset nếu có)
+    c.meta          = pkt;
+    c.meta.raw_data.reset();   // ← không giữ raw bytes trong model
 
     return c;
 }
-
 // ─── matchRecord ──────────────────────────────────────────────────────────────
 bool PacketListModel::matchRecord(const PacketInfo& pkt,
                                    const DisplayFilter& f) const {

@@ -10,21 +10,28 @@ IpsControlWidget::IpsControlWidget(QWidget* parent)
 // ─── setupUI ──────────────────────────────────────────────────────────────────
 void IpsControlWidget::setupUI() {
     auto* root = new QVBoxLayout(this);
-    root->setSpacing(8);
-    root->setContentsMargins(8, 8, 8, 8);
+    root->setSpacing(6);
+    root->setContentsMargins(8, 6, 8, 8);
 
-    // ── Mode badge ────────────────────────────────────────────────────────────
-    lbl_mode_badge_ = new QLabel("🛡️  IPS MODE", this);
+    // ── Header + Mode badge ───────────────────────────────────────────────────
+    lbl_mode_badge_ = new QLabel("🛡️  IPS — Full Protection", this);
     lbl_mode_badge_->setAlignment(Qt::AlignCenter);
-    lbl_mode_badge_->setFixedHeight(36);
+    lbl_mode_badge_->setFixedHeight(30);
     lbl_mode_badge_->setStyleSheet(
-        "QLabel { background: #1a3a1a; color: #00ff88; "
-        "font-size: 14px; font-weight: bold; "
-        "border: 1px solid #00aa55; border-radius: 6px; "
-        "padding: 4px; }");
+        "QLabel { background: #0d2a0d; color: #00ff88; "
+        "font-size: 11px; font-weight: bold; "
+        "border: 1px solid #1a5a1a; border-radius: 5px; "
+        "padding: 2px 4px; }");
     root->addWidget(lbl_mode_badge_);
 
-    // ── Helper: tạo engine row ────────────────────────────────────────────────
+    // ── Helper: engine row compact ────────────────────────────────────────────
+    const QString group_style =
+        "QGroupBox { color: #8888aa; font-size: 10px; font-weight: bold; "
+        "border: 1px solid #2a2a3e; border-radius: 5px; "
+        "margin-top: 6px; padding-top: 2px; background: #0d0d1a; }"
+        "QGroupBox::title { subcontrol-origin: margin; "
+        "left: 8px; padding: 0 4px; }";
+
     auto makeEngineRow = [&](const QString& title,
                               const QString& desc,
                               QLabel*&       status_lbl,
@@ -32,121 +39,87 @@ void IpsControlWidget::setupUI() {
                               QLabel*&       desc_lbl) -> QGroupBox*
     {
         auto* box    = new QGroupBox(title, this);
+        box->setStyleSheet(group_style);
         auto* layout = new QVBoxLayout(box);
-        layout->setSpacing(6);
-        layout->setContentsMargins(10, 12, 10, 10);
+        layout->setSpacing(4);
+        layout->setContentsMargins(8, 10, 8, 8);
 
-        // Row 1: status + toggle button
-        auto* row1    = new QWidget(box);
-        auto* row1_ly = new QHBoxLayout(row1);
-        row1_ly->setContentsMargins(0, 0, 0, 0);
+        // Row: status dot + label + toggle button
+        auto* row    = new QWidget(box);
+        auto* row_ly = new QHBoxLayout(row);
+        row_ly->setContentsMargins(0, 0, 0, 0);
+        row_ly->setSpacing(6);
 
-        status_lbl = new QLabel("● ACTIVE", row1);
+        status_lbl = new QLabel("● ACTIVE", row);
         status_lbl->setStyleSheet(
-            "color: #00ff88; font-weight: bold; font-size: 12px;");
+            "color: #00ff88; font-weight: bold; font-size: 11px;");
 
-        toggle_btn = new QPushButton("Disable", row1);
-        toggle_btn->setFixedWidth(80);
-        toggle_btn->setFixedHeight(26);
+        toggle_btn = new QPushButton("Disable", row);
+        toggle_btn->setFixedSize(64, 22);
         toggle_btn->setStyleSheet(
-            "QPushButton { background: #3a1a1a; color: #ff6666; "
-            "border: 1px solid #664444; border-radius: 4px; "
-            "font-size: 11px; font-weight: bold; }"
-            "QPushButton:hover { background: #4a2a2a; }");
+            "QPushButton { background: #2a1010; color: #ff6666; "
+            "border: 1px solid #553333; border-radius: 3px; "
+            "font-size: 10px; font-weight: bold; }"
+            "QPushButton:hover { background: #3a1818; }");
 
-        row1_ly->addWidget(status_lbl);
-        row1_ly->addStretch();
-        row1_ly->addWidget(toggle_btn);
-        layout->addWidget(row1);
+        row_ly->addWidget(status_lbl);
+        row_ly->addStretch();
+        row_ly->addWidget(toggle_btn);
+        layout->addWidget(row);
 
-        // Row 2: description
+        // Description
         desc_lbl = new QLabel(desc, box);
         desc_lbl->setWordWrap(true);
         desc_lbl->setStyleSheet(
-            "color: #666688; font-size: 10px; "
-            "padding: 2px 0;");
+            "color: #555577; font-size: 9px; padding: 0;");
         layout->addWidget(desc_lbl);
 
-        box->setStyleSheet(
-            "QGroupBox { color: #aaaacc; font-weight: bold; "
-            "border: 1px solid #444; border-radius: 6px; "
-            "margin-top: 8px; padding-top: 4px; }"
-            "QGroupBox::title { subcontrol-origin: margin; "
-            "left: 8px; padding: 0 4px; }");
         return box;
     };
 
     // ── Detection Engine ──────────────────────────────────────────────────────
     auto* det_box = makeEngineRow(
-        "🔍 Detection Engine (Layer 1)",
-        "Signature · Protocol Anomaly · Behavioral\n"
-        "Phát hiện: DDoS · Slow DDoS · Port Scan",
-        lbl_det_status_,
-        btn_det_toggle_,
-        lbl_det_desc_);
+        "🔍 Detection (L1)",
+        "Signature · Protocol Anomaly · Behavioral",
+        lbl_det_status_, btn_det_toggle_, lbl_det_desc_);
     root->addWidget(det_box);
 
     // ── ML Engine ─────────────────────────────────────────────────────────────
     auto* ml_box = makeEngineRow(
-        "🤖 ML Engine (Layer 2)",
-        "Isolation Forest · Autoencoder\n"
-        "Phân tích bất thường dựa trên AI",
-        lbl_ml_status_,
-        btn_ml_toggle_,
-        lbl_ml_desc_);
+        "🤖 ML Engine (L2)",
+        "Isolation Forest · Autoencoder",
+        lbl_ml_status_, btn_ml_toggle_, lbl_ml_desc_);
     root->addWidget(ml_box);
 
-    // ── Separator ─────────────────────────────────────────────────────────────
-    auto* sep = new QFrame(this);
-    sep->setFrameShape(QFrame::HLine);
-    sep->setStyleSheet("color: #333;");
-    root->addWidget(sep);
+    // ── Quick Actions ─────────────────────────────────────────────────────────
+    auto* qa_group  = new QGroupBox("⚡ Quick Actions", this);
+    qa_group->setStyleSheet(group_style);
+    auto* qa_layout = new QHBoxLayout(qa_group);
+    qa_layout->setSpacing(6);
+    qa_layout->setContentsMargins(8, 10, 8, 8);
 
-    // ── Quick actions ─────────────────────────────────────────────────────────
-    auto* quick_group  = new QGroupBox("⚡ Quick Actions", this);
-    auto* quick_layout = new QVBoxLayout(quick_group);
-    quick_layout->setSpacing(6);
-    quick_layout->setContentsMargins(10, 12, 10, 10);
+    auto* btn_enable_all = new QPushButton("✅ Enable All", qa_group);
+    btn_enable_all->setFixedHeight(24);
+    btn_enable_all->setStyleSheet(
+        "QPushButton { background: #0d2a0d; color: #00ff88; "
+        "border: 1px solid #1a5a1a; border-radius: 3px; font-size: 10px; }"
+        "QPushButton:hover { background: #1a3a1a; }");
 
-    auto makeQuickBtn = [&](const QString& label,
-                             const QString& style) -> QPushButton* {
-        auto* btn = new QPushButton(label, quick_group);
-        btn->setFixedHeight(28);
-        btn->setStyleSheet(style);
-        return btn;
-    };
+    auto* btn_disable_all = new QPushButton("⛔ Disable All", qa_group);
+    btn_disable_all->setFixedHeight(24);
+    btn_disable_all->setStyleSheet(
+        "QPushButton { background: #2a0d0d; color: #ff4444; "
+        "border: 1px solid #5a1a1a; border-radius: 3px; font-size: 10px; }"
+        "QPushButton:hover { background: #3a1a1a; }");
 
-    // Enable All
-    auto* btn_enable_all = makeQuickBtn(
-        "✅  Enable All Engines",
-        "QPushButton { background: #1a3a1a; color: #00ff88; "
-        "border: 1px solid #336633; border-radius: 4px; "
-        "font-size: 11px; font-weight: bold; }"
-        "QPushButton:hover { background: #2a4a2a; }");
-
-    // Disable All
-    auto* btn_disable_all = makeQuickBtn(
-        "⛔  Disable All Engines",
-        "QPushButton { background: #3a1a1a; color: #ff4444; "
-        "border: 1px solid #663333; border-radius: 4px; "
-        "font-size: 11px; font-weight: bold; }"
-        "QPushButton:hover { background: #4a2a2a; }");
-
-    quick_layout->addWidget(btn_enable_all);
-    quick_layout->addWidget(btn_disable_all);
-    quick_group->setStyleSheet(
-        "QGroupBox { color: #aaaacc; font-weight: bold; "
-        "border: 1px solid #444; border-radius: 6px; "
-        "margin-top: 8px; padding-top: 4px; }"
-        "QGroupBox::title { subcontrol-origin: margin; "
-        "left: 8px; padding: 0 4px; }");
-    root->addWidget(quick_group);
-    root->addStretch();
+    qa_layout->addWidget(btn_enable_all);
+    qa_layout->addWidget(btn_disable_all);
+    root->addWidget(qa_group);
 
     // ── Connections ───────────────────────────────────────────────────────────
-    connect(btn_det_toggle_,  &QPushButton::clicked,
+    connect(btn_det_toggle_, &QPushButton::clicked,
             this, &IpsControlWidget::onDetectionBtnClicked);
-    connect(btn_ml_toggle_,   &QPushButton::clicked,
+    connect(btn_ml_toggle_,  &QPushButton::clicked,
             this, &IpsControlWidget::onMlBtnClicked);
 
     connect(btn_enable_all, &QPushButton::clicked, this, [this]() {
@@ -158,7 +131,6 @@ void IpsControlWidget::setupUI() {
         if (ml_enabled_)   onMlBtnClicked();
     });
 }
-
 // ─── Slots từ button ──────────────────────────────────────────────────────────
 void IpsControlWidget::onDetectionBtnClicked() {
     emit toggleDetection(!det_enabled_);

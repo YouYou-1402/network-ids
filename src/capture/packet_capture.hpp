@@ -1,4 +1,3 @@
-// src/capture/packet_capture.hpp
 #pragma once
 #include "../core/packet_info.hpp"
 #include <pcap.h>
@@ -6,9 +5,12 @@
 #include <string>
 #include <atomic>
 #include <thread>
-#include <chrono>
 
-using PacketCallback = std::function<void(PacketInfo)>;
+using RawPacketCallback = std::function<void(PacketInfo        pkt,
+                                              const uint8_t*    raw_bytes,
+                                              uint32_t          raw_len)>;
+
+using PacketCallback = RawPacketCallback;
 
 class PacketCapture {
 public:
@@ -23,7 +25,7 @@ public:
     bool openOffline(const std::string& pcap_file,
                      const std::string& bpf_filter = "");
 
-    void startCapture(PacketCallback callback);
+    void startCapture(RawPacketCallback callback);
     void stopCapture();
     void waitForStop();
     void logStats() const;
@@ -31,25 +33,36 @@ public:
     bool isOpen()    const { return handle_ != nullptr; }
     bool isRunning() const { return running_.load(); }
 
-    // Parse in-place từ raw_data — gọi sau pcapCallback
-    // Public vì WorkerThread (detection) cũng cần gọi
-    static void parsePacket   (PacketInfo& pkt);
+    // ── Parse API (public — WorkerThread dùng) ────────────────────────────────
+
+    // Overload 1: WorkerThread — pkt đã có raw_data (copy từ callback)
+    static void parsePacket(PacketInfo& pkt) {
+        if (!pkt.raw_data || pkt.raw_data->empty()) return;
+        parsePacket(pkt,
+                    pkt.raw_data->data(),
+                    static_cast<uint32_t>(pkt.raw_data->size()));
+    }
+
+    // Overload 2: pcapCallback — raw pointer tạm, không copy
+    static void parsePacket(PacketInfo&    pkt,
+                             const uint8_t* data,
+                             uint32_t       cap_len);
 
 private:
     static void pcapCallback  (u_char*                   user,
                                 const struct pcap_pkthdr* header,
                                 const u_char*             packet);
 
-    static void parseTransport(PacketInfo&   pkt,
-                                const u_char* ptr,
-                                size_t        remaining,
-                                const u_char* frame_start);
+    static void parseTransport(PacketInfo&    pkt,
+                                const uint8_t* ptr,
+                                size_t         remaining,
+                                const uint8_t* frame_start);
 
     bool applyFilter(const std::string& bpf_filter);
     void captureLoop();
 
     pcap_t*           handle_  = nullptr;
-    PacketCallback    callback_;
+    RawPacketCallback callback_;
     std::atomic<bool> running_ {false};
     std::thread       capture_thread_;
 };

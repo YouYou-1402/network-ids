@@ -12,45 +12,60 @@ MetricsWidget::MetricsWidget(QWidget* parent)
 
 void MetricsWidget::setupUI() {
     auto* root_layout = new QVBoxLayout(this);
-    root_layout->setSpacing(8);
-    root_layout->setContentsMargins(8, 8, 8, 8);
+    root_layout->setSpacing(6);
+    root_layout->setContentsMargins(8, 8, 8, 6);
 
-    auto* pkt_group  = new QGroupBox("📦 Packet Counters", this);
-    auto* pkt_layout = new QVBoxLayout(pkt_group);
+    // ── Header ────────────────────────────────────────────────────────────────
+    auto* header = new QLabel("📊  Stats", this);
+    header->setStyleSheet(
+        "color: #aaaacc; font-weight: bold; font-size: 12px; "
+        "padding: 2px 0 4px 0;");
+    root_layout->addWidget(header);
 
-    auto makeLCD = [&](const QString& label,
-                       QLCDNumber*&   lcd,
-                       const QString& color) {
-        auto* row    = new QWidget(pkt_group);
-        auto* layout = new QHBoxLayout(row);
-        layout->setContentsMargins(0, 0, 0, 0);
+    // ── Packet counters — dạng grid 2 cột ────────────────────────────────────
+    auto* pkt_group  = new QGroupBox("Packets", this);
+    auto* pkt_layout = new QGridLayout(pkt_group);
+    pkt_layout->setSpacing(4);
+    pkt_layout->setContentsMargins(8, 10, 8, 8);
 
-        auto* lbl = new QLabel(label, row);
-        lbl->setFixedWidth(80);
-        lbl->setStyleSheet("color: #aaaaaa; font-size: 11px;");
+    auto makeCounter = [&](const QString& label,
+                            QLCDNumber*&   lcd,
+                            const QString& color,
+                            int row, int col) {
+        auto* cell   = new QWidget(pkt_group);
+        auto* layout = new QVBoxLayout(cell);
+        layout->setSpacing(2);
+        layout->setContentsMargins(2, 2, 2, 2);
 
-        lcd = new QLCDNumber(row);
-        lcd->setDigitCount(10);
+        auto* lbl = new QLabel(label, cell);
+        lbl->setAlignment(Qt::AlignCenter);
+        lbl->setStyleSheet("color: #888888; font-size: 9px;");
+
+        lcd = new QLCDNumber(cell);
+        lcd->setDigitCount(8);
         lcd->setSegmentStyle(QLCDNumber::Flat);
-        lcd->setFixedHeight(32);
+        lcd->setFixedHeight(28);
         lcd->setStyleSheet(
-            "QLCDNumber { background: #1a1a2e; color: " + color + "; "
-            "border: 1px solid #333; border-radius: 4px; }");
+            "QLCDNumber { background: #12121e; color: " + color + "; "
+            "border: 1px solid #2a2a3e; border-radius: 3px; }");
 
         layout->addWidget(lbl);
         layout->addWidget(lcd);
-        pkt_layout->addWidget(row);
+        pkt_layout->addWidget(cell, row, col);
     };
 
-    makeLCD("Captured",  lcd_captured_, "#00ff88");
-    makeLCD("Passed",    lcd_passed_,   "#4488ff");
-    makeLCD("Dropped",   lcd_dropped_,  "#ff4444");
-    makeLCD("Alerted",   lcd_pps_,      "#ffaa00");
+    makeCounter("Captured", lcd_captured_, "#00ff88", 0, 0);
+    makeCounter("Passed",   lcd_passed_,   "#4488ff", 0, 1);
+    makeCounter("Dropped",  lcd_dropped_,  "#ff4444", 1, 0);
+    makeCounter("Alerted",  lcd_pps_,      "#ffaa00", 1, 1);
 
     root_layout->addWidget(pkt_group);
 
-    auto* threat_group  = new QGroupBox("🚨 Threat Breakdown", this);
+    // ── Threat breakdown — compact bars ───────────────────────────────────────
+    auto* threat_group  = new QGroupBox("Threats", this);
     auto* threat_layout = new QVBoxLayout(threat_group);
+    threat_layout->setSpacing(5);
+    threat_layout->setContentsMargins(8, 10, 8, 8);
 
     auto makeThreatRow = [&](const QString& name,
                               const QString& color,
@@ -58,32 +73,33 @@ void MetricsWidget::setupUI() {
                               QProgressBar*& bar) {
         auto* row    = new QWidget(threat_group);
         auto* layout = new QHBoxLayout(row);
-        layout->setContentsMargins(0, 2, 0, 2);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(6);
 
         auto* name_lbl = new QLabel(name, row);
-        name_lbl->setFixedWidth(75);
+        name_lbl->setFixedWidth(70);
         name_lbl->setStyleSheet(
-            "color: " + color + "; font-weight: bold; font-size: 11px;");
+            "color: " + color + "; font-size: 10px; font-weight: bold;");
 
         bar = new QProgressBar(row);
         bar->setRange(0, 100);
         bar->setValue(0);
-        bar->setFixedHeight(14);
+        bar->setFixedHeight(12);
         bar->setTextVisible(false);
         bar->setStyleSheet(
-            "QProgressBar { background: #1a1a2e; border: 1px solid #333; "
-            "border-radius: 3px; }"
+            "QProgressBar { background: #1a1a2e; border: 1px solid #2a2a3e; "
+            "border-radius: 2px; }"
             "QProgressBar::chunk { background: " + color + "; "
-            "border-radius: 2px; }");
+            "border-radius: 1px; }");
 
         count_lbl = new QLabel("0", row);
-        count_lbl->setFixedWidth(50);
+        count_lbl->setFixedWidth(36);
         count_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         count_lbl->setStyleSheet(
-            "color: " + color + "; font-size: 11px; font-weight: bold;");
+            "color: " + color + "; font-size: 10px; font-weight: bold;");
 
         layout->addWidget(name_lbl);
-        layout->addWidget(bar);
+        layout->addWidget(bar, 1);
         layout->addWidget(count_lbl);
         threat_layout->addWidget(row);
     };
@@ -94,42 +110,45 @@ void MetricsWidget::setupUI() {
 
     root_layout->addWidget(threat_group);
 
-    auto* sys_group  = new QGroupBox("⚙️ System", this);
-    auto* sys_layout = new QVBoxLayout(sys_group);
+    // ── System info — compact ─────────────────────────────────────────────────
+    auto* sys_group  = new QGroupBox("System", this);
+    auto* sys_layout = new QGridLayout(sys_group);
+    sys_layout->setSpacing(3);
+    sys_layout->setContentsMargins(8, 10, 8, 8);
 
     auto makeSysRow = [&](const QString& label,
-                           QLabel*&       value_lbl) {
-        auto* row    = new QWidget(sys_group);
-        auto* layout = new QHBoxLayout(row);
-        layout->setContentsMargins(0, 1, 0, 1);
+                           QLabel*&       value_lbl,
+                           int row) {
+        auto* lbl = new QLabel(label, sys_group);
+        lbl->setStyleSheet("color: #888888; font-size: 10px;");
 
-        auto* lbl = new QLabel(label, row);
-        lbl->setStyleSheet("color: #aaaaaa; font-size: 11px;");
-
-        value_lbl = new QLabel("0", row);
+        value_lbl = new QLabel("0", sys_group);
         value_lbl->setAlignment(Qt::AlignRight);
         value_lbl->setStyleSheet(
-            "color: #00ccff; font-size: 11px; font-weight: bold;");
+            "color: #00ccff; font-size: 10px; font-weight: bold;");
 
-        layout->addWidget(lbl);
-        layout->addWidget(value_lbl);
-        sys_layout->addWidget(row);
+        sys_layout->addWidget(lbl,       row, 0);
+        sys_layout->addWidget(value_lbl, row, 1);
     };
 
-    makeSysRow("Active Flows :", lbl_active_flows_);
-    makeSysRow("L2 Jobs      :", lbl_ml_jobs_);
-    makeSysRow("L2 Anomalies :", lbl_ml_anomalies_);
+    makeSysRow("Active Flows",  lbl_active_flows_, 0);
+    makeSysRow("L2 Jobs",       lbl_ml_jobs_,      1);
+    makeSysRow("L2 Anomalies",  lbl_ml_anomalies_, 2);
 
     root_layout->addWidget(sys_group);
-    root_layout->addStretch();
 
-    // Dark theme cho toàn widget
-    setStyleSheet("QGroupBox { color: #cccccc; font-weight: bold; "
-                  "border: 1px solid #444; border-radius: 6px; "
-                  "margin-top: 8px; padding-top: 4px; }"
-                  "QGroupBox::title { subcontrol-origin: margin; "
-                  "left: 8px; padding: 0 4px; }");
+    // ── GroupBox style chung ──────────────────────────────────────────────────
+    const QString group_style =
+        "QGroupBox { color: #8888aa; font-size: 10px; font-weight: bold; "
+        "border: 1px solid #2a2a3e; border-radius: 5px; "
+        "margin-top: 6px; padding-top: 2px; background: #0d0d1a; }"
+        "QGroupBox::title { subcontrol-origin: margin; "
+        "left: 8px; padding: 0 4px; }";
+    pkt_group->setStyleSheet(group_style);
+    threat_group->setStyleSheet(group_style);
+    sys_group->setStyleSheet(group_style);
 }
+
 
 void MetricsWidget::onMetricsUpdated(MetricsSnapshot s) {
     // Packet counters
