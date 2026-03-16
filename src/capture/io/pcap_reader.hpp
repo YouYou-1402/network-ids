@@ -5,6 +5,7 @@
 #include <functional>
 #include <atomic>
 #include <memory>
+#include <vector>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -32,44 +33,50 @@ public:
     PcapReader()  = default;
     ~PcapReader();
 
-    // ── Scan nhanh (chỉ metadata, không load raw bytes) ───────────────────────
+    // ── Scan nhanh vào ring_buf (LIVE mode / compat) ──────────────────────────
     bool scanFile(const std::string&  filepath,
                   PacketRingBuffer&   ring_buf,
                   ProgressCallback    on_progress = nullptr,
                   std::atomic<bool>*  cancel_flag = nullptr);
 
-    // ── Lazy load raw bytes cho một packet ────────────────────────────────────
-    // Dùng mmap đang mở nếu cùng file, fallback fread nếu khác
-    bool loadRawBytes(PacketInfo&        record,
-                      const std::string& filepath);
+    // ── Scan trực tiếp ra vector — OFFLINE mode, bỏ qua ring_buf overhead ─────
+    // Trả về vector metadata (raw_data = nullptr), mmap giữ mở cho lazy-load
+    // Nhanh hơn scanFile(ring_buf) vì không lock mutex từng packet
+    bool scanFileDirect(const std::string&             filepath,
+                        std::vector<PacketInfo>&        out_packets,
+                        ProgressCallback                on_progress = nullptr,
+                        std::atomic<bool>*              cancel_flag = nullptr);
 
-    // ── Lazy load raw bytes cho một range packets ─────────────────────────────
-    // Dùng khi user scroll đến vùng cần xem hex dump
-    bool loadRawRange(std::vector<PacketInfo>& records,
-                      const std::string&       filepath);
+    // ── Lazy load raw bytes ───────────────────────────────────────────────────
+    bool loadRawBytes (PacketInfo&              record,
+                       const std::string&       filepath);
+    bool loadRawRange (std::vector<PacketInfo>& records,
+                       const std::string&       filepath);
 
-    // Lấy stats (gọi sau scanFile)
     const PcapFileStats& stats() const { return stats_; }
 
-    // Hủy scan đang chạy
     void cancel() { if (cancel_flag_) *cancel_flag_ = true; }
 
 private:
-    // Pre-scan đếm tổng số packets (chỉ đọc headers, O(n) nhưng rất nhanh)
     uint64_t prescanPacketCount(const uint8_t* data,
                                 size_t         file_size,
                                 bool           swap_bytes) const;
 
-    // Parse L3/L4 headers từ raw bytes (IPv4 + IPv6)
     void parseHeaders(PacketInfo&    record,
                       const uint8_t* data,
                       uint32_t       len,
                       int            linktype);
 
+    // ── Shared scan core — dùng bởi cả scanFile và scanFileDirect ────────────
+    // on_packet: callback nhận từng PacketInfo đã parse (metadata only)
+    bool scanCore(const std::string&                        filepath,
+                  std::function<void(PacketInfo&&)>         on_packet,
+                  ProgressCallback                          on_progress,
+                  std::atomic<bool>*                        cancel_flag);
+
     PcapFileStats      stats_;
     std::atomic<bool>* cancel_flag_ = nullptr;
 
-    // mmap state — giữ mở để lazy-load raw bytes
     int    mmap_fd_   = -1;
     void*  mmap_ptr_  = MAP_FAILED;
     size_t mmap_size_ = 0;

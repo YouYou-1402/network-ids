@@ -1,3 +1,4 @@
+// src/ui/qt/packet_list_model.hpp
 #pragma once
 #include "filter_bar.hpp"
 #include "../../capture/io/packet_ring_buffer.hpp"
@@ -6,6 +7,7 @@
 #include <QAbstractTableModel>
 #include <QColor>
 #include <QString>
+#include <QTimer>
 #include <deque>
 #include <vector>
 
@@ -18,7 +20,10 @@ public:
         COL_COUNT
     };
 
-    static constexpr int MAX_DISPLAY_ROWS = 500'000;
+    static constexpr int    MAX_DISPLAY_ROWS  = 500'000;
+    // Số rows tối đa gom vào 1 beginInsertRows/endInsertRows
+    // Lớn hơn → ít Qt notify hơn → nhanh hơn khi load file lớn
+    static constexpr size_t BATCH_FLUSH_SIZE  = 5'000;
 
     explicit PacketListModel(PacketRingBuffer& ring_buf,
                               QObject*          parent = nullptr);
@@ -28,23 +33,24 @@ public:
     QVariant headerData (int section, Qt::Orientation, int role) const override;
     QVariant data       (const QModelIndex& index, int role)     const override;
 
+    // Thêm batch — gom vào pending_rows_, flush theo BATCH_FLUSH_SIZE
     void appendRecords(const std::vector<PacketInfo>& batch);
+
+    // Flush toàn bộ pending_rows_ vào row_cache_ ngay lập tức
+    // Gọi sau khi scanFileDirect() hoàn thành để hiển thị ngay
+    void flushPending();
+
     void applyFilter  (const DisplayFilter& filter);
     void clear        ();
 
-    // Trả về metadata packet tại row
-    // raw_data = nullptr — caller tự lazy-load nếu cần
-    bool getRecord(int row, PacketInfo& out) const;
-
-    // Cập nhật raw_data sau khi lazy-load (cache lại để click tiếp không đọc disk)
+    bool getRecord    (int row, PacketInfo& out) const;
     void updateRawData(int row,
                        std::shared_ptr<std::vector<uint8_t>> raw_data);
 
 private:
-    // RowCache chỉ lưu metadata — KHÔNG giữ raw_data
     struct RowCache {
         uint64_t frame_no   = 0;
-        uint64_t pkt_idx    = 0;   // ring_buf index (dùng cho applyFilter)
+        uint64_t pkt_idx    = 0;
         uint32_t orig_len   = 0;
         QColor   bg_color;
         QString  time_str;
@@ -53,9 +59,6 @@ private:
         QString  proto;
         QString  info;
         QString  threat;
-
-        // Metadata đầy đủ để getRecord() không cần đọc ring_buf
-        // raw_data = nullptr (lazy-load khi click)
         PacketInfo meta;
     };
 
@@ -73,9 +76,16 @@ private:
     static bool evalOp (DisplayFilter::Op op, uint16_t lhs, uint16_t rhs);
     static bool applyOp(DisplayFilter::Op op, bool eq);
 
+    // Gom rows chưa flush — tránh beginInsertRows per-packet
+    void insertBatch(std::vector<RowCache>& batch);
+
     PacketRingBuffer&    ring_buf_;
     std::deque<RowCache> row_cache_;
     std::deque<uint64_t> pkt_indices_;
+
+    // pending_rows_: buffer gom trước khi insertBatch()
+    std::vector<RowCache> pending_rows_;
+
     DisplayFilter        current_filter_;
     double               base_ts_ = -1.0;
 };

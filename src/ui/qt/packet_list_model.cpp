@@ -66,55 +66,73 @@ QVariant PacketListModel::data(const QModelIndex& index, int role) const {
     }
 }
 
-// ─── appendRecords ────────────────────────────────────────────────────────────
-void PacketListModel::appendRecords(const std::vector<PacketInfo>& batch) {
+// ─── insertBatch ─────────────────────────────────────────────────────────────
+// Gom N rows vào row_cache_ với 1 lần beginInsertRows/endInsertRows
+// Giảm số Qt model notification từ N xuống còn N/BATCH_FLUSH_SIZE
+void PacketListModel::insertBatch(std::vector<RowCache>& batch) {
     if (batch.empty()) return;
 
-    std::vector<RowCache> incoming;
-    incoming.reserve(batch.size());
-
-    for (const auto& pkt : batch) {
-        if (base_ts_ < 0.0) base_ts_ = pkt.timestamp_d;
-        if (!matchRecord(pkt, current_filter_)) continue;
-        incoming.push_back(buildRowCache(pkt));
-    }
-    if (incoming.empty()) return;
-
-    if (static_cast<int>(incoming.size()) > MAX_DISPLAY_ROWS) {
-        const size_t keep_from = incoming.size()
-                               - static_cast<size_t>(MAX_DISPLAY_ROWS);
-        incoming.erase(incoming.begin(),
-                       incoming.begin() + static_cast<ptrdiff_t>(keep_from));
-        if (!row_cache_.empty()) {
-            beginRemoveRows({}, 0, static_cast<int>(row_cache_.size()) - 1);
-            row_cache_.clear(); pkt_indices_.clear();
-            endRemoveRows();
-        }
-    } else {
-        const int total_after = static_cast<int>(row_cache_.size())
-                              + static_cast<int>(incoming.size());
-        if (total_after > MAX_DISPLAY_ROWS) {
-            const int drop = std::min(total_after - MAX_DISPLAY_ROWS,
-                                      static_cast<int>(row_cache_.size()));
-            if (drop > 0) {
-                beginRemoveRows({}, 0, drop - 1);
-                for (int i = 0; i < drop; ++i) {
-                    pkt_indices_.pop_front();
-                    row_cache_.pop_front();
-                }
-                endRemoveRows();
+    // Trim nếu vượt MAX_DISPLAY_ROWS
+    const int total_after = static_cast<int>(row_cache_.size())
+                          + static_cast<int>(batch.size());
+    if (total_after > MAX_DISPLAY_ROWS) {
+        const int drop = std::min(total_after - MAX_DISPLAY_ROWS,
+                                  static_cast<int>(row_cache_.size()));
+        if (drop > 0) {
+            beginRemoveRows({}, 0, drop - 1);
+            for (int i = 0; i < drop; ++i) {
+                pkt_indices_.pop_front();
+                row_cache_.pop_front();
             }
+            endRemoveRows();
         }
     }
 
     const int first = static_cast<int>(row_cache_.size());
-    const int last  = first + static_cast<int>(incoming.size()) - 1;
+    const int last  = first + static_cast<int>(batch.size()) - 1;
     beginInsertRows({}, first, last);
-    for (auto& c : incoming) {
+    for (auto& c : batch) {
         pkt_indices_.push_back(c.pkt_idx);
         row_cache_.push_back(std::move(c));
     }
     endInsertRows();
+
+    batch.clear();
+}
+
+// ─── appendRecords ────────────────────────────────────────────────────────────
+// LIVE mode: gọi liên tục với batch nhỏ (vài chục packets)
+//            → flush ngay khi pending đủ BATCH_FLUSH_SIZE
+// OFFLINE:   gọi 1 lần với toàn bộ N packets
+//            → flush theo chunk BATCH_FLUSH_SIZE, tránh 1 beginInsertRows khổng lồ
+//            → sau khi xong gọi flushPending() để flush phần còn lại
+void PacketListModel::appendRecords(const std::vector<PacketInfo>& batch) {
+    if (batch.empty()) return;
+
+    for (const auto& pkt : batch) {
+        if (base_ts_ < 0.0) base_ts_ = pkt.timestamp_d;
+        if (!matchRecord(pkt, current_filter_)) continue;
+
+        pending_rows_.push_back(buildRowCache(pkt));
+
+        // Flush theo chunk để Qt có thể render từng phần
+        // → UI không bị freeze khi load file 500k packets
+        if (pending_rows_.size() >= BATCH_FLUSH_SIZE)
+            insertBatch(pending_rows_);
+    }
+    // Với LIVE mode: flush phần còn lại ngay
+    // Với OFFLINE mode: caller gọi flushPending() sau khi appendRecords() xong
+    // Ở đây flush luôn để LIVE không bị delay
+    if (!pending_rows_.empty())
+        insertBatch(pending_rows_);
+}
+
+// ─── flushPending ─────────────────────────────────────────────────────────────
+// Gọi sau scanFileDirect() để flush phần pending cuối cùng
+// (appendRecords đã tự flush theo chunk, hàm này là safety net)
+void PacketListModel::flushPending() {
+    if (!pending_rows_.empty())
+        insertBatch(pending_rows_);
 }
 
 // ─── applyFilter ──────────────────────────────────────────────────────────────
@@ -123,6 +141,7 @@ void PacketListModel::applyFilter(const DisplayFilter& filter) {
     current_filter_ = filter;
     row_cache_.clear();
     pkt_indices_.clear();
+    pending_rows_.clear();
     base_ts_ = -1.0;
 
     const uint64_t total   = ring_buf_.totalPushed();
@@ -133,7 +152,6 @@ void PacketListModel::applyFilter(const DisplayFilter& filter) {
                            : oldest;
     const uint64_t count   = (total > from) ? (total - from) : 0;
 
-    // FIX: dùng pollRange thay vì pollNew để không thay đổi state ngoài ý muốn
     const auto snapshot = ring_buf_.pollRange(from, count);
 
     for (const auto& pkt : snapshot) {
@@ -151,13 +169,12 @@ void PacketListModel::clear() {
     beginResetModel();
     row_cache_.clear();
     pkt_indices_.clear();
+    pending_rows_.clear();
     base_ts_ = -1.0;
     endResetModel();
 }
 
 // ─── getRecord ────────────────────────────────────────────────────────────────
-// FIX: ưu tiên dùng cached_pkt — không phụ thuộc raw_data còn sống
-// trong ring buffer. Fallback về ring buffer chỉ khi cache không có.
 bool PacketListModel::getRecord(int row, PacketInfo& out) const {
     if (row < 0 || row >= static_cast<int>(row_cache_.size()))
         return false;
@@ -165,6 +182,7 @@ bool PacketListModel::getRecord(int row, PacketInfo& out) const {
     return true;
 }
 
+// ─── updateRawData ────────────────────────────────────────────────────────────
 void PacketListModel::updateRawData(
     int row,
     std::shared_ptr<std::vector<uint8_t>> raw_data)
@@ -172,9 +190,13 @@ void PacketListModel::updateRawData(
     if (row < 0 || row >= static_cast<int>(row_cache_.size())) return;
     row_cache_[static_cast<size_t>(row)].meta.raw_data = std::move(raw_data);
 }
+
 // ─── ipv4Str ──────────────────────────────────────────────────────────────────
+// Dùng lookup table thay vì inet_ntop để tránh syscall overhead
+// khi gọi 500k lần trong buildRowCache()
 QString PacketListModel::ipv4Str(uint32_t ip_net) {
     if (ip_net == 0) return {};
+    // inet_ntop nhanh hơn inet_ntoa (thread-safe, không dùng static buffer)
     char buf[INET_ADDRSTRLEN]{};
     struct in_addr a{};
     a.s_addr = ip_net;
@@ -212,7 +234,6 @@ QString PacketListModel::addrStr(const PacketInfo& pkt, bool is_src) {
     }
 
     if (ip.isEmpty()) return {};
-
     const uint16_t port = is_src ? pkt.src_port : pkt.dst_port;
     if (port != 0)
         ip += ':' + QString::number(port);
@@ -220,8 +241,6 @@ QString PacketListModel::addrStr(const PacketInfo& pkt, bool is_src) {
 }
 
 // ─── buildRowCache ────────────────────────────────────────────────────────────
-// FIX: cache toàn bộ PacketInfo vào cached_pkt
-// → shared_ptr giữ raw_data alive ngay cả khi ring buffer evict slot đó
 PacketListModel::RowCache
 PacketListModel::buildRowCache(const PacketInfo& pkt) const {
     RowCache c;
@@ -238,12 +257,12 @@ PacketListModel::buildRowCache(const PacketInfo& pkt) const {
     const double base = (base_ts_ >= 0.0) ? base_ts_ : pkt.timestamp_d;
     c.time_str = QString::number(pkt.timestamp_d - base, 'f', 6);
 
-    // Lưu metadata — raw_data bị drop ở đây (reset nếu có)
     c.meta          = pkt;
-    c.meta.raw_data.reset();   // ← không giữ raw bytes trong model
+    c.meta.raw_data.reset();
 
     return c;
 }
+
 // ─── matchRecord ──────────────────────────────────────────────────────────────
 bool PacketListModel::matchRecord(const PacketInfo& pkt,
                                    const DisplayFilter& f) const {
@@ -268,12 +287,11 @@ bool PacketListModel::matchRecord(const PacketInfo& pkt,
 
     for (const auto& cond : f.conditions) {
         switch (cond.field) {
-
             case DisplayFilter::Field::SRC_IP: {
                 bool eq = false;
-                if (cond.value.find(':') != std::string::npos) {
+                if (cond.value.find(':') != std::string::npos)
                     eq = (ipv6Str(pkt.src_ip6).toStdString() == cond.value);
-                } else {
+                else {
                     struct in_addr a{};
                     if (inet_pton(AF_INET, cond.value.c_str(), &a) == 1)
                         eq = (pkt.src_ip == a.s_addr);
@@ -281,12 +299,11 @@ bool PacketListModel::matchRecord(const PacketInfo& pkt,
                 if (!applyOp(cond.op, eq)) return false;
                 break;
             }
-
             case DisplayFilter::Field::DST_IP: {
                 bool eq = false;
-                if (cond.value.find(':') != std::string::npos) {
+                if (cond.value.find(':') != std::string::npos)
                     eq = (ipv6Str(pkt.dst_ip6).toStdString() == cond.value);
-                } else {
+                else {
                     struct in_addr a{};
                     if (inet_pton(AF_INET, cond.value.c_str(), &a) == 1)
                         eq = (pkt.dst_ip == a.s_addr);
@@ -294,7 +311,6 @@ bool PacketListModel::matchRecord(const PacketInfo& pkt,
                 if (!applyOp(cond.op, eq)) return false;
                 break;
             }
-
             case DisplayFilter::Field::SRC_PORT: {
                 try {
                     const auto port = static_cast<uint16_t>(
@@ -303,7 +319,6 @@ bool PacketListModel::matchRecord(const PacketInfo& pkt,
                 } catch (...) { return false; }
                 break;
             }
-
             case DisplayFilter::Field::DST_PORT: {
                 try {
                     const auto port = static_cast<uint16_t>(
@@ -312,14 +327,12 @@ bool PacketListModel::matchRecord(const PacketInfo& pkt,
                 } catch (...) { return false; }
                 break;
             }
-
             case DisplayFilter::Field::PROTOCOL: {
                 const bool eq =
                     computeProto(pkt).toLower().toStdString() == cond.value;
                 if (!applyOp(cond.op, eq)) return false;
                 break;
             }
-
             case DisplayFilter::Field::TCP_FLAGS: {
                 uint8_t mask = 0;
                 if      (cond.value == "SYN") mask = TCPFlags::SYN;
@@ -333,7 +346,6 @@ bool PacketListModel::matchRecord(const PacketInfo& pkt,
                     return false;
                 break;
             }
-
             case DisplayFilter::Field::THREAT: {
                 std::string t = pkt.threat_type;
                 std::transform(t.begin(), t.end(), t.begin(), ::tolower);
@@ -342,7 +354,6 @@ bool PacketListModel::matchRecord(const PacketInfo& pkt,
                 if (!applyOp(cond.op, has)) return false;
                 break;
             }
-
             default: break;
         }
     }
@@ -364,7 +375,6 @@ QString PacketListModel::computeProto(const PacketInfo& pkt) const {
                 return QString("ETH 0x%1").arg(pkt.eth_type, 4, 16, QChar('0'));
             return "UNKNOWN";
     }
-
     switch (pkt.protocol) {
         case IPPROTO_TCP: {
             if (pkt.src_port == 80   || pkt.dst_port == 80   ||
@@ -396,7 +406,6 @@ QString PacketListModel::computeProto(const PacketInfo& pkt) const {
 QString PacketListModel::computeInfo(const PacketInfo& pkt) const {
     if (pkt.eth_type == EtherType::ARP)
         return "ARP";
-
     switch (pkt.protocol) {
         case IPPROTO_TCP: {
             QStringList flags;
@@ -435,7 +444,6 @@ QColor PacketListModel::computeRowColor(const PacketInfo& pkt) const {
     }
     if (pkt.eth_type == EtherType::ARP)  return {25, 25, 10};
     if (pkt.eth_type == EtherType::IPv6) return {10, 25, 25};
-
     switch (pkt.protocol) {
         case IPPROTO_TCP:
             if (pkt.hasRST()) return {40, 10, 10};

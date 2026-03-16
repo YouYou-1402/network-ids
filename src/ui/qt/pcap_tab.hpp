@@ -87,7 +87,7 @@ private:
     // dummy_ring_buf_:
     //   LIVE    — PacketListModel tạm trước khi setUiBridge() được gọi
     //   OFFLINE — PcapReader scan vào đây, PacketListModel đọc metadata
-    PacketRingBuffer dummy_ring_buf_{10'000};
+    PacketRingBuffer dummy_ring_buf_{100'000};
 
     // ── Packet view ───────────────────────────────────────────────────────────
     QTableView*       packet_table_ = nullptr;
