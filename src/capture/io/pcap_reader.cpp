@@ -13,9 +13,7 @@
 #include <pcap/pcap.h>
 #include <atomic>
 
-// ─── Global sequence counter (shared với ProtocolDecoder) ─────────────────────
-// Dùng atomic riêng để capture_seq tăng dần liên tục
-// kể cả khi mix live + offline
+// ─── Global sequence counter ──────────────────────────────────────────────────
 static std::atomic<uint64_t> g_pcap_reader_seq{0};
 
 // ─── pcap magic numbers ───────────────────────────────────────────────────────
@@ -73,7 +71,7 @@ uint64_t PcapReader::prescanPacketCount(const uint8_t* data,
     size_t   offset = sizeof(PcapGlobalHeader);
 
     while (offset + sizeof(PcapPacketHeader) <= file_size) {
-        auto* ph      = reinterpret_cast<const PcapPacketHeader*>(data + offset);
+        auto*    ph   = reinterpret_cast<const PcapPacketHeader*>(data + offset);
         uint32_t ilen = swap32(ph->incl_len);
         if (ilen > 65535) break;
         offset += sizeof(PcapPacketHeader) + ilen;
@@ -92,6 +90,10 @@ bool PcapReader::scanFile(const std::string&  filepath,
     cancel_flag_ = cancel_flag;
     stats_       = PcapFileStats{};
     stats_.filepath = filepath;
+
+    // Đóng mmap cũ nếu đang mở file khác
+    if (mmap_ptr_ != MAP_FAILED && stats_.filepath != filepath)
+        closeMmap();
 
     // ── mmap ──────────────────────────────────────────────────────────────────
     mmap_fd_ = ::open(filepath.c_str(), O_RDONLY);
@@ -162,6 +164,7 @@ bool PcapReader::scanFile(const std::string&  filepath,
         : 0;
 
     // ── Scan packets ──────────────────────────────────────────────────────────
+    // FIX: madvise SEQUENTIAL cho scan, sau đó đổi sang RANDOM cho lazy-load
     size_t   offset    = sizeof(PcapGlobalHeader);
     uint64_t pkt_count = 0;
 
@@ -185,16 +188,24 @@ bool PcapReader::scanFile(const std::string&  filepath,
             break;
         }
 
+        // pkt_data_offset = offset DATA (sau PcapPacketHeader 16 bytes)
+        // Đây là giá trị đúng để gán vào file_offset — khớp với loadRawBytes()
         const size_t pkt_data_offset = offset + sizeof(PcapPacketHeader);
         if (pkt_data_offset + incl_len > mmap_size_) break;
 
-        // ── Build PacketInfo ──────────────────────────────────────────────────
+        // ── Build PacketInfo — metadata only, KHÔNG copy raw_data ────────────
+        // FIX: scanFile() chỉ lưu metadata + file_offset
+        //      raw_data = nullptr — lazy-load khi user click
+        //      Tránh tốn RAM khi load file lớn (vd: 1GB pcap)
         PacketInfo record;
         record.cap_len     = incl_len;
         record.orig_len    = orig_len;
+        record.source_file = filepath;
+
+        // file_offset trỏ vào DATA (sau PcapPacketHeader)
+        // khớp với loadRawBytes() và PcapWriter::writePacket() data_offset
         record.file_offset = static_cast<int64_t>(pkt_data_offset);
 
-        // ── FIX BUG 2: capture_seq tăng dần ──────────────────────────────────
         record.capture_seq = g_pcap_reader_seq.fetch_add(
                                  1, std::memory_order_relaxed);
 
@@ -208,18 +219,9 @@ bool PcapReader::scanFile(const std::string&  filepath,
             : static_cast<suseconds_t>(ts_frac);
         record.timestamp_d = static_cast<double>(ts_sec) + ts_frac_sec;
 
-        // ── FIX BUG 1: copy raw bytes ─────────────────────────────────────────
-        // raw_data phải có trước parseHeaders để HexView hoạt động
-        // và để payload() helper trả về đúng pointer
+        // Parse L3/L4 headers từ mmap — không cần copy raw_data
         const uint8_t* pkt_data = data + pkt_data_offset;
-        record.raw_data = std::make_shared<std::vector<uint8_t>>(
-                              pkt_data, pkt_data + incl_len);
-
-        // Parse L3/L4 headers
-        parseHeaders(record,
-                     pkt_data,
-                     incl_len,
-                     stats_.linktype);
+        parseHeaders(record, pkt_data, incl_len, stats_.linktype);
 
         // Stats
         stats_.total_packets++;
@@ -245,6 +247,10 @@ bool PcapReader::scanFile(const std::string&  filepath,
 
     stats_.duration_sec = stats_.last_ts - stats_.first_ts;
 
+    // Sau khi scan xong, đổi hint sang RANDOM để lazy-load hiệu quả hơn
+    // mmap vẫn giữ mở — loadRawBytes() dùng lại không cần fread
+    madvise(mmap_ptr_, mmap_size_, MADV_RANDOM);
+
     LOG_INFO("PcapReader: scan complete — "
              + std::to_string(stats_.total_packets) + " packets, "
              + std::to_string(stats_.total_bytes / 1024 / 1024) + " MB, "
@@ -258,30 +264,52 @@ bool PcapReader::scanFile(const std::string&  filepath,
 // ═════════════════════════════════════════════════════════════════════════════
 bool PcapReader::loadRawBytes(PacketInfo&        record,
                                const std::string& filepath) {
-    if (record.file_offset < 0) return false;
-    if (record.raw_data)        return true;   // đã có
+    if (record.file_offset < 0)                       return false;
+    if (record.raw_data && !record.raw_data->empty()) return true;  // cache hit
 
-    if (mmap_ptr_ != MAP_FAILED) {
-        const size_t end = static_cast<size_t>(record.file_offset)
-                         + record.cap_len;
+    // ── Ưu tiên mmap nếu cùng file và offset nằm trong range ─────────────────
+    // FIX: kiểm tra stats_.filepath để tránh dùng mmap sai file
+    if (mmap_ptr_ != MAP_FAILED && stats_.filepath == filepath) {
+        const size_t start = static_cast<size_t>(record.file_offset);
+        const size_t end   = start + record.cap_len;
         if (end <= mmap_size_) {
-            const uint8_t* src = static_cast<const uint8_t*>(mmap_ptr_)
-                               + record.file_offset;
+            const uint8_t* src = static_cast<const uint8_t*>(mmap_ptr_) + start;
             record.raw_data = std::make_shared<std::vector<uint8_t>>(
                 src, src + record.cap_len);
             return true;
         }
     }
 
+    // ── Fallback: fread — dùng cho LIVE mode hoặc mmap không khả dụng ────────
+    // file_offset trỏ vào DATA (sau PcapPacketHeader) — fseek đúng vị trí
     FILE* f = fopen(filepath.c_str(), "rb");
-    if (!f) return false;
-    fseek(f, record.file_offset, SEEK_SET);
+    if (!f) {
+        LOG_WARN("PcapReader::loadRawBytes: cannot open " + filepath);
+        return false;
+    }
+
+    if (fseek(f, record.file_offset, SEEK_SET) != 0) {
+        LOG_WARN("PcapReader::loadRawBytes: fseek failed offset="
+                 + std::to_string(record.file_offset));
+        fclose(f);
+        return false;
+    }
+
     record.raw_data = std::make_shared<std::vector<uint8_t>>(record.cap_len);
-    const bool ok = (fread(record.raw_data->data(), 1,
-                           record.cap_len, f) == record.cap_len);
+    const size_t n_read = fread(record.raw_data->data(), 1,
+                                record.cap_len, f);
     fclose(f);
-    if (!ok) record.raw_data.reset();
-    return ok;
+
+    if (n_read != record.cap_len) {
+        LOG_WARN("PcapReader::loadRawBytes: short read — expected "
+                 + std::to_string(record.cap_len)
+                 + " got " + std::to_string(n_read)
+                 + " at offset=" + std::to_string(record.file_offset));
+        record.raw_data.reset();
+        return false;
+    }
+
+    return true;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -323,7 +351,6 @@ void PcapReader::parseHeaders(PacketInfo&    record,
         }
     }
     else if (linktype == DLT_LINUX_SLL) {
-        // Linux cooked capture: 16 bytes header, eth_type tại offset 14
         if (len < 16) return;
         record.eth_type = ntohs(
             *reinterpret_cast<const uint16_t*>(data + 14));
@@ -338,7 +365,6 @@ void PcapReader::parseHeaders(PacketInfo&    record,
         offset = 0;
     }
     else {
-        // Linktype không hỗ trợ — không parse
         return;
     }
 
@@ -348,11 +374,11 @@ void PcapReader::parseHeaders(PacketInfo&    record,
         auto* iph = reinterpret_cast<const struct ip*>(data + offset);
         if (iph->ip_v != 4) return;
 
-        record.src_ip   = iph->ip_src.s_addr;   // network byte order
+        record.src_ip   = iph->ip_src.s_addr;
         record.dst_ip   = iph->ip_dst.s_addr;
         record.protocol = iph->ip_p;
         record.ttl      = iph->ip_ttl;
-        record.is_ipv6  = false;                 // explicit
+        record.is_ipv6  = false;
 
         const size_t ip_hdr_len = iph->ip_hl * 4;
         if (ip_hdr_len < 20 || ip_hdr_len > len - offset) return;
@@ -360,7 +386,7 @@ void PcapReader::parseHeaders(PacketInfo&    record,
     }
     // ── IPv6 ──────────────────────────────────────────────────────────────────
     else if (record.eth_type == 0x86DD) {
-        constexpr size_t IP6H = sizeof(struct ip6_hdr);   // 40 bytes
+        constexpr size_t IP6H = sizeof(struct ip6_hdr);
         if (offset + IP6H > len) return;
         auto* ip6 = reinterpret_cast<const struct ip6_hdr*>(data + offset);
 
@@ -369,11 +395,10 @@ void PcapReader::parseHeaders(PacketInfo&    record,
         record.protocol  = ip6->ip6_nxt;
         record.hop_limit = ip6->ip6_hlim;
         record.ttl       = ip6->ip6_hlim;
-        record.is_ipv6   = true;                          // ← FIX BUG 3
+        record.is_ipv6   = true;
 
         offset += IP6H;
 
-        // Extension headers — giống packet_capture.cpp
         bool cont = true;
         while (cont && offset + 2 <= len) {
             switch (record.protocol) {
@@ -401,7 +426,7 @@ void PcapReader::parseHeaders(PacketInfo&    record,
         }
     }
     else {
-        return;   // ARP, VLAN bare, ... — không parse L4
+        return;
     }
 
     // ── Layer 4 ───────────────────────────────────────────────────────────────

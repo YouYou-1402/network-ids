@@ -8,42 +8,48 @@
 
 // Ghi packets ra file pcap trong khi capture
 // Thread-safe — nhiều worker threads có thể gọi đồng thời
+//
+// FIX: writePacket() trả về int64_t data_offset thay vì bool
+//      data_offset = vị trí DATA trong file (sau PcapPacketHeader 16 bytes)
+//      → đây là giá trị đúng để gán vào pkt.file_offset cho lazy-load
 class PcapWriter {
 public:
     PcapWriter()  = default;
     ~PcapWriter();
 
     // Mở file để ghi
-    // snaplen: max bytes per packet (65535 = full)
     bool open(const std::string& filepath,
               int                snaplen  = 65535,
               int                linktype = DLT_EN10MB);
 
-    // Ghi một packet (thread-safe)
-    bool writePacket(const uint8_t*        data,
-                     uint32_t              cap_len,
-                     uint32_t              orig_len,
-                     const struct timeval& ts);
+    // Ghi một packet — trả về data_offset (vị trí DATA sau PcapPacketHeader)
+    // Trả về -1 nếu thất bại
+    // data_offset này phải được gán vào pkt.file_offset để lazy-load đúng
+    int64_t writePacket(const uint8_t*        data,
+                        uint32_t              cap_len,
+                        uint32_t              orig_len,
+                        const struct timeval& ts);
 
     // Overload tiện lợi từ PacketInfo
-    bool writePacket(const PacketInfo& record);
+    int64_t writePacket(const PacketInfo& record);
+
+    // Flush buffer xuống disk — gọi trước khi lazy-load đọc file
+    void flush();
 
     void close();
 
-    // FIX BUG 3: mutex_ phải là mutable để dùng trong const methods
     bool isOpen() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return dumper_ != nullptr;
     }
 
-    // Trả về byte offset của packet SẮP ghi (gọi TRƯỚC writePacket)
-    // pcap format: [24 bytes global header] + N * [16 bytes pkt header + cap_len]
+    // Trả về byte offset hiện tại (sau packet cuối cùng đã ghi)
+    // Dùng để debug / stats — KHÔNG dùng làm file_offset cho lazy-load
     int64_t currentOffset() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return static_cast<int64_t>(PCAP_GLOBAL_HEADER_SIZE + bytes_written_);
     }
 
-    // FIX BUG 2: lock mutex_ khi đọc để nhất quán với write
     uint64_t packetsWritten() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return packets_written_;
@@ -62,13 +68,9 @@ private:
     pcap_t*        handle_  = nullptr;
     pcap_dumper_t* dumper_  = nullptr;
 
-    // FIX BUG 3: mutable — cho phép lock trong const methods
     mutable std::mutex mutex_;
 
     std::string filepath_;
-
-    // FIX BUG 2: plain uint64_t, bảo vệ bởi mutex_ (không cần atomic)
-    uint64_t packets_written_ = 0;
-    uint64_t bytes_written_   = 0;  // tổng bytes đã ghi (KHÔNG kể global header)
-                                    // mỗi packet += PCAP_PACKET_HEADER_SIZE + cap_len
+    uint64_t    packets_written_ = 0;
+    uint64_t    bytes_written_   = 0;
 };
