@@ -4,6 +4,7 @@
 #include "../common/metrics.hpp"
 #include "../common/engine_config.hpp"
 #include "../capture/packet_capture.hpp"
+#include <arpa/inet.h>                         
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PacketQueue
@@ -12,7 +13,6 @@
 PacketQueue::PacketQueue(size_t max_size)
     : max_size_(max_size), mask_(max_size - 1)
 {
-    // Round up to power of 2
     if (max_size == 0 || (max_size & (max_size - 1)) != 0) {
         size_t p = 1;
         while (p < max_size) p <<= 1;
@@ -27,7 +27,7 @@ bool PacketQueue::push(PacketInfo pkt) {
     const size_t h    = head_.load(std::memory_order_relaxed);
     const size_t next = (h + 1) & mask_;
     if (next == tail_.load(std::memory_order_acquire))
-        return false;   // full
+        return false;
     buf_[h] = std::move(pkt);
     head_.store(next, std::memory_order_release);
     return true;
@@ -36,7 +36,7 @@ bool PacketQueue::push(PacketInfo pkt) {
 bool PacketQueue::pop(PacketInfo& pkt) {
     const size_t t = tail_.load(std::memory_order_relaxed);
     if (t == head_.load(std::memory_order_acquire))
-        return false;   // empty
+        return false;
     pkt = std::move(buf_[t]);
     tail_.store((t + 1) & mask_, std::memory_order_release);
     return true;
@@ -70,6 +70,7 @@ WorkerThread::WorkerThread(int               id,
     , sig_engine_       (ip_tracker)
     , anomaly_engine_   (ip_tracker)
     , behavioral_engine_(ip_tracker)
+    , firewall_manager_ (nullptr)          // ✅ khởi tạo rõ ràng
 {}
 
 WorkerThread::~WorkerThread() { stop(); }
@@ -77,7 +78,8 @@ WorkerThread::~WorkerThread() { stop(); }
 void WorkerThread::start() {
     running_ = true;
     thread_  = std::thread(&WorkerThread::run, this);
-    LOG_INFO("WorkerThread " + std::to_string(id_) + " started");
+    LOG_INFO("WorkerThread " + std::to_string(id_) + " started"
+             + (firewall_manager_ ? " [firewall ON]" : " [firewall OFF]"));
 }
 
 void WorkerThread::stop() {
@@ -108,11 +110,11 @@ void WorkerThread::run() {
 
         if (count == 0) {
             ++idle_spins;
-            if      (idle_spins < 16)  { /* spin */                                       }
-            else if (idle_spins < 256) { std::this_thread::yield();                       }
+            if      (idle_spins < 16)  { /* spin */                              }
+            else if (idle_spins < 256) { std::this_thread::yield();              }
             else {
                 std::this_thread::sleep_for(std::chrono::microseconds(50));
-                idle_spins = 128;   // reset về yield level
+                idle_spins = 128;
             }
             continue;
         }
@@ -135,12 +137,36 @@ void WorkerThread::processPacket(PacketInfo& pkt) {
     FlowState*        flow = flow_table_.getOrCreate(key, pkt);
 
     if (!flow) {
-        // FlowTable đầy → DROP
         METRICS.packets_dropped.fetch_add(1, std::memory_order_relaxed);
         ring_buf_.updateRecord(pkt.index, [](PacketInfo& slot) {
             slot.action = "DROP";
         });
         return;
+    }
+
+    // ── 2.5. Firewall quick check (kernel đã drop, ở đây chỉ update metrics) ──
+    if (firewall_manager_) {
+        const auto check = firewall_manager_->quickCheck(pkt);
+
+        if (check == FirewallManager::QuickCheck::WHITELIST) {
+            METRICS.packets_passed.fetch_add(1, std::memory_order_relaxed);
+            ring_buf_.updateRecord(pkt.index, [](PacketInfo& slot) {
+                slot.action = "PASS(whitelist)";
+            });
+            return;
+        }
+
+        if (check == FirewallManager::QuickCheck::BLACKLIST) {
+            // iptables/nftables đã DROP ở kernel trước khi lên userspace
+            // Packet này chỉ xuất hiện nếu capture trước firewall (mirror port)
+            // → chỉ update metrics, không cần xử lý thêm
+            METRICS.packets_dropped.fetch_add(1, std::memory_order_relaxed);
+            ring_buf_.updateRecord(pkt.index, [](PacketInfo& slot) {
+                slot.action = "DROP(blacklist)";
+            });
+            return;
+        }
+        // QuickCheck::NONE → tiếp tục detection bình thường
     }
 
     // ── 3. Detection (chỉ khi enabled) ───────────────────────────────────────
@@ -168,7 +194,7 @@ void WorkerThread::processPacket(PacketInfo& pkt) {
         source = DetectionSource::LAYER1_BEHAVIORAL;
     }
 
-    // ── 4. Action ─────────────────────────────────────────────────────────────
+    // ── 4. Threat detected ────────────────────────────────────────────────────
     if (result != DetectionResult::NORMAL) {
         handleDetection(result, source, pkt, *flow);
 
@@ -194,7 +220,7 @@ void WorkerThread::handleDetection(DetectionResult    result,
                                     DetectionSource    source,
                                     const PacketInfo&  pkt,
                                     FlowState&         flow) {
-    // Cập nhật metrics
+    // ── Metrics ───────────────────────────────────────────────────────────────
     switch (result) {
         case DetectionResult::DDOS_VOLUMETRIC:
             METRICS.ddos_detected   .fetch_add(1, std::memory_order_relaxed);
@@ -213,11 +239,22 @@ void WorkerThread::handleDetection(DetectionResult    result,
             break;
     }
 
-    // Cập nhật flow state
+    // ── Auto-block vào kernel firewall ────────────────────────────────────────
+    if (firewall_manager_) {
+        // Convert src_ip (uint32_t host order) → string "x.x.x.x"
+        struct in_addr addr;
+        addr.s_addr = htonl(pkt.src_ip);
+        const std::string src_ip = inet_ntoa(addr);
+
+        const std::string reason = threatToString(result) + " detected by IDS";
+        firewall_manager_->autoBlock(src_ip, pkt.protocol, 0, reason);
+    }
+
+    // ── Flow state ────────────────────────────────────────────────────────────
     flow.is_malicious = true;
     flow.threat_type  = threatToString(result);
 
-    // Tạo event và gọi callback
+    // ── Alert callback → UI / AlertManager ───────────────────────────────────
     const DetectionEvent ev = action_handler_.makeEvent(result, source, pkt);
     if (on_alert_) on_alert_(ev);
 }

@@ -3,6 +3,7 @@
 #include "../core/packet_info.hpp"
 #include "../core/threat_types.hpp"
 #include "../capture/io/packet_ring_buffer.hpp"
+#include "../firewall/firewall_manager.hpp"      
 #include "flow_table.hpp"
 #include "ip_tracker.hpp"
 #include "signature_engine.hpp"
@@ -42,12 +43,14 @@ private:
 //
 //  Pipeline per packet:
 //    1. updateFlowState (trong SignatureEngine)
-//    2. SignatureEngine    → DDoS, Port Scan, Flag abuse, Payload
-//    3. ProtocolAnomaly   → Slow DDoS (nếu HTTP port)
-//    4. BehavioralEngine  → HTTP Flood, SYN no-handshake, Dist scan
-//    5. ActionHandler     → quyết định DROP/ALERT/PASS
-//    6. ring_buf_.updateRecord() → ghi threat/action vào slot
-//    7. on_alert_() nếu có threat
+//    2. Firewall quickCheck → WHITELIST=skip / BLACKLIST=drop(kernel đã drop)
+//    3. SignatureEngine    → DDoS, Port Scan, Flag abuse, Payload
+//    4. ProtocolAnomaly   → Slow DDoS (nếu HTTP port)
+//    5. BehavioralEngine  → HTTP Flood, SYN no-handshake, Dist scan
+//    6. ActionHandler     → quyết định DROP/ALERT/PASS
+//    7. ring_buf_.updateRecord() → ghi threat/action vào slot
+//    8. on_alert_() nếu có threat
+//    9. autoBlock(src_ip) → iptables/nftables kernel rule
 // ─────────────────────────────────────────────────────────────────────────────
 class WorkerThread {
 public:
@@ -70,6 +73,16 @@ public:
     size_t queueSize   () const { return queue_.size(); }
     size_t queueDropped() const { return queue_dropped_.load(std::memory_order_relaxed); }
 
+    // Dùng raw pointer (không own) — lifetime do caller quản lý
+    // nullptr = firewall integration disabled
+    void setFirewallManager(FirewallManager* fw) {
+        firewall_manager_ = fw;
+    }
+
+    FirewallManager* firewallManager() const {
+        return firewall_manager_;
+    }
+
 private:
     void run();
     void processPacket  (PacketInfo& pkt);
@@ -88,6 +101,9 @@ private:
     ProtocolAnomalyEngine anomaly_engine_;
     BehavioralEngine      behavioral_engine_;
     ActionHandler         action_handler_;
+
+    // Thread-safe: chỉ được set trước khi gọi start()
+    FirewallManager*      firewall_manager_ = nullptr;
 
     std::thread           thread_;
     std::atomic<bool>     running_      {false};

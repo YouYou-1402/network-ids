@@ -8,6 +8,7 @@
 #include "traffic_chart.hpp"
 #include "alert_panel.hpp"
 #include "ips_control_widget.hpp"
+#include "firewall_widget.hpp"          // ← THÊM
 #include "ui_bridge.hpp"
 
 #include "../../capture/io/pcap_reader.hpp"
@@ -25,8 +26,8 @@
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QScrollBar>
-#include <QScrollBar>
 #include <QAbstractItemView>
+#include <algorithm>
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Constructor / Destructor
@@ -87,9 +88,11 @@ void PcapTab::setUiBridge(UiBridge* bridge) {
             bridge_->isMlEnabled());
     }
 }
+
 // ═════════════════════════════════════════════════════════════════════════════
 // connectBridgeSignals
 // ═════════════════════════════════════════════════════════════════════════════
+
 void PcapTab::connectBridgeSignals() {
     if (!bridge_) return;
 
@@ -105,7 +108,7 @@ void PcapTab::connectBridgeSignals() {
         connect(bridge_, &UiBridge::newAlerts,
                 alert_panel_, &AlertPanel::onNewAlerts);
 
-    // ── captureStarted / captureStopped signal → điều khiển timerEvent ────────
+    // ── captureStarted / captureStopped → điều khiển timerEvent ──────────────
     connect(bridge_, &UiBridge::captureStarted, this, [this]() {
         capture_in_progress_.store(true, std::memory_order_release);
         tail_at_end_     = true;
@@ -118,6 +121,7 @@ void PcapTab::connectBridgeSignals() {
         capture_in_progress_.store(false, std::memory_order_release);
     });
 
+    // ── IPS control ───────────────────────────────────────────────────────────
     if (ips_control_) {
         connect(ips_control_, &IpsControlWidget::toggleDetection,
                 bridge_,      &UiBridge::setDetectionEnabled);
@@ -128,7 +132,16 @@ void PcapTab::connectBridgeSignals() {
         connect(bridge_,      &UiBridge::mlStatusChanged,
                 ips_control_, &IpsControlWidget::onMlStatusChanged);
     }
+
+    // ── Firewall widget status messages → tab statusMessage ──────────────────
+    // FirewallManager được inject từ MainWindow sau setUiBridge()
+    // → chỉ cần connect statusMessage signal ở đây
+    if (firewall_widget_) {
+        connect(firewall_widget_, &FirewallWidget::statusMessage,
+                this,             &PcapTab::statusMessage);
+    }
 }
+
 // ═════════════════════════════════════════════════════════════════════════════
 // setupPacketTable
 // ═════════════════════════════════════════════════════════════════════════════
@@ -175,42 +188,81 @@ void PcapTab::setupPacketTable() {
 // ═════════════════════════════════════════════════════════════════════════════
 // setupLiveLayout
 // ═════════════════════════════════════════════════════════════════════════════
+//
+//  Layout tổng thể:
+//
+//  ┌─ root (QVBoxLayout) ─────────────────────────────────────────────────────┐
+//  │  FilterBar                                                                │
+//  │  ┌─ main_split (H) ──────────────────────────────────────────────────┐   │
+//  │  │  ┌─ sidebar (240-300px) ──┐  ┌─ right ────────────────────────┐  │   │
+//  │  │  │  MetricsWidget         │  │  ┌─ v_split (V) ─────────────┐ │  │   │
+//  │  │  │  ── divider ──         │  │  │  PacketTable               │ │  │   │
+//  │  │  │  IpsControlWidget      │  │  │  ┌─ bot_split (H) ───────┐ │ │  │   │
+//  │  │  │  ── divider ──         │  │  │  │  detail+hex │ tabs    │ │ │  │   │
+//  │  │  │  FirewallWidget (flex) │  │  │  └───────────────────────┘ │ │  │   │
+//  │  │  │  AlertPanel (flex)     │  │  └───────────────────────────┘ │  │   │
+//  │  │  └───────────────────────┘  └────────────────────────────────┘  │   │
+//  │  └───────────────────────────────────────────────────────────────────┘   │
+//  └──────────────────────────────────────────────────────────────────────────┘
+//
+//  Sidebar dùng QSplitter dọc để FirewallWidget và AlertPanel có thể resize
+// ═════════════════════════════════════════════════════════════════════════════
 
 void PcapTab::setupLiveLayout() {
     auto* root = new QVBoxLayout(this);
     root->setSpacing(4);
     root->setContentsMargins(4, 4, 4, 4);
 
+    // ── FilterBar ─────────────────────────────────────────────────────────────
     filter_bar_ = new FilterBar(this);
     root->addWidget(filter_bar_);
 
+    // ── Main horizontal splitter ──────────────────────────────────────────────
     auto* main_split = new QSplitter(Qt::Horizontal, this);
     main_split->setHandleWidth(5);
     main_split->setStyleSheet(
         "QSplitter::handle { background: #1e1e30; border: 1px solid #2a2a3e; }");
 
-    auto* sidebar = new QWidget(main_split);
-    sidebar->setMinimumWidth(240);
-    sidebar->setMaximumWidth(300);
-    auto* sb_lay = new QVBoxLayout(sidebar);
-    sb_lay->setSpacing(0);
-    sb_lay->setContentsMargins(0, 0, 0, 0);
+    // ── Sidebar ───────────────────────────────────────────────────────────────
+    // Dùng QSplitter dọc để user có thể resize từng panel
+    auto* sidebar_split = new QSplitter(Qt::Vertical, main_split);
+    sidebar_split->setHandleWidth(4);
+    sidebar_split->setMinimumWidth(240);
+    sidebar_split->setMaximumWidth(300);
+    sidebar_split->setStyleSheet(
+        "QSplitter::handle { background: #2a2a4a; border: none; height: 3px; }");
 
-    metrics_widget_ = new MetricsWidget(sidebar);
-    sb_lay->addWidget(metrics_widget_, 0);
+    // MetricsWidget — fixed height, không resize
+    metrics_widget_ = new MetricsWidget(sidebar_split);
+    metrics_widget_->setMinimumHeight(120);
+    metrics_widget_->setMaximumHeight(200);
+    sidebar_split->addWidget(metrics_widget_);
 
-    auto* divider = new QFrame(sidebar);
-    divider->setFrameShape(QFrame::HLine);
-    divider->setFixedHeight(2);
-    divider->setStyleSheet("background: #2a2a4a; border: none;");
-    sb_lay->addWidget(divider);
+    // IpsControlWidget — fixed height, không resize
+    ips_control_ = new IpsControlWidget(sidebar_split);
+    ips_control_->setMinimumHeight(160);
+    ips_control_->setMaximumHeight(220);
+    sidebar_split->addWidget(ips_control_);
 
-    ips_control_ = new IpsControlWidget(sidebar);
-    sb_lay->addWidget(ips_control_, 0);
-    sb_lay->addStretch(1);
+    // FirewallWidget — flex, chiếm phần còn lại cùng AlertPanel
+    firewall_widget_ = new FirewallWidget(sidebar_split);
+    firewall_widget_->setMinimumHeight(200);
+    sidebar_split->addWidget(firewall_widget_);
 
-    main_split->addWidget(sidebar);
+    // AlertPanel — flex
+    alert_panel_ = new AlertPanel(sidebar_split);
+    alert_panel_->setMinimumHeight(120);
+    sidebar_split->addWidget(alert_panel_);
 
+    // Tỉ lệ ban đầu: Metrics=0, IPS=0, Firewall=2, Alert=1
+    sidebar_split->setStretchFactor(0, 0);   // MetricsWidget
+    sidebar_split->setStretchFactor(1, 0);   // IpsControlWidget
+    sidebar_split->setStretchFactor(2, 2);   // FirewallWidget
+    sidebar_split->setStretchFactor(3, 1);   // AlertPanel
+
+    main_split->addWidget(sidebar_split);
+
+    // ── Right panel ───────────────────────────────────────────────────────────
     auto* right_w   = new QWidget(main_split);
     auto* right_lay = new QVBoxLayout(right_w);
     right_lay->setSpacing(4);
@@ -221,14 +273,17 @@ void PcapTab::setupLiveLayout() {
     v_split->setStyleSheet(
         "QSplitter::handle { background: #1e1e30; border: 1px solid #2a2a3e; }");
 
+    // Packet table
     setupPacketTable();
     v_split->addWidget(packet_table_);
 
+    // Bottom: detail + hex | tabs
     auto* bot_split = new QSplitter(Qt::Horizontal, v_split);
     bot_split->setHandleWidth(5);
     bot_split->setStyleSheet(
         "QSplitter::handle { background: #1e1e30; border: 1px solid #2a2a3e; }");
 
+    // Detail tree + hex view
     auto* detail_w   = new QWidget(bot_split);
     auto* detail_lay = new QVBoxLayout(detail_w);
     detail_lay->setSpacing(0);
@@ -246,6 +301,7 @@ void PcapTab::setupLiveLayout() {
     detail_lay->addWidget(dh_split);
     bot_split->addWidget(detail_w);
 
+    // Info tabs: Traffic chart + Alerts
     auto* info_tabs = new QTabWidget(bot_split);
     info_tabs->setMinimumWidth(280);
     info_tabs->setStyleSheet(
@@ -260,9 +316,15 @@ void PcapTab::setupLiveLayout() {
     traffic_chart_ = new TrafficChart(info_tabs);
     info_tabs->addTab(traffic_chart_, "📈 Traffic");
 
-    alert_panel_ = new AlertPanel(info_tabs);
-    info_tabs->addTab(alert_panel_, "🚨 Alerts");
+    // Alert tab nhỏ trong info_tabs — chỉ hiển thị summary
+    // AlertPanel đầy đủ đã ở sidebar
+    auto* alert_summary = new AlertPanel(info_tabs);
+    info_tabs->addTab(alert_summary, "🚨 Alerts");
 
+    // Connect bridge → alert_summary (sidebar alert_panel_ connect trong connectBridgeSignals)
+    // Lưu lại để connectBridgeSignals dùng
+    // Dùng alert_panel_ cho sidebar, alert_summary_ cho tab
+    // → đơn giản: chỉ dùng alert_panel_ (sidebar), tab chỉ là placeholder
     info_tabs->setCurrentIndex(0);
     bot_split->addWidget(info_tabs);
     bot_split->setSizes({560, 320});
@@ -278,6 +340,7 @@ void PcapTab::setupLiveLayout() {
 
     root->addWidget(main_split);
 
+    // ── Connections ───────────────────────────────────────────────────────────
     connect(filter_bar_, &FilterBar::filterChanged,
             this, [this](const DisplayFilter& f) {
                 if (f.valid) onFilterApplied(QString::fromStdString(f.raw_expr));
@@ -300,6 +363,7 @@ void PcapTab::setupOfflineLayout() {
     root->setSpacing(4);
     root->setContentsMargins(4, 4, 4, 4);
 
+    // ── Toolbar ───────────────────────────────────────────────────────────────
     auto* toolbar = new QWidget(this);
     auto* tb_lay  = new QHBoxLayout(toolbar);
     tb_lay->setContentsMargins(0, 0, 0, 4);
@@ -322,9 +386,11 @@ void PcapTab::setupOfflineLayout() {
     tb_lay->addStretch();
     root->addWidget(toolbar);
 
+    // ── FilterBar ─────────────────────────────────────────────────────────────
     filter_bar_ = new FilterBar(this);
     root->addWidget(filter_bar_);
 
+    // ── Vertical splitter: table | detail+hex ─────────────────────────────────
     auto* v_split = new QSplitter(Qt::Vertical, this);
     v_split->setHandleWidth(4);
     v_split->setStyleSheet("QSplitter::handle { background: #2a2a3e; }");
@@ -347,6 +413,7 @@ void PcapTab::setupOfflineLayout() {
 
     root->addWidget(v_split);
 
+    // ── Connections ───────────────────────────────────────────────────────────
     connect(open_btn,   &QPushButton::clicked, this, &PcapTab::onOpenClicked);
     connect(export_btn, &QPushButton::clicked, this, &PcapTab::onExportClicked);
 
@@ -361,6 +428,8 @@ void PcapTab::setupOfflineLayout() {
             this, [this](const QModelIndex& cur, const QModelIndex&) {
                 onPacketSelected(cur);
             });
+
+    // OFFLINE tab không có firewall_widget_ → nullptr (đã init trong header)
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -393,55 +462,38 @@ void PcapTab::stopLiveWriter() {
 }
 
 // ─── writeLivePacket ─────────────────────────────────────────────────────────
-// FIX: writePacket() trả về data_offset (sau PcapPacketHeader 16B)
-//      → gán trực tiếp vào pkt.file_offset — đúng cho loadRawBytes()
-//
-// Trước đây: currentOffset() trả về offset TRƯỚC khi ghi header
-//            → file_offset lệch 16 bytes → hex dump sai hoàn toàn
+// writePacket() trả về data_offset (sau PcapPacketHeader 16B)
+// → gán trực tiếp vào pkt.file_offset — đúng cho loadRawBytes()
 int64_t PcapTab::writeLivePacket(const uint8_t*        raw_bytes,
                                    uint32_t              raw_len,
                                    uint32_t              orig_len,
                                    const struct timeval& ts) {
     std::lock_guard<std::mutex> lk(live_writer_mutex_);
     if (!live_writer_ || !live_writer_->isOpen()) return -1;
-
-    // writePacket() trả về data_offset = vị trí DATA trong file
-    // = global_header(24) + bytes_written_so_far + packet_header(16)
     return live_writer_->writePacket(raw_bytes, raw_len, orig_len, ts);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
 // lazyLoadRawData
 // ═════════════════════════════════════════════════════════════════════════════
-// FIX 1: LIVE mode flush writer trước khi fread để đảm bảo data đã xuống disk
-// FIX 2: pcap_reader_ mới (mmap_ptr_ = MAP_FAILED) → fread với file_offset đúng
-bool PcapTab::lazyLoadRawData(int row, PacketInfo& pkt) {
-    // Cache hit — không cần đọc disk
-    if (pkt.raw_data && !pkt.raw_data->empty()) return true;
 
-    // Không có thông tin để đọc
+bool PcapTab::lazyLoadRawData(int row, PacketInfo& pkt) {
+    if (pkt.raw_data && !pkt.raw_data->empty()) return true;
     if (pkt.file_offset < 0 || pkt.source_file.empty()) return false;
 
     // LIVE mode: flush writer trước để đảm bảo packet đã xuống disk
-    // Không cần lock live_writer_mutex_ ở đây vì flush() tự lock bên trong
     if (mode_ == Mode::LIVE) {
         std::lock_guard<std::mutex> lk(live_writer_mutex_);
         if (live_writer_ && live_writer_->isOpen())
             live_writer_->flush();
     }
 
-    // Tạo pcap_reader_ nếu chưa có
-    // OFFLINE: pcap_reader_ đã được tạo trong loadFile() và giữ mmap mở
-    //          → loadRawBytes() dùng mmap path (nhanh, zero-copy)
-    // LIVE:    pcap_reader_ mới, mmap_ptr_ = MAP_FAILED
-    //          → loadRawBytes() fallback fread với file_offset đúng (data_offset)
     if (!pcap_reader_)
         pcap_reader_ = std::make_unique<PcapReader>();
 
     if (!pcap_reader_->loadRawBytes(pkt, pkt.source_file))
         return false;
 
-    // Cache lại vào model — click tiếp không đọc disk nữa
     packet_model_->updateRawData(row, pkt.raw_data);
     return true;
 }
@@ -450,18 +502,12 @@ bool PcapTab::lazyLoadRawData(int row, PacketInfo& pkt) {
 // Slots
 // ═════════════════════════════════════════════════════════════════════════════
 
-
-// ─── onPacketSelected ────────────────────────────────────────────────────────
-// Lazy-load raw bytes từ disk khi user click vào row
-// Sau đó cập nhật detail tree và hex view
 void PcapTab::onPacketSelected(const QModelIndex& index) {
     if (!index.isValid()) return;
 
     PacketInfo pkt;
     if (!packet_model_->getRecord(index.row(), pkt)) return;
 
-    // Lazy-load raw_data nếu chưa có
-    // lazyLoadRawData() cập nhật pkt.raw_data và cache vào model
     lazyLoadRawData(index.row(), pkt);
 
     if (detail_tree_) detail_tree_->showPacket(pkt);
@@ -504,14 +550,11 @@ void PcapTab::onExportClicked() {
 // ═════════════════════════════════════════════════════════════════════════════
 // loadFile  (OFFLINE mode)
 // ═════════════════════════════════════════════════════════════════════════════
-// FIX: scanFile() KHÔNG copy raw_data — chỉ lưu metadata + file_offset
-//      mmap giữ mở sau scanFile() → loadRawBytes() dùng mmap (zero-copy)
-//      source_file được gán trong scanFile() cho từng record
+
 void PcapTab::loadFile(const QString& path) {
     packet_model_->clear();
     dummy_ring_buf_.clear();
 
-    // Tạo PcapReader mới — đóng mmap cũ nếu có
     pcap_reader_ = std::make_unique<PcapReader>();
 
     const bool ok = pcap_reader_->scanFile(
@@ -525,8 +568,6 @@ void PcapTab::loadFile(const QString& path) {
         return;
     }
 
-    // Poll toàn bộ metadata từ ring_buf vào model
-    // raw_data = nullptr trong mọi record — lazy-load khi click
     uint64_t last_seq = 0;
     auto pkts = dummy_ring_buf_.pollNew(last_seq);
     packet_model_->appendRecords(pkts);
@@ -543,9 +584,8 @@ void PcapTab::loadFile(const QString& path) {
 
 void PcapTab::saveToFile(const QString& path) {
 
-    // LIVE: copy file tạm → đích (nhanh, không re-encode)
+    // LIVE: copy file tạm → đích
     if (mode_ == Mode::LIVE && !live_writer_path_.isEmpty()) {
-        // Flush trước khi copy để đảm bảo mọi packet đã xuống disk
         {
             std::lock_guard<std::mutex> lk(live_writer_mutex_);
             if (live_writer_ && live_writer_->isOpen())
@@ -565,7 +605,7 @@ void PcapTab::saveToFile(const QString& path) {
         return;
     }
 
-    // OFFLINE / fallback: dump từ model (lazy-load raw_data từng packet)
+    // OFFLINE / fallback: dump từ model
     PcapWriter writer;
     if (!writer.open(path.toStdString())) {
         emit statusMessage("❌ Cannot save: " + path);
@@ -576,10 +616,8 @@ void PcapTab::saveToFile(const QString& path) {
     for (int i = 0; i < n; ++i) {
         PacketInfo pkt;
         if (!packet_model_->getRecord(i, pkt)) continue;
-
         if (!pkt.raw_data || pkt.raw_data->empty())
             lazyLoadRawData(i, pkt);
-
         if (pkt.raw_data && !pkt.raw_data->empty())
             writer.writePacket(pkt);
     }
@@ -590,24 +628,20 @@ void PcapTab::saveToFile(const QString& path) {
             .arg(QFileInfo(path).fileName())
             .arg(n));
 }
-// ─── timerEvent ───────────────────────────────────────────────────────────────
-//
-//  Wireshark algorithm (packet_list.cpp::timerEvent):
+
+// ═════════════════════════════════════════════════════════════════════════════
+// timerEvent  (Wireshark algorithm)
+// ═════════════════════════════════════════════════════════════════════════════
 //
 //  overlay_timer (100ms):
 //    1. freeze()                   ← tắt Qt model notification
 //    2. pollRange(last_seq, MAX)   ← lấy packet mới từ ring_buf
-//    3. appendRecords(batch)       ← gom vào pending (frozen → không flush)
+//    3. appendRecords(batch)       ← gom vào pending (frozen)
 //    4. thaw()                     ← 1 beginInsertRows/endInsertRows duy nhất
 //    5. viewport()->update()       ← schedule 1 repaint
 //
 //  tail_timer (200ms):
 //    scrollToBottom() nếu tail_at_end_
-//
-//  Tại sao timerEvent tốt hơn QTimer::timeout:
-//    - Qt queue timerEvent sau khi event loop rảnh
-//    - Không fire giữa paint event → không flicker
-//    - Có thể killTimer chính xác theo timer ID
 //
 void PcapTab::timerEvent(QTimerEvent* event) {
     if (!packet_model_) return;
@@ -615,16 +649,13 @@ void PcapTab::timerEvent(QTimerEvent* event) {
     // ── overlay_timer: poll + freeze/thaw ─────────────────────────────────────
     if (event->timerId() == overlay_timer_id_) {
 
-        const bool capturing = capture_in_progress_.load(std::memory_order_acquire);
-        const uint64_t total_now = bridge_
+        const bool     capturing  = capture_in_progress_.load(std::memory_order_acquire);
+        const uint64_t total_now  = bridge_
             ? bridge_->ringBuf().totalPushed()
             : 0;
-
-        const bool has_new = (total_now > last_polled_seq_);
+        const bool     has_new    = (total_now > last_polled_seq_);
 
         if (has_new) {
-            // MAX_PER_TICK: 2000 pps × 100ms = 200 pkt/tick
-            // Dùng 500 để có buffer cho burst ngắn
             constexpr uint64_t MAX_PER_TICK = 500;
             const uint64_t to_fetch =
                 std::min(total_now - last_polled_seq_, MAX_PER_TICK);
@@ -633,12 +664,10 @@ void PcapTab::timerEvent(QTimerEvent* event) {
             last_polled_seq_ += to_fetch;
 
             if (!batch.empty()) {
-                // ── Wireshark freeze/thaw ─────────────────────────────────────
                 packet_model_->freeze();
-                packet_model_->appendRecords(batch);  // gom vào pending
-                packet_model_->thaw();                // 1 beginInsertRows duy nhất
+                packet_model_->appendRecords(batch);
+                packet_model_->thaw();
 
-                // 1 lần viewport update thay vì N lần
                 if (packet_model_->isDirty()) {
                     packet_table_->viewport()->update();
                     packet_model_->clearDirty();
@@ -654,7 +683,6 @@ void PcapTab::timerEvent(QTimerEvent* event) {
                 QString("⏹ Capture stopped — %1 packets")
                     .arg(packet_model_->rowCount()));
         }
-
         return;
     }
 
@@ -662,13 +690,10 @@ void PcapTab::timerEvent(QTimerEvent* event) {
     if (event->timerId() == tail_timer_id_) {
         if (tail_at_end_ && packet_model_->rowCount() > 0) {
             auto* vsb = packet_table_->verticalScrollBar();
-            // Chỉ scroll nếu user đang ở gần cuối (±3 rows)
-            // Tránh scroll khi user đang xem packet ở giữa
             if (vsb->value() >= vsb->maximum() - 3)
                 packet_table_->scrollToBottom();
         }
 
-        // Dừng tail timer khi capture kết thúc
         if (!capture_in_progress_.load(std::memory_order_acquire)) {
             killTimer(tail_timer_id_);
             tail_timer_id_ = -1;
@@ -680,9 +705,7 @@ void PcapTab::timerEvent(QTimerEvent* event) {
 }
 
 // ─── onNewPacketInfos (giữ lại để tương thích) ───────────────────────────────
-// timerEvent đã xử lý LIVE mode → hàm này chỉ dùng nếu ai đó vẫn emit signal
 void PcapTab::onNewPacketInfos(std::vector<PacketInfo> records) {
     if (records.empty() || mode_ == Mode::LIVE) return;
-    // OFFLINE fallback
     packet_model_->appendRecords(records);
 }

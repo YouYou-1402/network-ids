@@ -26,6 +26,7 @@ class MetricsWidget;
 class TrafficChart;
 class AlertPanel;
 class IpsControlWidget;
+class FirewallWidget;   // ← THÊM forward declare
 class UiBridge;
 struct DisplayFilter;
 
@@ -51,19 +52,15 @@ public:
     QString liveWriterPath() const { return live_writer_path_; }
     void    onOpenClicked  ();
 
+    // ── Accessor cho MainWindow inject FirewallManager ─────────────────────
+    // Chỉ có ở LIVE tab — OFFLINE tab trả nullptr
+    FirewallWidget* firewallWidget() const { return firewall_widget_; }
+
 signals:
     void titleChanged  (const QString& title);
     void statusMessage (const QString& msg);
 
 protected:
-    // ── Wireshark timerEvent ──────────────────────────────────────────────────
-    // Wireshark dùng timerEvent() thay QTimer::timeout để điều tiết repaint
-    // Lý do: timerEvent được Qt queue sau khi event loop rảnh
-    //        → không block UI khi đang xử lý mouse/keyboard event
-    //        → QTimer::timeout có thể fire ngay giữa paint event → flicker
-    //
-    // overlay_timer_id_  : 100ms — poll ring_buf + freeze/thaw
-    // tail_timer_id_     : 200ms — auto-scroll nếu tail_at_end_
     void timerEvent(QTimerEvent* event) override;
 
 private slots:
@@ -83,17 +80,18 @@ private:
     Mode      mode_;
     UiBridge* bridge_ = nullptr;
 
-    PacketRingBuffer dummy_ring_buf_{100'000};
+    PacketRingBuffer dummy_ring_buf_{1000'000};
 
-    QTableView*       packet_table_   = nullptr;
-    PacketListModel*  packet_model_   = nullptr;
-    PacketDetailTree* detail_tree_    = nullptr;
-    HexView*          hex_view_       = nullptr;
-    FilterBar*        filter_bar_     = nullptr;
-    MetricsWidget*    metrics_widget_ = nullptr;
-    TrafficChart*     traffic_chart_  = nullptr;
-    AlertPanel*       alert_panel_    = nullptr;
-    IpsControlWidget* ips_control_    = nullptr;
+    QTableView*       packet_table_    = nullptr;
+    PacketListModel*  packet_model_    = nullptr;
+    PacketDetailTree* detail_tree_     = nullptr;
+    HexView*          hex_view_        = nullptr;
+    FilterBar*        filter_bar_      = nullptr;
+    MetricsWidget*    metrics_widget_  = nullptr;
+    TrafficChart*     traffic_chart_   = nullptr;
+    AlertPanel*       alert_panel_     = nullptr;
+    IpsControlWidget* ips_control_     = nullptr;
+    FirewallWidget*   firewall_widget_ = nullptr;   // ← THÊM (nullptr cho OFFLINE)
 
     std::unique_ptr<PcapReader> pcap_reader_;
     std::unique_ptr<PcapWriter> live_writer_;
@@ -102,22 +100,10 @@ private:
 
     bool auto_scroll_ = true;
 
-    // ── Wireshark-style timer IDs ─────────────────────────────────────────────
-    // overlay_timer_id_ : startTimer(100) — poll + freeze/thaw
-    // tail_timer_id_    : startTimer(200) — auto-scroll
-    // -1 = chưa start
-    int overlay_timer_id_ = -1;
-    int tail_timer_id_    = -1;
+    int  overlay_timer_id_ = -1;
+    int  tail_timer_id_    = -1;
+    bool tail_at_end_      = true;
 
-    // tail_at_end_: true khi user đang ở cuối list → auto-scroll
-    // Wireshark: set true khi capture bắt đầu, false khi user scroll lên
-    bool tail_at_end_ = true;
-
-    // capture_in_progress_: true khi đang live capture
-    // timerEvent dừng overlay timer khi false + pending rỗng
     std::atomic<bool> capture_in_progress_{false};
-
-    // last_polled_seq_: seq cuối đã poll từ ring_buf
-    // Chỉ đọc/ghi trong timerEvent (UI thread) → không cần mutex
-    uint64_t last_polled_seq_ = 0;
+    uint64_t          last_polled_seq_ = 0;
 };

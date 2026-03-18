@@ -10,15 +10,13 @@ UiBridge::UiBridge(AlertManager&     alert_manager,
                    PacketRingBuffer& ring_buf,
                    QObject*          parent)
     : QObject(parent)
-    , alert_manager_(alert_manager)
-    , dispatcher_(dispatcher)
-    , ml_engine_(ml_engine)
-    , ring_buf_(ring_buf)
+    , alert_manager_   (alert_manager)
+    , dispatcher_      (dispatcher)
+    , ml_engine_       (ml_engine)
+    , ring_buf_        (ring_buf)
+    , firewall_manager_(nullptr)
 {
     connect(&timer_, &QTimer::timeout, this, &UiBridge::onTimer);
-
-    // Khởi tạo last_sent_seq_ = totalPushed() hiện tại
-    // → không emit packet cũ khi UI vừa mở
     last_sent_seq_ = ring_buf_.totalPushed();
 }
 
@@ -32,10 +30,9 @@ void UiBridge::onTimer() {
     emit metricsUpdated(buildMetricsSnapshot());
 
     // ── 2. Traffic chart ──────────────────────────────────────────────────────
-    // buildTrafficPoint() push vào pps_window_ → currentPps() đọc sau
     emit trafficUpdated(buildTrafficPoint());
 
-    // ── 3. Alerts — chỉ lấy phần mới ─────────────────────────────────────────
+    // ── 3. Alerts ─────────────────────────────────────────────────────────────
     {
         const uint64_t total_now = alert_manager_.totalAlerts();
         if (total_now > last_alert_seq_) {
@@ -53,46 +50,31 @@ void UiBridge::onTimer() {
     // ── 4. Live packets ───────────────────────────────────────────────────────
     {
         const uint64_t total_now = ring_buf_.totalPushed();
-        if (total_now <= last_sent_seq_) return;
+        if (total_now > last_sent_seq_) {
+            const uint64_t pps = currentPps();
+            if      (pps > 5000) max_batch_per_tick_ = 30;
+            else if (pps > 2000) max_batch_per_tick_ = 60;
+            else if (pps > 500)  max_batch_per_tick_ = 100;
+            else                 max_batch_per_tick_ = 150;
 
-        // ── Adaptive batch: điều chỉnh max_batch_per_tick_ theo PPS ──────────
-        // currentPps() đọc pps_window_ đã được buildTrafficPoint() cập nhật
-        const uint64_t pps = currentPps();
-        if      (pps > 5000) max_batch_per_tick_ = 30;
-        else if (pps > 2000) max_batch_per_tick_ = 60;
-        else if (pps > 500)  max_batch_per_tick_ = 100;
-        else                 max_batch_per_tick_ = 150;
+            const uint64_t available = total_now - last_sent_seq_;
+            const uint64_t to_fetch  = std::min(
+                available,
+                static_cast<uint64_t>(max_batch_per_tick_));
 
-        // ── FIX: dùng pollRange thay vì pollNew + rollback ────────────────────
-        //
-        // Trước đây (BUG):
-        //   pollNew(last_sent_seq_)  → advance last_sent_seq_ lên write_seq_
-        //   records.resize(batch)    → cắt bớt
-        //   last_sent_seq_ -= skip   → rollback thủ công
-        //   → race: capture thread push thêm trong lúc rollback
-        //   → có thể bỏ sót hoặc duplicate packet
-        //
-        // Bây giờ (FIX):
-        //   Tính to_fetch trước
-        //   pollRange(from, count)   → KHÔNG thay đổi state
-        //   last_sent_seq_ += to_fetch → advance chính xác SAU khi lấy xong
-        //   → không race, không bỏ sót, không duplicate
+            auto records = ring_buf_.pollRange(last_sent_seq_, to_fetch);
+            last_sent_seq_ += to_fetch;
 
-        const uint64_t available = total_now - last_sent_seq_;
-        const uint64_t to_fetch  = std::min(
-            available,
-            static_cast<uint64_t>(max_batch_per_tick_));
+            if (!records.empty())
+                emit newPacketInfos(std::move(records));
+        }
+    }
 
-        auto records = ring_buf_.pollRange(last_sent_seq_, to_fetch);
-
-        // Advance đúng số lượng đã fetch — kể cả khi ring buffer trả về
-        // ít hơn to_fetch (do oldest_seq_ đã vượt qua một số slot)
-        // → dùng to_fetch (không dùng records.size()) để tránh re-fetch
-        //   các slot đã bị overwrite mà không bao giờ lấy được
-        last_sent_seq_ += to_fetch;
-
-        if (!records.empty())
-            emit newPacketInfos(std::move(records));
+    // ── 5. Firewall stats (mỗi tick) ─────────────────────────────────────────
+    if (firewall_manager_) {
+        emit firewallStatsUpdated(
+            firewall_manager_->blacklistSize(),
+            firewall_manager_->whitelistSize());
     }
 }
 
@@ -113,7 +95,6 @@ MetricsSnapshot UiBridge::buildMetricsSnapshot() const {
 }
 
 // ─── buildTrafficPoint ────────────────────────────────────────────────────────
-// Push PpsPoint mới vào window, tính PPS từ oldest → newest
 TrafficPoint UiBridge::buildTrafficPoint() {
     const qint64   now_ms   = QDateTime::currentMSecsSinceEpoch();
     const uint64_t captured = METRICS.packets_captured.load(std::memory_order_relaxed);
@@ -122,7 +103,6 @@ TrafficPoint UiBridge::buildTrafficPoint() {
 
     pps_window_.push_back({now_ms, captured, dropped, alerted});
 
-    // Evict điểm cũ hơn PPS_WINDOW_MS
     while (pps_window_.size() > 1 &&
            now_ms - pps_window_.front().time_ms > PPS_WINDOW_MS)
         pps_window_.pop_front();
@@ -154,18 +134,12 @@ TrafficPoint UiBridge::buildTrafficPoint() {
 }
 
 // ─── currentPps ───────────────────────────────────────────────────────────────
-// Đọc PPS từ pps_window_ hiện tại — không push thêm
-// Gọi SAU buildTrafficPoint() để window đã có điểm mới nhất
 uint64_t UiBridge::currentPps() const {
     if (pps_window_.size() < 2) return 0;
-
     const auto&  oldest  = pps_window_.front();
     const auto&  newest  = pps_window_.back();
     const qint64 elapsed = newest.time_ms - oldest.time_ms;
-
-    if (elapsed <= 0) return 0;
-    if (newest.captured <= oldest.captured) return 0;
-
+    if (elapsed <= 0 || newest.captured <= oldest.captured) return 0;
     return (newest.captured - oldest.captured) * 1000ULL
            / static_cast<uint64_t>(elapsed);
 }
@@ -190,6 +164,36 @@ void UiBridge::setMlEnabled(bool enabled) {
     }
 }
 
+// ─── blockIp ─────────────────────────────────────────────────────────────────
+void UiBridge::blockIp(const QString& ip, const QString& reason) {
+    if (!firewall_manager_) return;
+    const std::string reason_str = reason.isEmpty()
+        ? "Manual block via UI"
+        : reason.toStdString();
+    const uint64_t id = firewall_manager_->manualBlock(
+        ip.toStdString(),
+        0,      // protocol: any
+        0,      // port: any
+        false,  // not permanent
+        600,    // TTL 10 min
+        reason_str);
+    if (id > 0)
+        LOG_INFO("UI blocked IP: " + ip.toStdString()
+                 + " reason=" + reason_str);
+    else
+        LOG_WARN("UI block failed for IP: " + ip.toStdString());
+}
+
+// ─── unblockIp ────────────────────────────────────────────────────────────────
+void UiBridge::unblockIp(const QString& ip) {
+    if (!firewall_manager_) return;
+    if (firewall_manager_->removeByIp(ip.toStdString()))
+        LOG_INFO("UI unblocked IP: " + ip.toStdString());
+    else
+        LOG_WARN("UI unblock failed for IP: " + ip.toStdString());
+}
+
+// ─── notifyCaptureStarted / Stopped ──────────────────────────────────────────
 void UiBridge::notifyCaptureStarted() {
     LOG_INFO("UiBridge: capture started");
     emit captureStarted();

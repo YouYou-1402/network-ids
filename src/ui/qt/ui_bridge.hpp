@@ -12,6 +12,7 @@
 #include "../../ml/ml_engine.hpp"
 #include "../../capture/io/packet_ring_buffer.hpp"
 #include "../../common/engine_config.hpp"
+#include "../../firewall/firewall_manager.hpp"   // ← THÊM
 
 // ─── Snapshot structs ─────────────────────────────────────────────────────────
 struct MetricsSnapshot {
@@ -39,13 +40,12 @@ struct TrafficPoint {
 //  Thread model:
 //    - Tất cả slots chạy trên Qt main thread (QTimer → main thread)
 //    - ring_buf_ được access qua pollNew() — thread-safe (mutex bên trong)
+//    - FirewallManager* không own — lifetime do caller quản lý
 //
 //  Packet flow (single source of truth):
 //    capture thread → ring_buf_.push()
 //    main thread    → ring_buf_.pollNew(last_sent_seq_) → emit newPacketInfos
 //    PcapTab        → onNewPacketInfos() → packet_model_->appendRecords()
-//
-//  ringBuf() public — PcapTab dùng để khởi tạo PacketListModel với đúng buffer
 // ─────────────────────────────────────────────────────────────────────────────
 class UiBridge : public QObject {
     Q_OBJECT
@@ -61,9 +61,15 @@ public:
     void stopPolling();
 
     void setMaxBatchPerTick(uint64_t n) { max_batch_per_tick_ = n; }
-    void notifyCaptureStarted();   // ← THÊM
-    void notifyCaptureStopped();   // ← THÊM
-    // ── Public accessor — PcapTab dùng để rebuild PacketListModel ─────────────
+    void notifyCaptureStarted();
+    void notifyCaptureStopped();
+
+    // ── FirewallManager injection ─────────────────────────────────────────────
+    // Gọi trước startPolling() — không thread-safe nếu gọi sau
+    void             setFirewallManager(FirewallManager* fw) { firewall_manager_ = fw; }
+    FirewallManager* firewallManager()  const                { return firewall_manager_; }
+
+    // ── Public accessor ───────────────────────────────────────────────────────
     PacketRingBuffer& ringBuf() { return ring_buf_; }
 
     bool isDetectionEnabled() const {
@@ -81,13 +87,18 @@ signals:
     void newPacketInfos        (std::vector<PacketInfo> records);
     void detectionStatusChanged(bool enabled);
     void mlStatusChanged       (bool enabled);
-    void captureStarted        ();   // ← THÊM
-    void captureStopped        ();   // ← THÊM
+    void captureStarted        ();
+    void captureStopped        ();
+    // ── Firewall signals ──────────────────────────────────────────────────────
+    void firewallStatsUpdated  (size_t blacklist_count,
+                                size_t whitelist_count);   // ← THÊM
 
 public slots:
     void setDetectionEnabled(bool enabled);
     void setMlEnabled       (bool enabled);
-
+    // ── Firewall slots ────────────────────────────────────────────────────────
+    void blockIp  (const QString& ip, const QString& reason = {});   // ← THÊM
+    void unblockIp(const QString& ip);                               // ← THÊM
 
 private slots:
     void onTimer();
@@ -101,11 +112,12 @@ private:
     Dispatcher&       dispatcher_;
     MLEngine&         ml_engine_;
     PacketRingBuffer& ring_buf_;
+    FirewallManager*  firewall_manager_ = nullptr;   // ← THÊM (không own)
 
     QTimer            timer_;
 
     uint64_t last_alert_seq_     {0};
-    uint64_t last_sent_seq_      {0};   // khởi tạo = totalPushed() trong ctor
+    uint64_t last_sent_seq_      {0};
     uint64_t max_batch_per_tick_ {150};
 
     struct PpsPoint {
