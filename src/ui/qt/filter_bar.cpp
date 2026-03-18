@@ -1,6 +1,7 @@
 // src/ui/qt/filter_bar.cpp
 #include "filter_bar.hpp"
 #include <QHBoxLayout>
+#include <QAbstractItemView>
 #include <arpa/inet.h>
 #include <algorithm>
 
@@ -22,66 +23,98 @@ const QStringList FilterBar::SUGGESTIONS = {
     "threat == port_scan",  "threat != normal",
 };
 
-// ─── Stylesheet constants ─────────────────────────────────────────────────────
+// ─── Stylesheet constants — light theme ──────────────────────────────────────
 static const char* STYLE_INPUT_NORMAL =
-    "QLineEdit { background: #1a1a2e; color: #cccccc; "
-    "border: 1px solid #444; border-radius: 3px; "
-    "padding: 1px 6px; font-family: monospace; font-size: 11px; }"
-    "QLineEdit:focus { border-color: #4488ff; }";
+    "QLineEdit {"
+    "  background: #ffffff; color: #1a1a3e;"
+    "  border: 1px solid #b0b8d8; border-radius: 4px;"
+    "  padding: 1px 8px;"
+    "  font-family: 'Consolas', 'Courier New', monospace;"
+    "  font-size: 11px; }"
+    "QLineEdit:focus { border-color: #3355cc; }";
 
 static const char* STYLE_INPUT_OK =
-    "QLineEdit { background: #1a2a1a; color: #cccccc; "
-    "border: 1px solid #44aa44; border-radius: 3px; "
-    "padding: 1px 6px; font-family: monospace; font-size: 11px; }";
+    "QLineEdit {"
+    "  background: #f0fff4; color: #1a1a3e;"
+    "  border: 1px solid #52c07a; border-radius: 4px;"
+    "  padding: 1px 8px;"
+    "  font-family: 'Consolas', 'Courier New', monospace;"
+    "  font-size: 11px; }";
 
 static const char* STYLE_INPUT_ERR =
-    "QLineEdit { background: #2a1a1a; color: #cccccc; "
-    "border: 1px solid #aa4444; border-radius: 3px; "
-    "padding: 1px 6px; font-family: monospace; font-size: 11px; }";
+    "QLineEdit {"
+    "  background: #fff5f5; color: #1a1a3e;"
+    "  border: 1px solid #e05555; border-radius: 4px;"
+    "  padding: 1px 8px;"
+    "  font-family: 'Consolas', 'Courier New', monospace;"
+    "  font-size: 11px; }";
 
 // ─── Constructor ──────────────────────────────────────────────────────────────
 FilterBar::FilterBar(QWidget* parent)
     : QWidget(parent)
 {
-    setFixedHeight(28);
+    setFixedHeight(32);
+    setStyleSheet("QWidget { background: #eef0f7; }");
 
     auto* layout = new QHBoxLayout(this);
-    layout->setContentsMargins(4, 2, 4, 2);
-    layout->setSpacing(4);
+    layout->setContentsMargins(6, 3, 6, 3);
+    layout->setSpacing(5);
 
+    // Icon
     auto* icon_lbl = new QLabel("🔍", this);
     icon_lbl->setFixedSize(18, 18);
-    icon_lbl->setStyleSheet("font-size: 11px;");
+    icon_lbl->setStyleSheet(
+        "QLabel { background: transparent; font-size: 12px; }");
 
+    // Input
     input_ = new QLineEdit(this);
-    input_->setFixedHeight(22);
+    input_->setFixedHeight(24);
     input_->setPlaceholderText(
         "Display filter  "
         "(e.g.  tcp  |  ip.src == 10.0.0.1  |  tcp.flags.syn == 1  |  threat == ddos)");
     input_->setStyleSheet(STYLE_INPUT_NORMAL);
 
+    // Completer
     completer_ = new QCompleter(SUGGESTIONS, this);
     completer_->setCaseSensitivity(Qt::CaseInsensitive);
     completer_->setFilterMode(Qt::MatchContains);
+    completer_->popup()->setStyleSheet(
+        "QAbstractItemView {"
+        "  background: #ffffff; color: #1a1a3e;"
+        "  border: 1px solid #d0d4e8;"
+        "  selection-background-color: #dce3ff;"
+        "  selection-color: #0a0a6e;"
+        "  font-size: 11px; }");
     input_->setCompleter(completer_);
 
+    // Apply button
     apply_btn_ = new QPushButton("Apply", this);
-    apply_btn_->setFixedSize(52, 22);
+    apply_btn_->setFixedSize(56, 24);
     apply_btn_->setStyleSheet(
-        "QPushButton { background: #2a3a5a; color: #88aaff; "
-        "border: 1px solid #446; border-radius: 3px; font-size: 11px; }"
-        "QPushButton:hover { background: #3a4a6a; }");
+        "QPushButton {"
+        "  background: #3355cc; color: #ffffff;"
+        "  border: none; border-radius: 4px;"
+        "  font-size: 11px; font-weight: bold; }"
+        "QPushButton:hover   { background: #2244bb; }"
+        "QPushButton:pressed { background: #1133aa; }");
 
+    // Clear button
     clear_btn_ = new QPushButton("✕", this);
-    clear_btn_->setFixedSize(22, 22);
+    clear_btn_->setFixedSize(24, 24);
+    clear_btn_->setToolTip("Clear filter");
     clear_btn_->setStyleSheet(
-        "QPushButton { background: #3a2a2a; color: #ff8888; "
-        "border: 1px solid #644; border-radius: 3px; font-size: 11px; }"
-        "QPushButton:hover { background: #4a3a3a; }");
+        "QPushButton {"
+        "  background: #fff0f0; color: #cc2222;"
+        "  border: 1px solid #f0b8b8; border-radius: 4px;"
+        "  font-size: 11px; }"
+        "QPushButton:hover   { background: #ffe0e0; border-color: #cc2222; }"
+        "QPushButton:pressed { background: #ffd0d0; }");
 
+    // Status label
     status_lbl_ = new QLabel("", this);
-    status_lbl_->setFixedWidth(80);
-    status_lbl_->setStyleSheet("font-size: 9px;");
+    status_lbl_->setFixedWidth(72);
+    status_lbl_->setStyleSheet(
+        "QLabel { background: transparent; font-size: 9px; }");
 
     layout->addWidget(icon_lbl);
     layout->addWidget(input_, 1);
@@ -89,6 +122,7 @@ FilterBar::FilterBar(QWidget* parent)
     layout->addWidget(clear_btn_);
     layout->addWidget(status_lbl_);
 
+    // Debounce timer
     debounce_timer_ = new QTimer(this);
     debounce_timer_->setSingleShot(true);
     debounce_timer_->setInterval(300);
@@ -165,12 +199,16 @@ void FilterBar::onDebounceTimeout() {
     const DisplayFilter test = parseFilter(text);
     if (test.valid) {
         input_->setStyleSheet(STYLE_INPUT_OK);
-        status_lbl_->setText("  ✔ OK");
-        status_lbl_->setStyleSheet("color: #44aa44; font-size: 9px;");
+        status_lbl_->setText("✔ OK");
+        status_lbl_->setStyleSheet(
+            "QLabel { background: transparent;"
+            "         color: #227744; font-size: 9px; }");
     } else {
         input_->setStyleSheet(STYLE_INPUT_ERR);
-        status_lbl_->setText("  " + QString::fromStdString(test.error_msg));
-        status_lbl_->setStyleSheet("color: #ff6666; font-size: 9px;");
+        status_lbl_->setText(QString::fromStdString(test.error_msg));
+        status_lbl_->setStyleSheet(
+            "QLabel { background: transparent;"
+            "         color: #cc2222; font-size: 9px; }");
     }
 }
 
@@ -184,19 +222,25 @@ void FilterBar::clearFilter() {
     onClear();
 }
 
-// ─── setValidStyle / setStatusOk / setStatusErr ───────────────────────────────
+// ─── setValidStyle ────────────────────────────────────────────────────────────
 void FilterBar::setValidStyle(bool valid) {
     input_->setStyleSheet(valid ? STYLE_INPUT_OK : STYLE_INPUT_ERR);
 }
 
+// ─── setStatusOk ─────────────────────────────────────────────────────────────
 void FilterBar::setStatusOk(const QString& msg) {
-    status_lbl_->setText(msg);
-    status_lbl_->setStyleSheet("color: #44ff88; font-size: 9px;");
+    status_lbl_->setText(msg.isEmpty() ? "✔ OK" : msg);
+    status_lbl_->setStyleSheet(
+        "QLabel { background: transparent;"
+        "         color: #227744; font-size: 9px; }");
 }
 
+// ─── setStatusErr ─────────────────────────────────────────────────────────────
 void FilterBar::setStatusErr(const QString& msg) {
     status_lbl_->setText("✕ " + msg);
-    status_lbl_->setStyleSheet("color: #ff4444; font-size: 9px;");
+    status_lbl_->setStyleSheet(
+        "QLabel { background: transparent;"
+        "         color: #cc2222; font-size: 9px; }");
 }
 
 // ─── parseFilter ─────────────────────────────────────────────────────────────

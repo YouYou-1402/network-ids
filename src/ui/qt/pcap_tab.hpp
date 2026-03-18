@@ -24,9 +24,7 @@ class HexView;
 class FilterBar;
 class MetricsWidget;
 class TrafficChart;
-class AlertPanel;
-class IpsControlWidget;
-class FirewallWidget;   // ← THÊM forward declare
+class AlertPanel;  
 class UiBridge;
 struct DisplayFilter;
 
@@ -52,9 +50,6 @@ public:
     QString liveWriterPath() const { return live_writer_path_; }
     void    onOpenClicked  ();
 
-    // ── Accessor cho MainWindow inject FirewallManager ─────────────────────
-    // Chỉ có ở LIVE tab — OFFLINE tab trả nullptr
-    FirewallWidget* firewallWidget() const { return firewall_widget_; }
 
 signals:
     void titleChanged  (const QString& title);
@@ -89,9 +84,6 @@ private:
     FilterBar*        filter_bar_      = nullptr;
     MetricsWidget*    metrics_widget_  = nullptr;
     TrafficChart*     traffic_chart_   = nullptr;
-    AlertPanel*       alert_panel_     = nullptr;
-    IpsControlWidget* ips_control_     = nullptr;
-    FirewallWidget*   firewall_widget_ = nullptr;   // ← THÊM (nullptr cho OFFLINE)
 
     std::unique_ptr<PcapReader> pcap_reader_;
     std::unique_ptr<PcapWriter> live_writer_;

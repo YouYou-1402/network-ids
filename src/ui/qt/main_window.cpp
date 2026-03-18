@@ -234,6 +234,8 @@ void MainWindow::applyTheme() {
         "QToolTip { background: #1e2a4a; color: #ddeeff;"
         "           border: 1px solid #3355cc; padding: 4px; font-size: 11px; }");
 }
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // setupUI
 // ═══════════════════════════════════════════════════════════════════════════════

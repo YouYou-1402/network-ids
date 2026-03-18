@@ -9,6 +9,21 @@
 #include <chrono>
 #include <ctime>
 
+// ─── Palette ──────────────────────────────────────────────────────────────────
+//  BG_PAGE   #f5f6fa    nền tổng
+//  BG_PANEL  #ffffff    nền bảng
+//  BG_ALT    #f4f5fb    alternate row
+//  BG_HEADER #eef0f7    header / toolbar
+//  BORDER    #d0d4e8    viền
+//  TEXT_PRI  #1a1a3e    chữ chính
+//  TEXT_SEC  #666688    chữ phụ
+//  ACCENT    #3355cc    xanh accent
+//  RED_FG    #cc2222    đỏ foreground
+//  RED_BG    #fff0f0    đỏ background pastel
+//  GREEN_FG  #227744    xanh lá foreground
+//  GREEN_BG  #f0fff4    xanh lá background pastel
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Constructor / setFirewallManager
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -16,6 +31,7 @@
 FirewallWidget::FirewallWidget(QWidget* parent)
     : QWidget(parent)
 {
+    setStyleSheet("QWidget { background: #f5f6fa; color: #1a1a3e; }");
     setupUI();
     setControlsEnabled(false);
 }
@@ -25,7 +41,6 @@ void FirewallWidget::setFirewallManager(FirewallManager* fw) {
     setControlsEnabled(fw_ != nullptr);
     if (!fw_) return;
 
-    // ── RuleChangeCallback → marshal về main thread ───────────────────────────
     fw_->setRuleChangeCallback(
         [this](const FirewallRule& rule, bool added) {
             QMetaObject::invokeMethod(this,
@@ -42,48 +57,96 @@ void FirewallWidget::setFirewallManager(FirewallManager* fw) {
 
 void FirewallWidget::setupUI() {
     auto* root = new QVBoxLayout(this);
-    root->setSpacing(5);
+    root->setSpacing(6);
     root->setContentsMargins(6, 6, 6, 6);
 
     // ── Stats badge ───────────────────────────────────────────────────────────
     lbl_stats_badge_ = new QLabel("🔴 Blacklist: 0   🟢 Whitelist: 0", this);
     lbl_stats_badge_->setAlignment(Qt::AlignCenter);
-    lbl_stats_badge_->setFixedHeight(26);
+    lbl_stats_badge_->setFixedHeight(28);
     lbl_stats_badge_->setStyleSheet(
-        "QLabel { background: #0d0d1a; color: #aaaacc; "
-        "font-size: 11px; font-weight: bold; "
-        "border: 1px solid #2a2a3e; border-radius: 4px; "
-        "padding: 2px 6px; }");
+        "QLabel {"
+        "  background: #eef0f7; color: #1a1a3e;"
+        "  font-size: 11px; font-weight: bold;"
+        "  border: 1px solid #d0d4e8; border-radius: 4px;"
+        "  padding: 2px 8px; }");
     root->addWidget(lbl_stats_badge_);
 
     // ── Tab widget ────────────────────────────────────────────────────────────
     tab_widget_ = new QTabWidget(this);
     tab_widget_->setStyleSheet(
-        "QTabWidget::pane  { border: 1px solid #2a2a3e; background: #0d0d1a; }"
-        "QTabBar::tab      { background: #1a1a2e; color: #888899; "
-        "                    border: 1px solid #2a2a3e; padding: 4px 10px; }"
-        "QTabBar::tab:selected { background: #1e1e35; color: #ffffff; "
-        "                        border-bottom: 2px solid #ff4444; }"
-        "QTabBar::tab:hover    { background: #222238; }");
+        "QTabWidget::pane {"
+        "  border: 1px solid #d0d4e8; border-radius: 4px;"
+        "  background: #ffffff; }"
+        "QTabBar::tab {"
+        "  background: #eef0f7; color: #555577;"
+        "  border: 1px solid #d0d4e8;"
+        "  border-bottom: none;"
+        "  padding: 5px 14px;"
+        "  font-size: 11px; }"
+        "QTabBar::tab:selected {"
+        "  background: #ffffff; color: #1a1a3e;"
+        "  font-weight: bold;"
+        "  border-bottom: 2px solid #3355cc; }"
+        "QTabBar::tab:hover { background: #dce3ff; }");
 
     auto* bl_tab = new QWidget(tab_widget_);
     setupBlacklistTab(bl_tab);
-    tab_widget_->addTab(bl_tab, "🔴 Blacklist");
+    tab_widget_->addTab(bl_tab, "🔴  Blacklist");
 
     auto* wl_tab = new QWidget(tab_widget_);
     setupWhitelistTab(wl_tab);
-    tab_widget_->addTab(wl_tab, "🟢 Whitelist");
+    tab_widget_->addTab(wl_tab, "🟢  Whitelist");
 
     root->addWidget(tab_widget_, 1);
 
     setupQuickActions(root);
 }
 
+// ─── Table stylesheet helper ──────────────────────────────────────────────────
+static QString tableStyle() {
+    return
+        "QTableWidget {"
+        "  background: #ffffff; color: #1a1a3e;"
+        "  border: 1px solid #d0d4e8;"
+        "  gridline-color: #e8eaf4;"
+        "  font-size: 11px; }"
+        "QTableWidget::item { padding: 2px 6px; border: none; }"
+        "QTableWidget::item:selected {"
+        "  background: #dce3ff; color: #0a0a6e; }"
+        "QTableWidget::item:hover { background: #eef0ff; }"
+        "QHeaderView::section {"
+        "  background: #eef0f7; color: #333366;"
+        "  border: none;"
+        "  border-right: 1px solid #d0d4e8;"
+        "  border-bottom: 2px solid #b0b8d8;"
+        "  padding: 3px 6px;"
+        "  font-size: 10px; font-weight: bold; }"
+        "QHeaderView::section:last { border-right: none; }"
+        "QScrollBar:vertical   { background: #f0f1f8; width: 8px; }"
+        "QScrollBar:horizontal { background: #f0f1f8; height: 8px; }"
+        "QScrollBar::handle:vertical   { background: #b0b8d8;"
+        "  border-radius: 4px; min-height: 20px; }"
+        "QScrollBar::handle:horizontal { background: #b0b8d8;"
+        "  border-radius: 4px; min-width: 20px; }"
+        "QScrollBar::add-line, QScrollBar::sub-line { height:0; width:0; }";
+}
+
+static QString inputStyle(const QString& focus_border = "#3355cc") {
+    return QString(
+        "QLineEdit {"
+        "  background: #ffffff; color: #1a1a3e;"
+        "  border: 1px solid #b0b8d8; border-radius: 4px;"
+        "  padding: 3px 8px; font-size: 11px; }"
+        "QLineEdit:focus { border-color: %1; }"
+        "QLineEdit:disabled { background: #f0f0f8; color: #aaaacc; }").arg(focus_border);
+}
+
 // ─── setupBlacklistTab ────────────────────────────────────────────────────────
 void FirewallWidget::setupBlacklistTab(QWidget* parent) {
     auto* layout = new QVBoxLayout(parent);
-    layout->setSpacing(4);
-    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(6);
+    layout->setContentsMargins(6, 6, 6, 6);
 
     bl_table_ = new QTableWidget(0, BL_COL_COUNT, parent);
     bl_table_->setHorizontalHeaderLabels(
@@ -103,44 +166,40 @@ void FirewallWidget::setupBlacklistTab(QWidget* parent) {
     bl_table_->setColumnWidth(BL_ACTION, 60);
     bl_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     bl_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    bl_table_->setAlternatingRowColors(true);
+    bl_table_->setAlternatingRowColors(false);
     bl_table_->verticalHeader()->hide();
-    bl_table_->setStyleSheet(
-        "QTableWidget { background: #0d0d1a; color: #cccccc; "
-        "gridline-color: #1e1e2e; font-size: 11px; "
-        "alternate-background-color: #111120; }"
-        "QHeaderView::section { background: #1a1a2e; color: #8888aa; "
-        "border: 1px solid #2a2a3e; padding: 3px; font-size: 10px; }"
-        "QTableWidget::item:selected { background: #2a1a1a; color: #ff8888; }");
+    bl_table_->setStyleSheet(tableStyle());
     layout->addWidget(bl_table_, 1);
 
     // ── Add row ───────────────────────────────────────────────────────────────
     auto* add_row    = new QWidget(parent);
+    add_row->setStyleSheet(
+        "QWidget { background: #eef0f7;"
+        "          border: 1px solid #d0d4e8; border-radius: 4px; }");
     auto* add_layout = new QHBoxLayout(add_row);
-    add_layout->setContentsMargins(0, 0, 0, 0);
-    add_layout->setSpacing(4);
+    add_layout->setContentsMargins(8, 5, 8, 5);
+    add_layout->setSpacing(6);
 
     bl_ip_input_ = new QLineEdit(add_row);
     bl_ip_input_->setPlaceholderText("IP / CIDR  (e.g. 192.168.1.1)");
-    bl_ip_input_->setStyleSheet(
-        "QLineEdit { background: #1a1a2e; color: #cccccc; "
-        "border: 1px solid #333355; border-radius: 3px; "
-        "padding: 3px 6px; font-size: 11px; }"
-        "QLineEdit:focus { border-color: #ff4444; }");
+    bl_ip_input_->setStyleSheet(inputStyle("#cc2222"));
 
     bl_comment_ = new QLineEdit(add_row);
     bl_comment_->setPlaceholderText("Comment (optional)");
-    bl_comment_->setFixedWidth(120);
-    bl_comment_->setStyleSheet(bl_ip_input_->styleSheet());
+    bl_comment_->setFixedWidth(130);
+    bl_comment_->setStyleSheet(inputStyle());
 
     bl_perm_btn_ = new QPushButton("⏱ TTL 10m", add_row);
-    bl_perm_btn_->setFixedSize(80, 26);
+    bl_perm_btn_->setFixedSize(84, 26);
     bl_perm_btn_->setCheckable(true);
     bl_perm_btn_->setStyleSheet(
-        "QPushButton { background: #1a2a1a; color: #88cc88; "
-        "border: 1px solid #336633; border-radius: 3px; font-size: 10px; }"
-        "QPushButton:checked { background: #2a1a1a; color: #ff8888; "
-        "border-color: #663333; }"
+        "QPushButton {"
+        "  background: #eef0f7; color: #227744;"
+        "  border: 1px solid #a5d6a7; border-radius: 4px;"
+        "  font-size: 10px; }"
+        "QPushButton:checked {"
+        "  background: #fff0f0; color: #cc2222;"
+        "  border-color: #f0b8b8; }"
         "QPushButton:hover { opacity: 0.85; }");
     connect(bl_perm_btn_, &QPushButton::toggled, this, [this](bool checked) {
         bl_permanent_ = checked;
@@ -148,14 +207,16 @@ void FirewallWidget::setupBlacklistTab(QWidget* parent) {
     });
 
     btn_block_ = new QPushButton("⛔ Block", add_row);
-    btn_block_->setFixedSize(70, 26);
+    btn_block_->setFixedSize(72, 26);
     btn_block_->setStyleSheet(
-        "QPushButton { background: #3a1010; color: #ff6666; "
-        "border: 1px solid #662222; border-radius: 3px; "
-        "font-size: 11px; font-weight: bold; }"
-        "QPushButton:hover { background: #4a1818; }"
-        "QPushButton:disabled { background: #1a1a1a; color: #444444; "
-        "border-color: #333333; }");
+        "QPushButton {"
+        "  background: #fff0f0; color: #cc2222;"
+        "  border: 1px solid #f0b8b8; border-radius: 4px;"
+        "  font-size: 11px; font-weight: bold; }"
+        "QPushButton:hover   { background: #ffe0e0; border-color: #cc2222; }"
+        "QPushButton:pressed { background: #ffd0d0; }"
+        "QPushButton:disabled { background: #f8f8f8; color: #aaaacc;"
+        "                       border-color: #d8d8ee; }");
     connect(btn_block_, &QPushButton::clicked,
             this, &FirewallWidget::onBlockClicked);
 
@@ -169,8 +230,8 @@ void FirewallWidget::setupBlacklistTab(QWidget* parent) {
 // ─── setupWhitelistTab ────────────────────────────────────────────────────────
 void FirewallWidget::setupWhitelistTab(QWidget* parent) {
     auto* layout = new QVBoxLayout(parent);
-    layout->setSpacing(4);
-    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(6);
+    layout->setContentsMargins(6, 6, 6, 6);
 
     wl_table_ = new QTableWidget(0, WL_COL_COUNT, parent);
     wl_table_->setHorizontalHeaderLabels({"IP Address", "Comment", ""});
@@ -183,44 +244,40 @@ void FirewallWidget::setupWhitelistTab(QWidget* parent) {
     wl_table_->setColumnWidth(WL_ACTION, 60);
     wl_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     wl_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    wl_table_->setAlternatingRowColors(true);
+    wl_table_->setAlternatingRowColors(false);
     wl_table_->verticalHeader()->hide();
-    wl_table_->setStyleSheet(
-        "QTableWidget { background: #0d0d1a; color: #cccccc; "
-        "gridline-color: #1e1e2e; font-size: 11px; "
-        "alternate-background-color: #111120; }"
-        "QHeaderView::section { background: #1a1a2e; color: #8888aa; "
-        "border: 1px solid #2a2a3e; padding: 3px; font-size: 10px; }"
-        "QTableWidget::item:selected { background: #1a2a1a; color: #88ff88; }");
+    wl_table_->setStyleSheet(tableStyle());
     layout->addWidget(wl_table_, 1);
 
+    // ── Add row ───────────────────────────────────────────────────────────────
     auto* add_row    = new QWidget(parent);
+    add_row->setStyleSheet(
+        "QWidget { background: #eef0f7;"
+        "          border: 1px solid #d0d4e8; border-radius: 4px; }");
     auto* add_layout = new QHBoxLayout(add_row);
-    add_layout->setContentsMargins(0, 0, 0, 0);
-    add_layout->setSpacing(4);
+    add_layout->setContentsMargins(8, 5, 8, 5);
+    add_layout->setSpacing(6);
 
     wl_ip_input_ = new QLineEdit(add_row);
     wl_ip_input_->setPlaceholderText("IP / CIDR  (e.g. 10.0.0.1)");
-    wl_ip_input_->setStyleSheet(
-        "QLineEdit { background: #1a1a2e; color: #cccccc; "
-        "border: 1px solid #333355; border-radius: 3px; "
-        "padding: 3px 6px; font-size: 11px; }"
-        "QLineEdit:focus { border-color: #00cc66; }");
+    wl_ip_input_->setStyleSheet(inputStyle("#227744"));
 
     wl_comment_ = new QLineEdit(add_row);
     wl_comment_->setPlaceholderText("Comment (optional)");
-    wl_comment_->setFixedWidth(140);
-    wl_comment_->setStyleSheet(wl_ip_input_->styleSheet());
+    wl_comment_->setFixedWidth(150);
+    wl_comment_->setStyleSheet(inputStyle());
 
     btn_allow_ = new QPushButton("✅ Allow", add_row);
-    btn_allow_->setFixedSize(70, 26);
+    btn_allow_->setFixedSize(72, 26);
     btn_allow_->setStyleSheet(
-        "QPushButton { background: #0d2a0d; color: #00ff88; "
-        "border: 1px solid #1a5a1a; border-radius: 3px; "
-        "font-size: 11px; font-weight: bold; }"
-        "QPushButton:hover { background: #1a3a1a; }"
-        "QPushButton:disabled { background: #1a1a1a; color: #444444; "
-        "border-color: #333333; }");
+        "QPushButton {"
+        "  background: #f0fff4; color: #227744;"
+        "  border: 1px solid #a5d6a7; border-radius: 4px;"
+        "  font-size: 11px; font-weight: bold; }"
+        "QPushButton:hover   { background: #c8e6c9; border-color: #388e3c; }"
+        "QPushButton:pressed { background: #b2dfdb; }"
+        "QPushButton:disabled { background: #f8f8f8; color: #aaaacc;"
+        "                       border-color: #d8d8ee; }");
     connect(btn_allow_, &QPushButton::clicked,
             this, &FirewallWidget::onAllowClicked);
 
@@ -233,20 +290,23 @@ void FirewallWidget::setupWhitelistTab(QWidget* parent) {
 // ─── setupQuickActions ────────────────────────────────────────────────────────
 void FirewallWidget::setupQuickActions(QVBoxLayout* root) {
     auto* row    = new QWidget(this);
+    row->setStyleSheet("QWidget { background: transparent; }");
     auto* layout = new QHBoxLayout(row);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(4);
+    layout->setContentsMargins(0, 2, 0, 0);
+    layout->setSpacing(5);
 
     const QString btn_style =
-        "QPushButton { background: #1a1a2e; color: #8888cc; "
-        "border: 1px solid #2a2a4e; border-radius: 3px; "
-        "font-size: 10px; padding: 3px 8px; }"
-        "QPushButton:hover { background: #222240; color: #aaaaee; }"
-        "QPushButton:disabled { color: #444444; border-color: #222222; }";
+        "QPushButton {"
+        "  background: #eef0f7; color: #3355cc;"
+        "  border: 1px solid #c0c8e8; border-radius: 4px;"
+        "  font-size: 10px; padding: 4px 10px; }"
+        "QPushButton:hover   { background: #dce3ff; border-color: #3355cc; }"
+        "QPushButton:pressed { background: #c8d0f8; }"
+        "QPushButton:disabled { color: #aaaacc; border-color: #d8d8ee; }";
 
-    btn_refresh_ = new QPushButton("🔄 Refresh", row);
-    btn_flush_   = new QPushButton("🗑 Flush Blacklist", row);
-    btn_save_    = new QPushButton("💾 Save Rules", row);
+    btn_refresh_ = new QPushButton("🔄  Refresh",        row);
+    btn_flush_   = new QPushButton("🗑  Flush Blacklist", row);
+    btn_save_    = new QPushButton("💾  Save Rules",      row);
 
     btn_refresh_->setStyleSheet(btn_style);
     btn_flush_  ->setStyleSheet(btn_style);
@@ -280,11 +340,8 @@ void FirewallWidget::onBlockClicked() {
     }
 
     const std::string comment = bl_comment_->text().trimmed().toStdString();
-
     const uint64_t id = fw_->manualBlock(
-        ip.toStdString(),
-        0,
-        0,
+        ip.toStdString(), 0, 0,
         bl_permanent_,
         bl_permanent_ ? 0 : 600,
         comment.empty() ? "Manual block" : comment);
@@ -313,7 +370,6 @@ void FirewallWidget::onAllowClicked() {
     }
 
     const std::string comment = wl_comment_->text().trimmed().toStdString();
-
     const uint64_t id = fw_->addWhitelist(
         ip.toStdString(),
         comment.empty() ? "Manual whitelist" : comment);
@@ -412,7 +468,7 @@ void FirewallWidget::refreshBlacklist() {
         // ── IP ────────────────────────────────────────────────────────────────
         auto* ip_item = makeItem(QString::fromStdString(r.src_ip));
         ip_item->setData(Qt::UserRole, static_cast<qulonglong>(r.id));
-        ip_item->setForeground(QColor("#ff8888"));
+        ip_item->setForeground(QColor("#cc2222"));
         bl_table_->setItem(i, BL_IP, ip_item);
 
         // ── Protocol ──────────────────────────────────────────────────────────
@@ -421,9 +477,8 @@ void FirewallWidget::refreshBlacklist() {
                      Qt::AlignCenter | Qt::AlignVCenter));
 
         // ── Comment ───────────────────────────────────────────────────────────
-        // field name: comment (theo firewall_rule.hpp chuẩn hóa ở trên)
         auto* cmt_item = makeItem(QString::fromStdString(r.comment));
-        cmt_item->setForeground(QColor("#aaaacc"));
+        cmt_item->setForeground(QColor("#666688"));
         bl_table_->setItem(i, BL_COMMENT, cmt_item);
 
         // ── TTL ───────────────────────────────────────────────────────────────
@@ -433,27 +488,37 @@ void FirewallWidget::refreshBlacklist() {
         auto* ttl_item = makeItem(ttl_str,
                                    Qt::AlignCenter | Qt::AlignVCenter);
         ttl_item->setForeground(r.permanent
-            ? QColor("#ff6666") : QColor("#ffaa44"));
+            ? QColor("#cc2222") : QColor("#cc6600"));
         bl_table_->setItem(i, BL_TTL, ttl_item);
 
         // ── Source ────────────────────────────────────────────────────────────
         const bool is_auto = (r.source == FirewallRule::Source::AUTO);
         const QString src  = is_auto ? "🤖 Auto" : "👤 Manual";
         auto* src_item = makeItem(src, Qt::AlignCenter | Qt::AlignVCenter);
-        src_item->setForeground(QColor(is_auto ? "#44aaff" : "#aaaaaa"));
+        src_item->setForeground(QColor(is_auto ? "#3355cc" : "#666688"));
         bl_table_->setItem(i, BL_SOURCE, src_item);
 
         // ── Remove button ─────────────────────────────────────────────────────
         auto* btn = new QPushButton("✕", bl_table_);
-        btn->setFixedSize(40, 20);
+        btn->setFixedSize(42, 20);
         btn->setStyleSheet(
-            "QPushButton { background: #3a1010; color: #ff6666; "
-            "border: 1px solid #552222; border-radius: 2px; font-size: 11px; }"
-            "QPushButton:hover { background: #4a1818; }");
+            "QPushButton {"
+            "  background: #fff0f0; color: #cc2222;"
+            "  border: 1px solid #f0b8b8; border-radius: 3px;"
+            "  font-size: 11px; }"
+            "QPushButton:hover { background: #ffe0e0; border-color: #cc2222; }");
         const int row_idx = i;
         connect(btn, &QPushButton::clicked,
                 this, [this, row_idx]() { onRemoveBlacklistRow(row_idx); });
         bl_table_->setCellWidget(i, BL_ACTION, btn);
+
+        // Row tint nhẹ theo loại
+        const QColor row_bg = r.permanent
+            ? QColor("#fff8f8")   // permanent → đỏ rất nhạt
+            : QColor("#ffffff");
+        for (int col = 0; col < BL_ACTION; ++col)
+            if (auto* item = bl_table_->item(i, col))
+                item->setBackground(row_bg);
 
         bl_table_->setRowHeight(i, 22);
     }
@@ -473,20 +538,21 @@ void FirewallWidget::refreshWhitelist() {
         const auto& r = rules[i];
 
         auto* ip_item = makeItem(QString::fromStdString(r.src_ip));
-        ip_item->setForeground(QColor("#88ff88"));
+        ip_item->setForeground(QColor("#227744"));
         wl_table_->setItem(i, WL_IP, ip_item);
 
-        // ── Comment ───────────────────────────────────────────────────────────
         auto* cmt_item = makeItem(QString::fromStdString(r.comment));
-        cmt_item->setForeground(QColor("#aaaacc"));
+        cmt_item->setForeground(QColor("#666688"));
         wl_table_->setItem(i, WL_COMMENT, cmt_item);
 
         auto* btn = new QPushButton("✕", wl_table_);
-        btn->setFixedSize(40, 20);
+        btn->setFixedSize(42, 20);
         btn->setStyleSheet(
-            "QPushButton { background: #102a10; color: #66ff66; "
-            "border: 1px solid #225522; border-radius: 2px; font-size: 11px; }"
-            "QPushButton:hover { background: #183a18; }");
+            "QPushButton {"
+            "  background: #f0fff4; color: #227744;"
+            "  border: 1px solid #a5d6a7; border-radius: 3px;"
+            "  font-size: 11px; }"
+            "QPushButton:hover { background: #c8e6c9; border-color: #388e3c; }");
         const int row_idx = i;
         connect(btn, &QPushButton::clicked,
                 this, [this, row_idx]() { onRemoveWhitelistRow(row_idx); });

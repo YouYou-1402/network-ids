@@ -6,9 +6,6 @@
 #include "filter_bar.hpp"
 #include "metrics_widget.hpp"
 #include "traffic_chart.hpp"
-#include "alert_panel.hpp"
-#include "ips_control_widget.hpp"
-#include "firewall_widget.hpp"          // ← THÊM
 #include "ui_bridge.hpp"
 
 #include "../../capture/io/pcap_reader.hpp"
@@ -17,26 +14,38 @@
 #include <QSplitter>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QTabWidget>
+#include <QFrame>
+#include <QPushButton>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFile>
 #include <QDir>
-#include <QDateTime>
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QScrollBar>
 #include <QAbstractItemView>
 #include <algorithm>
 
+// ─── Palette (light theme) ────────────────────────────────────────────────────
+//   BG_PAGE   #f5f6fa   nền tổng
+//   BG_PANEL  #ffffff   nền panel / table
+//   BG_HEADER #eef0f7   header row / sidebar
+//   BORDER    #d0d4e8   viền
+//   TEXT_PRI  #1a1a3e   chữ chính
+//   TEXT_SEC  #555577   chữ phụ
+//   ACCENT    #3355cc   xanh accent
+//   SEL_BG    #dce3ff   nền selected row
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Constructor / Destructor
 // ═════════════════════════════════════════════════════════════════════════════
 
 PcapTab::PcapTab(Mode mode, QWidget* parent)
-    : QWidget(parent)
-    , mode_(mode)
+    : QWidget(parent), mode_(mode)
 {
+    setStyleSheet("QWidget { background: #f5f6fa; color: #1a1a3e; }");
+
     if (mode_ == Mode::LIVE)
         setupLiveLayout();
     else
@@ -68,25 +77,14 @@ void PcapTab::setUiBridge(UiBridge* bridge) {
 
         delete old_model;
 
-        // ── Wireshark: startTimer thay vì QTimer ──────────────────────────────
-        // overlay_timer_id_: poll ring_buf + freeze/thaw mỗi 100ms
-        // tail_timer_id_   : auto-scroll mỗi 200ms
-        if (overlay_timer_id_ == -1)
-            overlay_timer_id_ = startTimer(100);
-        if (tail_timer_id_ == -1)
-            tail_timer_id_ = startTimer(200);
+        if (overlay_timer_id_ == -1) overlay_timer_id_ = startTimer(100);
+        if (tail_timer_id_    == -1) tail_timer_id_    = startTimer(200);
 
         capture_in_progress_.store(true, std::memory_order_release);
         last_polled_seq_ = bridge_->ringBuf().totalPushed();
     }
 
     connectBridgeSignals();
-
-    if (ips_control_) {
-        ips_control_->syncState(
-            bridge_->isDetectionEnabled(),
-            bridge_->isMlEnabled());
-    }
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -104,11 +102,6 @@ void PcapTab::connectBridgeSignals() {
         connect(bridge_, &UiBridge::trafficUpdated,
                 traffic_chart_, &TrafficChart::onTrafficUpdated);
 
-    if (alert_panel_)
-        connect(bridge_, &UiBridge::newAlerts,
-                alert_panel_, &AlertPanel::onNewAlerts);
-
-    // ── captureStarted / captureStopped → điều khiển timerEvent ──────────────
     connect(bridge_, &UiBridge::captureStarted, this, [this]() {
         capture_in_progress_.store(true, std::memory_order_release);
         tail_at_end_     = true;
@@ -120,30 +113,10 @@ void PcapTab::connectBridgeSignals() {
     connect(bridge_, &UiBridge::captureStopped, this, [this]() {
         capture_in_progress_.store(false, std::memory_order_release);
     });
-
-    // ── IPS control ───────────────────────────────────────────────────────────
-    if (ips_control_) {
-        connect(ips_control_, &IpsControlWidget::toggleDetection,
-                bridge_,      &UiBridge::setDetectionEnabled);
-        connect(ips_control_, &IpsControlWidget::toggleMl,
-                bridge_,      &UiBridge::setMlEnabled);
-        connect(bridge_,      &UiBridge::detectionStatusChanged,
-                ips_control_, &IpsControlWidget::onDetectionStatusChanged);
-        connect(bridge_,      &UiBridge::mlStatusChanged,
-                ips_control_, &IpsControlWidget::onMlStatusChanged);
-    }
-
-    // ── Firewall widget status messages → tab statusMessage ──────────────────
-    // FirewallManager được inject từ MainWindow sau setUiBridge()
-    // → chỉ cần connect statusMessage signal ở đây
-    if (firewall_widget_) {
-        connect(firewall_widget_, &FirewallWidget::statusMessage,
-                this,             &PcapTab::statusMessage);
-    }
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// setupPacketTable
+// setupPacketTable  — light theme, Wireshark-style
 // ═════════════════════════════════════════════════════════════════════════════
 
 void PcapTab::setupPacketTable() {
@@ -152,9 +125,9 @@ void PcapTab::setupPacketTable() {
     packet_table_ = new QTableView(this);
     packet_table_->setModel(packet_model_);
     packet_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
-    packet_table_->setSelectionMode(QAbstractItemView::SingleSelection);
-    packet_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    packet_table_->setAlternatingRowColors(false);
+    packet_table_->setSelectionMode   (QAbstractItemView::SingleSelection);
+    packet_table_->setEditTriggers    (QAbstractItemView::NoEditTriggers);
+    packet_table_->setAlternatingRowColors(true);
     packet_table_->verticalHeader()->setVisible(false);
     packet_table_->verticalHeader()->setDefaultSectionSize(20);
     packet_table_->setShowGrid(false);
@@ -162,179 +135,167 @@ void PcapTab::setupPacketTable() {
     packet_table_->horizontalHeader()->setStretchLastSection(true);
     packet_table_->horizontalHeader()->setHighlightSections(false);
 
-    packet_table_->setColumnWidth(0,  55);
-    packet_table_->setColumnWidth(1,  85);
-    packet_table_->setColumnWidth(2, 115);
-    packet_table_->setColumnWidth(3, 115);
-    packet_table_->setColumnWidth(4,  55);
-    packet_table_->setColumnWidth(5,  60);
-    packet_table_->setColumnWidth(6,  80);
-    packet_table_->setColumnWidth(7, 100);
+    packet_table_->setColumnWidth(0,  55);   // No.
+    packet_table_->setColumnWidth(1,  90);   // Time
+    packet_table_->setColumnWidth(2, 120);   // Source
+    packet_table_->setColumnWidth(3, 120);   // Destination
+    packet_table_->setColumnWidth(4,  60);   // Protocol
+    packet_table_->setColumnWidth(5,  60);   // Length
+    packet_table_->setColumnWidth(6, 200);   // Info
+    // col 7 (Threat) → stretch
 
     packet_table_->setStyleSheet(
+        // ── Table body ──────────────────────────────────────────────────────
         "QTableView {"
-        "  background: #0a0a14; color: #cccccc;"
-        "  border: 1px solid #2a2a3e;"
-        "  gridline-color: #1a1a2a;"
-        "  font-size: 11px; font-family: 'Consolas', monospace; }"
-        "QTableView::item { padding: 1px 4px; border: none; }"
-        "QTableView::item:selected { background: #2a2a5a; color: #ffffff; }"
+        "  background: #ffffff;"
+        "  alternate-background-color: #f4f5fb;"
+        "  color: #1a1a3e;"
+        "  border: 1px solid #d0d4e8;"
+        "  gridline-color: transparent;"
+        "  font-size: 11px;"
+        "  font-family: 'Consolas', 'Courier New', monospace; }"
+        "QTableView::item { padding: 1px 6px; border: none; }"
+        "QTableView::item:selected {"
+        "  background: #dce3ff; color: #0a0a6e; }"
+        "QTableView::item:hover { background: #eef0ff; }"
+        // ── Header ──────────────────────────────────────────────────────────
         "QHeaderView::section {"
-        "  background: #1a1a2e; color: #8888aa;"
-        "  border: none; border-bottom: 1px solid #333;"
-        "  padding: 3px 4px; font-size: 10px; font-weight: bold; }");
+        "  background: #eef0f7;"
+        "  color: #333366;"
+        "  border: none;"
+        "  border-right: 1px solid #d0d4e8;"
+        "  border-bottom: 2px solid #b0b8d8;"
+        "  padding: 3px 6px;"
+        "  font-size: 10px;"
+        "  font-weight: bold; }"
+        "QHeaderView::section:last { border-right: none; }"
+        // ── Scrollbar ───────────────────────────────────────────────────────
+        "QScrollBar:vertical   { background: #f0f1f8; width: 8px; }"
+        "QScrollBar:horizontal { background: #f0f1f8; height: 8px; }"
+        "QScrollBar::handle:vertical   { background: #b0b8d8;"
+        "  border-radius: 4px; min-height: 20px; }"
+        "QScrollBar::handle:horizontal { background: #b0b8d8;"
+        "  border-radius: 4px; min-width: 20px; }"
+        "QScrollBar::add-line, QScrollBar::sub-line { height:0; width:0; }");
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
 // setupLiveLayout
 // ═════════════════════════════════════════════════════════════════════════════
 //
-//  Layout tổng thể:
-//
-//  ┌─ root (QVBoxLayout) ─────────────────────────────────────────────────────┐
-//  │  FilterBar                                                                │
-//  │  ┌─ main_split (H) ──────────────────────────────────────────────────┐   │
-//  │  │  ┌─ sidebar (240-300px) ──┐  ┌─ right ────────────────────────┐  │   │
-//  │  │  │  MetricsWidget         │  │  ┌─ v_split (V) ─────────────┐ │  │   │
-//  │  │  │  ── divider ──         │  │  │  PacketTable               │ │  │   │
-//  │  │  │  IpsControlWidget      │  │  │  ┌─ bot_split (H) ───────┐ │ │  │   │
-//  │  │  │  ── divider ──         │  │  │  │  detail+hex │ tabs    │ │ │  │   │
-//  │  │  │  FirewallWidget (flex) │  │  │  └───────────────────────┘ │ │  │   │
-//  │  │  │  AlertPanel (flex)     │  │  └───────────────────────────┘ │  │   │
-//  │  │  └───────────────────────┘  └────────────────────────────────┘  │   │
-//  │  └───────────────────────────────────────────────────────────────────┘   │
-//  └──────────────────────────────────────────────────────────────────────────┘
-//
-//  Sidebar dùng QSplitter dọc để FirewallWidget và AlertPanel có thể resize
-// ═════════════════════════════════════════════════════════════════════════════
+//  ┌─ root (QVBoxLayout) ──────────────────────────────────────────────────┐
+//  │  FilterBar                                                             │
+//  │  ┌─ main_split (H) ────────────────────────────────────────────────┐  │
+//  │  │  ┌─ sidebar (200px) ─┐  ┌─ right ──────────────────────────┐   │  │
+//  │  │  │  MetricsWidget    │  │  ┌─ v_split (V) ───────────────┐ │   │  │
+//  │  │  └───────────────────┘  │  │  PacketTable                │ │   │  │
+//  │  │                         │  │  ┌─ bot_split (H) ─────────┐│ │   │  │
+//  │  │                         │  │  │ detail+hex │ TrafficChart│││ │   │  │
+//  │  │                         │  │  └─────────────────────────┘│ │   │  │
+//  │  │                         │  └─────────────────────────────┘ │   │  │
+//  │  │                         └──────────────────────────────────┘   │  │
+//  │  └─────────────────────────────────────────────────────────────────┘  │
+//  └───────────────────────────────────────────────────────────────────────┘
 
 void PcapTab::setupLiveLayout() {
     auto* root = new QVBoxLayout(this);
     root->setSpacing(4);
-    root->setContentsMargins(4, 4, 4, 4);
+    root->setContentsMargins(6, 6, 6, 6);
 
     // ── FilterBar ─────────────────────────────────────────────────────────────
     filter_bar_ = new FilterBar(this);
     root->addWidget(filter_bar_);
 
-    // ── Main horizontal splitter ──────────────────────────────────────────────
+    // ── Main splitter (H) ─────────────────────────────────────────────────────
     auto* main_split = new QSplitter(Qt::Horizontal, this);
-    main_split->setHandleWidth(5);
+    main_split->setHandleWidth(4);
     main_split->setStyleSheet(
-        "QSplitter::handle { background: #1e1e30; border: 1px solid #2a2a3e; }");
+        "QSplitter::handle { background: #d0d4e8; }");
 
-    // ── Sidebar ───────────────────────────────────────────────────────────────
-    // Dùng QSplitter dọc để user có thể resize từng panel
-    auto* sidebar_split = new QSplitter(Qt::Vertical, main_split);
-    sidebar_split->setHandleWidth(4);
-    sidebar_split->setMinimumWidth(240);
-    sidebar_split->setMaximumWidth(300);
-    sidebar_split->setStyleSheet(
-        "QSplitter::handle { background: #2a2a4a; border: none; height: 3px; }");
+    // ┌── SIDEBAR ──────────────────────────────────────────────────────────────
+    auto* sidebar_w   = new QWidget(main_split);
+    auto* sidebar_lay = new QVBoxLayout(sidebar_w);
+    sidebar_lay->setSpacing(0);
+    sidebar_lay->setContentsMargins(0, 0, 0, 0);
+    sidebar_w->setMinimumWidth(180);
+    sidebar_w->setMaximumWidth(240);
+    sidebar_w->setStyleSheet(
+        "QWidget { background: #ffffff;"
+        "          border-right: 1px solid #d0d4e8; }");
 
-    // MetricsWidget — fixed height, không resize
-    metrics_widget_ = new MetricsWidget(sidebar_split);
-    metrics_widget_->setMinimumHeight(120);
-    metrics_widget_->setMaximumHeight(200);
-    sidebar_split->addWidget(metrics_widget_);
+    metrics_widget_ = new MetricsWidget(sidebar_w);
+    sidebar_lay->addWidget(metrics_widget_);
+    sidebar_lay->addStretch();
 
-    // IpsControlWidget — fixed height, không resize
-    ips_control_ = new IpsControlWidget(sidebar_split);
-    ips_control_->setMinimumHeight(160);
-    ips_control_->setMaximumHeight(220);
-    sidebar_split->addWidget(ips_control_);
+    main_split->addWidget(sidebar_w);
 
-    // FirewallWidget — flex, chiếm phần còn lại cùng AlertPanel
-    firewall_widget_ = new FirewallWidget(sidebar_split);
-    firewall_widget_->setMinimumHeight(200);
-    sidebar_split->addWidget(firewall_widget_);
-
-    // AlertPanel — flex
-    alert_panel_ = new AlertPanel(sidebar_split);
-    alert_panel_->setMinimumHeight(120);
-    sidebar_split->addWidget(alert_panel_);
-
-    // Tỉ lệ ban đầu: Metrics=0, IPS=0, Firewall=2, Alert=1
-    sidebar_split->setStretchFactor(0, 0);   // MetricsWidget
-    sidebar_split->setStretchFactor(1, 0);   // IpsControlWidget
-    sidebar_split->setStretchFactor(2, 2);   // FirewallWidget
-    sidebar_split->setStretchFactor(3, 1);   // AlertPanel
-
-    main_split->addWidget(sidebar_split);
-
-    // ── Right panel ───────────────────────────────────────────────────────────
+    // ┌── RIGHT PANEL ──────────────────────────────────────────────────────────
     auto* right_w   = new QWidget(main_split);
     auto* right_lay = new QVBoxLayout(right_w);
-    right_lay->setSpacing(4);
+    right_lay->setSpacing(0);
     right_lay->setContentsMargins(0, 0, 0, 0);
 
+    // Vertical splitter: table | bottom
     auto* v_split = new QSplitter(Qt::Vertical, right_w);
-    v_split->setHandleWidth(5);
+    v_split->setHandleWidth(4);
     v_split->setStyleSheet(
-        "QSplitter::handle { background: #1e1e30; border: 1px solid #2a2a3e; }");
+        "QSplitter::handle { background: #d0d4e8; }");
 
-    // Packet table
     setupPacketTable();
     v_split->addWidget(packet_table_);
 
-    // Bottom: detail + hex | tabs
+    // ── Bottom: detail+hex (trái) | traffic chart (phải) ─────────────────────
     auto* bot_split = new QSplitter(Qt::Horizontal, v_split);
-    bot_split->setHandleWidth(5);
+    bot_split->setHandleWidth(4);
     bot_split->setStyleSheet(
-        "QSplitter::handle { background: #1e1e30; border: 1px solid #2a2a3e; }");
+        "QSplitter::handle { background: #d0d4e8; }");
 
-    // Detail tree + hex view
-    auto* detail_w   = new QWidget(bot_split);
-    auto* detail_lay = new QVBoxLayout(detail_w);
-    detail_lay->setSpacing(0);
-    detail_lay->setContentsMargins(0, 0, 0, 0);
+    // Detail + Hex
+    auto* dh_split = new QSplitter(Qt::Horizontal, bot_split);
+    dh_split->setHandleWidth(3);
+    dh_split->setStyleSheet(
+        "QSplitter::handle { background: #e0e3f0; }");
 
-    auto* dh_split = new QSplitter(Qt::Horizontal, detail_w);
-    dh_split->setHandleWidth(4);
-    dh_split->setStyleSheet("QSplitter::handle { background: #2a2a3e; }");
-
-    detail_tree_ = new PacketDetailTree(detail_w);
-    hex_view_    = new HexView(detail_w);
+    detail_tree_ = new PacketDetailTree(dh_split);
+    hex_view_    = new HexView(dh_split);
     dh_split->addWidget(detail_tree_);
     dh_split->addWidget(hex_view_);
-    dh_split->setSizes({280, 280});
-    detail_lay->addWidget(dh_split);
-    bot_split->addWidget(detail_w);
+    dh_split->setSizes({320, 280});
+    bot_split->addWidget(dh_split);
 
-    // Info tabs: Traffic chart + Alerts
-    auto* info_tabs = new QTabWidget(bot_split);
-    info_tabs->setMinimumWidth(280);
-    info_tabs->setStyleSheet(
-        "QTabWidget::pane  { border: 1px solid #2a2a3e; background: #0f0f1a; }"
-        "QTabBar::tab      { background: #1a1a2e; color: #888888;"
-        "                    border: 1px solid #2a2a3e; padding: 4px 10px;"
-        "                    font-size: 10px; margin-right: 1px; }"
-        "QTabBar::tab:selected { background: #2a2a4a; color: #ffffff;"
-        "                        border-bottom: 2px solid #4488ff; }"
-        "QTabBar::tab:hover    { background: #252540; }");
+    // Traffic chart — wrap trong QGroupBox để có title
+    auto* chart_box = new QGroupBox("📈 Traffic Monitor", bot_split);
+    chart_box->setStyleSheet(
+        "QGroupBox {"
+        "  background: #ffffff;"
+        "  border: 1px solid #d0d4e8;"
+        "  border-radius: 4px;"
+        "  margin-top: 6px;"
+        "  font-size: 10px; font-weight: bold; color: #3355cc; }"
+        "QGroupBox::title {"
+        "  subcontrol-origin: margin; subcontrol-position: top left;"
+        "  padding: 0 6px; left: 8px; }");
+    auto* chart_lay = new QVBoxLayout(chart_box);
+    chart_lay->setContentsMargins(4, 8, 4, 4);
+    chart_lay->setSpacing(0);
 
-    traffic_chart_ = new TrafficChart(info_tabs);
-    info_tabs->addTab(traffic_chart_, "📈 Traffic");
+    traffic_chart_ = new TrafficChart(chart_box);
+    chart_lay->addWidget(traffic_chart_);
+    bot_split->addWidget(chart_box);
 
-    // Alert tab nhỏ trong info_tabs — chỉ hiển thị summary
-    // AlertPanel đầy đủ đã ở sidebar
-    auto* alert_summary = new AlertPanel(info_tabs);
-    info_tabs->addTab(alert_summary, "🚨 Alerts");
-
-    // Connect bridge → alert_summary (sidebar alert_panel_ connect trong connectBridgeSignals)
-    // Lưu lại để connectBridgeSignals dùng
-    // Dùng alert_panel_ cho sidebar, alert_summary_ cho tab
-    // → đơn giản: chỉ dùng alert_panel_ (sidebar), tab chỉ là placeholder
-    info_tabs->setCurrentIndex(0);
-    bot_split->addWidget(info_tabs);
-    bot_split->setSizes({560, 320});
+    bot_split->setSizes({580, 280});
+    bot_split->setStretchFactor(0, 1);
+    bot_split->setStretchFactor(1, 0);
 
     v_split->addWidget(bot_split);
-    v_split->setSizes({420, 260});
+    v_split->setSizes({420, 220});
+    v_split->setStretchFactor(0, 3);
+    v_split->setStretchFactor(1, 2);
 
     right_lay->addWidget(v_split);
     main_split->addWidget(right_w);
-    main_split->setSizes({260, 1000});
+
+    main_split->setSizes({200, 1000});
     main_split->setStretchFactor(0, 0);
     main_split->setStretchFactor(1, 1);
 
@@ -355,31 +316,36 @@ void PcapTab::setupLiveLayout() {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// setupOfflineLayout
+// setupOfflineLayout  — light theme
 // ═════════════════════════════════════════════════════════════════════════════
 
 void PcapTab::setupOfflineLayout() {
     auto* root = new QVBoxLayout(this);
     root->setSpacing(4);
-    root->setContentsMargins(4, 4, 4, 4);
+    root->setContentsMargins(6, 6, 6, 6);
 
     // ── Toolbar ───────────────────────────────────────────────────────────────
     auto* toolbar = new QWidget(this);
-    auto* tb_lay  = new QHBoxLayout(toolbar);
-    tb_lay->setContentsMargins(0, 0, 0, 4);
+    toolbar->setStyleSheet(
+        "QWidget { background: #eef0f7;"
+        "          border-bottom: 1px solid #d0d4e8; }");
+    auto* tb_lay = new QHBoxLayout(toolbar);
+    tb_lay->setContentsMargins(6, 4, 6, 4);
     tb_lay->setSpacing(6);
 
-    auto* open_btn = new QPushButton("📂 Open PCAP", toolbar);
-    open_btn->setStyleSheet(
-        "QPushButton { background: #2a2a3e; color: #88aaff;"
-        "  border: 1px solid #444; border-radius: 4px; padding: 4px 12px; }"
-        "QPushButton:hover { background: #3a3a5a; }");
+    const QString btn_base =
+        "QPushButton { border: 1px solid #b0b8d8; border-radius: 4px;"
+        "              padding: 4px 14px; font-size: 12px; }"
+        "QPushButton:hover   { border-color: #3355cc; }"
+        "QPushButton:pressed { padding: 5px 13px 3px 15px; }";
 
-    auto* export_btn = new QPushButton("💾 Export", toolbar);
-    export_btn->setStyleSheet(
-        "QPushButton { background: #2a3a2a; color: #88ff88;"
-        "  border: 1px solid #446644; border-radius: 4px; padding: 4px 12px; }"
-        "QPushButton:hover { background: #3a4a3a; }");
+    auto* open_btn = new QPushButton("📂  Open PCAP", toolbar);
+    open_btn->setStyleSheet(btn_base +
+        "QPushButton { background: #ffffff; color: #3355cc; }");
+
+    auto* export_btn = new QPushButton("💾  Export", toolbar);
+    export_btn->setStyleSheet(btn_base +
+        "QPushButton { background: #ffffff; color: #226622; }");
 
     tb_lay->addWidget(open_btn);
     tb_lay->addWidget(export_btn);
@@ -393,24 +359,23 @@ void PcapTab::setupOfflineLayout() {
     // ── Vertical splitter: table | detail+hex ─────────────────────────────────
     auto* v_split = new QSplitter(Qt::Vertical, this);
     v_split->setHandleWidth(4);
-    v_split->setStyleSheet("QSplitter::handle { background: #2a2a3e; }");
+    v_split->setStyleSheet("QSplitter::handle { background: #d0d4e8; }");
 
     setupPacketTable();
     v_split->addWidget(packet_table_);
 
     auto* dh_split = new QSplitter(Qt::Horizontal, v_split);
     dh_split->setHandleWidth(4);
-    dh_split->setStyleSheet("QSplitter::handle { background: #2a2a3e; }");
+    dh_split->setStyleSheet("QSplitter::handle { background: #d0d4e8; }");
 
     detail_tree_ = new PacketDetailTree(dh_split);
     hex_view_    = new HexView(dh_split);
     dh_split->addWidget(detail_tree_);
     dh_split->addWidget(hex_view_);
-    dh_split->setSizes({400, 400});
+    dh_split->setSizes({420, 420});
 
     v_split->addWidget(dh_split);
-    v_split->setSizes({500, 300});
-
+    v_split->setSizes({520, 280});
     root->addWidget(v_split);
 
     // ── Connections ───────────────────────────────────────────────────────────
@@ -428,8 +393,6 @@ void PcapTab::setupOfflineLayout() {
             this, [this](const QModelIndex& cur, const QModelIndex&) {
                 onPacketSelected(cur);
             });
-
-    // OFFLINE tab không có firewall_widget_ → nullptr (đã init trong header)
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -438,9 +401,7 @@ void PcapTab::setupOfflineLayout() {
 
 void PcapTab::startLiveWriter(const QString& temp_path) {
     std::lock_guard<std::mutex> lk(live_writer_mutex_);
-
-    if (live_writer_ && live_writer_->isOpen())
-        live_writer_->close();
+    if (live_writer_ && live_writer_->isOpen()) live_writer_->close();
 
     live_writer_ = std::make_unique<PcapWriter>();
     if (!live_writer_->open(temp_path.toStdString())) {
@@ -455,15 +416,9 @@ void PcapTab::startLiveWriter(const QString& temp_path) {
 
 void PcapTab::stopLiveWriter() {
     std::lock_guard<std::mutex> lk(live_writer_mutex_);
-    if (live_writer_) {
-        live_writer_->close();
-        live_writer_.reset();
-    }
+    if (live_writer_) { live_writer_->close(); live_writer_.reset(); }
 }
 
-// ─── writeLivePacket ─────────────────────────────────────────────────────────
-// writePacket() trả về data_offset (sau PcapPacketHeader 16B)
-// → gán trực tiếp vào pkt.file_offset — đúng cho loadRawBytes()
 int64_t PcapTab::writeLivePacket(const uint8_t*        raw_bytes,
                                    uint32_t              raw_len,
                                    uint32_t              orig_len,
@@ -481,18 +436,13 @@ bool PcapTab::lazyLoadRawData(int row, PacketInfo& pkt) {
     if (pkt.raw_data && !pkt.raw_data->empty()) return true;
     if (pkt.file_offset < 0 || pkt.source_file.empty()) return false;
 
-    // LIVE mode: flush writer trước để đảm bảo packet đã xuống disk
     if (mode_ == Mode::LIVE) {
         std::lock_guard<std::mutex> lk(live_writer_mutex_);
-        if (live_writer_ && live_writer_->isOpen())
-            live_writer_->flush();
+        if (live_writer_ && live_writer_->isOpen()) live_writer_->flush();
     }
 
-    if (!pcap_reader_)
-        pcap_reader_ = std::make_unique<PcapReader>();
-
-    if (!pcap_reader_->loadRawBytes(pkt, pkt.source_file))
-        return false;
+    if (!pcap_reader_) pcap_reader_ = std::make_unique<PcapReader>();
+    if (!pcap_reader_->loadRawBytes(pkt, pkt.source_file)) return false;
 
     packet_model_->updateRawData(row, pkt.raw_data);
     return true;
@@ -504,14 +454,10 @@ bool PcapTab::lazyLoadRawData(int row, PacketInfo& pkt) {
 
 void PcapTab::onPacketSelected(const QModelIndex& index) {
     if (!index.isValid()) return;
-
     PacketInfo pkt;
     if (!packet_model_->getRecord(index.row(), pkt)) return;
-
     lazyLoadRawData(index.row(), pkt);
-
     if (detail_tree_) detail_tree_->showPacket(pkt);
-
     if (hex_view_) {
         if (pkt.raw_data && !pkt.raw_data->empty())
             hex_view_->setData(*pkt.raw_data);
@@ -534,8 +480,7 @@ void PcapTab::onOpenClicked() {
     const QString path = QFileDialog::getOpenFileName(
         this, "Open PCAP File", QDir::homePath(),
         "PCAP Files (*.pcap *.pcapng);;All Files (*)");
-    if (!path.isEmpty())
-        loadFile(path);
+    if (!path.isEmpty()) loadFile(path);
 }
 
 void PcapTab::onExportClicked() {
@@ -543,123 +488,79 @@ void PcapTab::onExportClicked() {
         this, "Export PCAP",
         QDir::homePath() + "/export.pcap",
         "PCAP Files (*.pcap);;All Files (*)");
-    if (!path.isEmpty())
-        saveToFile(path);
+    if (!path.isEmpty()) saveToFile(path);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// loadFile  (OFFLINE mode)
+// loadFile / saveToFile
 // ═════════════════════════════════════════════════════════════════════════════
 
 void PcapTab::loadFile(const QString& path) {
     packet_model_->clear();
     dummy_ring_buf_.clear();
-
     pcap_reader_ = std::make_unique<PcapReader>();
 
     const bool ok = pcap_reader_->scanFile(
-        path.toStdString(),
-        dummy_ring_buf_,
-        [](uint64_t, uint64_t, double) {},
-        nullptr);
+        path.toStdString(), dummy_ring_buf_,
+        [](uint64_t, uint64_t, double) {}, nullptr);
 
-    if (!ok) {
-        emit statusMessage("❌ Cannot open: " + path);
-        return;
-    }
+    if (!ok) { emit statusMessage("❌ Cannot open: " + path); return; }
 
     uint64_t last_seq = 0;
-    auto pkts = dummy_ring_buf_.pollNew(last_seq);
-    packet_model_->appendRecords(pkts);
+    packet_model_->appendRecords(dummy_ring_buf_.pollNew(last_seq));
 
     emit titleChanged ("📂 " + QFileInfo(path).fileName());
     emit statusMessage("✅ Loaded: " + path
-                       + "  (" + QString::number(packet_model_->rowCount())
-                       + " packets)");
+        + "  (" + QString::number(packet_model_->rowCount()) + " packets)");
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// saveToFile
-// ═════════════════════════════════════════════════════════════════════════════
-
 void PcapTab::saveToFile(const QString& path) {
-
-    // LIVE: copy file tạm → đích
     if (mode_ == Mode::LIVE && !live_writer_path_.isEmpty()) {
         {
             std::lock_guard<std::mutex> lk(live_writer_mutex_);
-            if (live_writer_ && live_writer_->isOpen())
-                live_writer_->flush();
+            if (live_writer_ && live_writer_->isOpen()) live_writer_->flush();
         }
-
         if (QFile::exists(path)) QFile::remove(path);
-
-        if (QFile::copy(live_writer_path_, path)) {
-            emit statusMessage(
-                QString("💾 Saved: %1  (%2 packets)")
-                    .arg(QFileInfo(path).fileName())
-                    .arg(packet_model_->rowCount()));
-        } else {
+        if (QFile::copy(live_writer_path_, path))
+            emit statusMessage(QString("💾 Saved: %1  (%2 packets)")
+                .arg(QFileInfo(path).fileName())
+                .arg(packet_model_->rowCount()));
+        else
             emit statusMessage("❌ Copy failed: " + path);
-        }
         return;
     }
 
-    // OFFLINE / fallback: dump từ model
     PcapWriter writer;
     if (!writer.open(path.toStdString())) {
-        emit statusMessage("❌ Cannot save: " + path);
-        return;
+        emit statusMessage("❌ Cannot save: " + path); return;
     }
-
     const int n = packet_model_->rowCount();
     for (int i = 0; i < n; ++i) {
         PacketInfo pkt;
         if (!packet_model_->getRecord(i, pkt)) continue;
-        if (!pkt.raw_data || pkt.raw_data->empty())
-            lazyLoadRawData(i, pkt);
-        if (pkt.raw_data && !pkt.raw_data->empty())
-            writer.writePacket(pkt);
+        if (!pkt.raw_data || pkt.raw_data->empty()) lazyLoadRawData(i, pkt);
+        if (pkt.raw_data && !pkt.raw_data->empty()) writer.writePacket(pkt);
     }
     writer.close();
-
-    emit statusMessage(
-        QString("💾 Saved: %1  (%2 packets)")
-            .arg(QFileInfo(path).fileName())
-            .arg(n));
+    emit statusMessage(QString("💾 Saved: %1  (%2 packets)")
+        .arg(QFileInfo(path).fileName()).arg(n));
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// timerEvent  (Wireshark algorithm)
+// timerEvent
 // ═════════════════════════════════════════════════════════════════════════════
-//
-//  overlay_timer (100ms):
-//    1. freeze()                   ← tắt Qt model notification
-//    2. pollRange(last_seq, MAX)   ← lấy packet mới từ ring_buf
-//    3. appendRecords(batch)       ← gom vào pending (frozen)
-//    4. thaw()                     ← 1 beginInsertRows/endInsertRows duy nhất
-//    5. viewport()->update()       ← schedule 1 repaint
-//
-//  tail_timer (200ms):
-//    scrollToBottom() nếu tail_at_end_
-//
+
 void PcapTab::timerEvent(QTimerEvent* event) {
     if (!packet_model_) return;
 
-    // ── overlay_timer: poll + freeze/thaw ─────────────────────────────────────
     if (event->timerId() == overlay_timer_id_) {
-
-        const bool     capturing  = capture_in_progress_.load(std::memory_order_acquire);
-        const uint64_t total_now  = bridge_
-            ? bridge_->ringBuf().totalPushed()
-            : 0;
-        const bool     has_new    = (total_now > last_polled_seq_);
+        const bool     capturing = capture_in_progress_.load(std::memory_order_acquire);
+        const uint64_t total_now = bridge_ ? bridge_->ringBuf().totalPushed() : 0;
+        const bool     has_new   = (total_now > last_polled_seq_);
 
         if (has_new) {
             constexpr uint64_t MAX_PER_TICK = 500;
-            const uint64_t to_fetch =
-                std::min(total_now - last_polled_seq_, MAX_PER_TICK);
-
+            const uint64_t to_fetch = std::min(total_now - last_polled_seq_, MAX_PER_TICK);
             auto batch = bridge_->ringBuf().pollRange(last_polled_seq_, to_fetch);
             last_polled_seq_ += to_fetch;
 
@@ -667,7 +568,6 @@ void PcapTab::timerEvent(QTimerEvent* event) {
                 packet_model_->freeze();
                 packet_model_->appendRecords(batch);
                 packet_model_->thaw();
-
                 if (packet_model_->isDirty()) {
                     packet_table_->viewport()->update();
                     packet_model_->clearDirty();
@@ -675,25 +575,21 @@ void PcapTab::timerEvent(QTimerEvent* event) {
             }
         }
 
-        // Dừng timer khi capture kết thúc VÀ đã drain hết ring_buf
         if (!capturing && !has_new) {
             killTimer(overlay_timer_id_);
             overlay_timer_id_ = -1;
-            emit statusMessage(
-                QString("⏹ Capture stopped — %1 packets")
-                    .arg(packet_model_->rowCount()));
+            emit statusMessage(QString("⏹ Capture stopped — %1 packets")
+                .arg(packet_model_->rowCount()));
         }
         return;
     }
 
-    // ── tail_timer: auto-scroll ───────────────────────────────────────────────
     if (event->timerId() == tail_timer_id_) {
         if (tail_at_end_ && packet_model_->rowCount() > 0) {
             auto* vsb = packet_table_->verticalScrollBar();
             if (vsb->value() >= vsb->maximum() - 3)
                 packet_table_->scrollToBottom();
         }
-
         if (!capture_in_progress_.load(std::memory_order_acquire)) {
             killTimer(tail_timer_id_);
             tail_timer_id_ = -1;
@@ -704,7 +600,6 @@ void PcapTab::timerEvent(QTimerEvent* event) {
     QWidget::timerEvent(event);
 }
 
-// ─── onNewPacketInfos (giữ lại để tương thích) ───────────────────────────────
 void PcapTab::onNewPacketInfos(std::vector<PacketInfo> records) {
     if (records.empty() || mode_ == Mode::LIVE) return;
     packet_model_->appendRecords(records);

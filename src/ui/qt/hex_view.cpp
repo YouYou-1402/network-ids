@@ -5,6 +5,18 @@
 #include <QMouseEvent>
 #include <QFontMetrics>
 
+// ─── Palette ──────────────────────────────────────────────────────────────────
+//  BG_VIEW      #ffffff    nền viewport
+//  BG_HIGHLIGHT #dce8ff    highlight byte
+//  FG_OFFSET    #888899    màu offset address
+//  FG_HEX_A     #1a1a3e    hex group chẵn
+//  FG_HEX_B     #3355cc    hex group lẻ
+//  FG_HI_BYTE   #0044cc    hex/ascii khi highlighted
+//  FG_ASCII_PR  #227744    ký tự printable
+//  FG_ASCII_NP  #aabbaa    ký tự non-printable
+//  BORDER       #d0d4e8    viền widget
+// ─────────────────────────────────────────────────────────────────────────────
+
 HexView::HexView(QWidget* parent)
     : QAbstractScrollArea(parent)
 {
@@ -16,13 +28,20 @@ HexView::HexView(QWidget* parent)
     char_height_ = fm.height() + 2;
 
     setStyleSheet(
-        "QAbstractScrollArea { background: #0a0a14; "
-        "border: 1px solid #333; }"
-        "QScrollBar:vertical { background: #1a1a2e; width: 8px; }"
-        "QScrollBar::handle:vertical { background: #444; "
-        "border-radius: 4px; }");
+        "QAbstractScrollArea {"
+        "  background: #ffffff;"
+        "  border: 1px solid #d0d4e8;"
+        "  border-radius: 3px; }"
+        "QScrollBar:vertical {"
+        "  background: #f0f1f8; width: 8px;"
+        "  border: none; }"
+        "QScrollBar::handle:vertical {"
+        "  background: #b0b8d8;"
+        "  border-radius: 4px; min-height: 20px; }"
+        "QScrollBar::handle:vertical:hover { background: #8898cc; }"
+        "QScrollBar::add-line, QScrollBar::sub-line { height: 0; }");
 
-    viewport()->setStyleSheet("background: #0a0a14;");
+    viewport()->setStyleSheet("background: #ffffff;");
 }
 
 void HexView::setData(const std::vector<uint8_t>& data) {
@@ -74,20 +93,22 @@ void HexView::resizeEvent(QResizeEvent* event) {
 void HexView::paintEvent(QPaintEvent*) {
     QPainter painter(viewport());
     painter.setFont(font_);
-    painter.fillRect(viewport()->rect(), QColor("#0a0a14"));
+
+    // ── Nền trắng ─────────────────────────────────────────────────────────────
+    painter.fillRect(viewport()->rect(), QColor("#ffffff"));
 
     if (data_.empty()) {
-        painter.setPen(QColor("#555555"));
+        painter.setPen(QColor("#aaaacc"));
         painter.drawText(viewport()->rect(),
                          Qt::AlignCenter,
                          "No data");
         return;
     }
 
-    int scroll_y   = verticalScrollBar()->value();
-    int bpr        = bytesPerRow();
-    int rh         = rowHeight();
-    int first_row  = scroll_y / rh;
+    int scroll_y     = verticalScrollBar()->value();
+    int bpr          = bytesPerRow();
+    int rh           = rowHeight();
+    int first_row    = scroll_y / rh;
     int visible_rows = viewport()->height() / rh + 2;
 
     // Layout:
@@ -98,41 +119,55 @@ void HexView::paintEvent(QPaintEvent*) {
 
     for (int row = first_row;
          row < first_row + visible_rows;
-         row++) {
+         ++row) {
 
         int byte_start = row * bpr;
         if (byte_start >= static_cast<int>(data_.size())) break;
 
         int y = row * rh - scroll_y + char_height_ - 2;
 
+        // ── Zebra stripe nhẹ theo hàng ────────────────────────────────────────
+        if (row % 2 == 0) {
+            painter.fillRect(0, y - char_height_ + 3,
+                             viewport()->width(), rh,
+                             QColor("#f8f9fd"));
+        }
+
         // ── Offset ────────────────────────────────────────────────────────────
-        painter.setPen(QColor("#666688"));
+        painter.setPen(QColor("#888899"));
         painter.drawText(x_offset, y,
             QString("%1").arg(byte_start, 8, 16, QChar('0')));
 
+        // ── Separator line giữa offset và hex ────────────────────────────────
+        painter.setPen(QColor("#e0e4f0"));
+        painter.drawLine(x_hex - char_width_,
+                         y - char_height_ + 3,
+                         x_hex - char_width_,
+                         y + 2);
+
         // ── Hex bytes ─────────────────────────────────────────────────────────
-        for (int col = 0; col < bpr; col++) {
+        for (int col = 0; col < bpr; ++col) {
             int byte_idx = byte_start + col;
             if (byte_idx >= static_cast<int>(data_.size())) break;
 
             int x = x_hex + col * hexColWidth();
 
-            // Highlight
             bool is_highlighted =
                 (highlight_start_ >= 0 &&
                  byte_idx >= highlight_start_ &&
                  byte_idx < highlight_start_ + highlight_len_);
 
             if (is_highlighted) {
+                // Highlight: nền xanh pastel
                 painter.fillRect(x - 1, y - char_height_ + 3,
                                  hexColWidth(), rh,
-                                 QColor(40, 60, 100));
-                painter.setPen(QColor("#88ccff"));
+                                 QColor("#dce8ff"));
+                painter.setPen(QColor("#0044cc"));
             } else {
                 // Alternating group color (4 bytes)
                 painter.setPen((col / 4) % 2 == 0
-                    ? QColor("#cccccc")
-                    : QColor("#aaaaaa"));
+                    ? QColor("#1a1a3e")   // group chẵn — xanh đậm
+                    : QColor("#3355cc")); // group lẻ  — xanh accent
             }
 
             painter.drawText(x, y,
@@ -140,24 +175,34 @@ void HexView::paintEvent(QPaintEvent*) {
                                   QChar('0')).toUpper());
         }
 
+        // ── Separator line giữa hex và ascii ─────────────────────────────────
+        painter.setPen(QColor("#e0e4f0"));
+        painter.drawLine(x_ascii - char_width_,
+                         y - char_height_ + 3,
+                         x_ascii - char_width_,
+                         y + 2);
+
         // ── ASCII ─────────────────────────────────────────────────────────────
-        for (int col = 0; col < bpr; col++) {
+        for (int col = 0; col < bpr; ++col) {
             int byte_idx = byte_start + col;
             if (byte_idx >= static_cast<int>(data_.size())) break;
 
-            uint8_t b = data_[byte_idx];
-            QChar   c = (b >= 0x20 && b < 0x7F) ? QChar(b) : QChar('.');
+            uint8_t b   = data_[byte_idx];
+            QChar   c   = (b >= 0x20 && b < 0x7F) ? QChar(b) : QChar('.');
+            bool printable = (b >= 0x20 && b < 0x7F);
 
             bool is_highlighted =
                 (highlight_start_ >= 0 &&
                  byte_idx >= highlight_start_ &&
                  byte_idx < highlight_start_ + highlight_len_);
 
-            painter.setPen(is_highlighted
-                ? QColor("#88ccff")
-                : (b >= 0x20 && b < 0x7F)
-                    ? QColor("#88cc88")
-                    : QColor("#445544"));
+            if (is_highlighted) {
+                painter.setPen(QColor("#0044cc"));
+            } else if (printable) {
+                painter.setPen(QColor("#227744")); // xanh lá đậm
+            } else {
+                painter.setPen(QColor("#bbccbb")); // non-printable — xám nhạt
+            }
 
             painter.drawText(x_ascii + col * charColWidth(), y,
                              QString(c));

@@ -1,37 +1,66 @@
 // src/ui/qt/ips_control_widget.cpp
 #include "ips_control_widget.hpp"
 
+// ─── Palette ──────────────────────────────────────────────────────────────────
+//  BG_PAGE      #f5f6fa    nền tổng
+//  BG_GROUP     #ffffff    nền groupbox
+//  BORDER       #d0d4e8    viền
+//  TEXT_PRI     #1a1a3e    chữ chính
+//  TEXT_SEC     #666688    chữ phụ / mô tả
+//  GREEN_FG     #227744    active / enable
+//  GREEN_BG     #f0fff4    nền pastel xanh lá
+//  GREEN_BD     #a5d6a7    viền xanh lá
+//  RED_FG       #cc2222    disable / danger
+//  RED_BG       #fff0f0    nền pastel đỏ
+//  RED_BD       #f0b8b8    viền đỏ
+//  BLUE_FG      #3355cc    IDS mode
+//  BLUE_BG      #eef0ff    nền pastel xanh
+//  BLUE_BD      #b0b8e8    viền xanh
+//  PURPLE_FG    #6633cc    ML only
+//  PURPLE_BG    #f5f0ff    nền pastel tím
+//  PURPLE_BD    #c8b0e8    viền tím
+//  GRAY_FG      #888899    disabled / off
+//  GRAY_BG      #f0f0f8    nền pastel xám
+//  GRAY_BD      #c8c8d8    viền xám
+// ─────────────────────────────────────────────────────────────────────────────
+
 IpsControlWidget::IpsControlWidget(QWidget* parent)
     : QWidget(parent)
 {
+    setStyleSheet("QWidget { background: #f5f6fa; color: #1a1a3e; }");
     setupUI();
 }
 
 // ─── setupUI ──────────────────────────────────────────────────────────────────
 void IpsControlWidget::setupUI() {
     auto* root = new QVBoxLayout(this);
-    root->setSpacing(6);
-    root->setContentsMargins(8, 6, 8, 8);
+    root->setSpacing(8);
+    root->setContentsMargins(8, 8, 8, 8);
 
-    // ── Header + Mode badge ───────────────────────────────────────────────────
+    // ── Mode badge ────────────────────────────────────────────────────────────
     lbl_mode_badge_ = new QLabel("🛡️  IPS — Full Protection", this);
     lbl_mode_badge_->setAlignment(Qt::AlignCenter);
-    lbl_mode_badge_->setFixedHeight(30);
+    lbl_mode_badge_->setFixedHeight(32);
     lbl_mode_badge_->setStyleSheet(
-        "QLabel { background: #0d2a0d; color: #00ff88; "
-        "font-size: 11px; font-weight: bold; "
-        "border: 1px solid #1a5a1a; border-radius: 5px; "
-        "padding: 2px 4px; }");
+        "QLabel {"
+        "  background: #f0fff4; color: #227744;"
+        "  font-size: 12px; font-weight: bold;"
+        "  border: 1px solid #a5d6a7; border-radius: 6px;"
+        "  padding: 2px 8px; }");
     root->addWidget(lbl_mode_badge_);
 
-    // ── Helper: engine row compact ────────────────────────────────────────────
+    // ── GroupBox style ────────────────────────────────────────────────────────
     const QString group_style =
-        "QGroupBox { color: #8888aa; font-size: 10px; font-weight: bold; "
-        "border: 1px solid #2a2a3e; border-radius: 5px; "
-        "margin-top: 6px; padding-top: 2px; background: #0d0d1a; }"
-        "QGroupBox::title { subcontrol-origin: margin; "
-        "left: 8px; padding: 0 4px; }";
+        "QGroupBox {"
+        "  background: #ffffff;"
+        "  border: 1px solid #d0d4e8; border-radius: 6px;"
+        "  margin-top: 8px; padding-top: 4px; }"
+        "QGroupBox::title {"
+        "  subcontrol-origin: margin;"
+        "  left: 10px; padding: 0 4px;"
+        "  color: #3355cc; font-size: 10px; font-weight: bold; }";
 
+    // ── Helper: engine row ────────────────────────────────────────────────────
     auto makeEngineRow = [&](const QString& title,
                               const QString& desc,
                               QLabel*&       status_lbl,
@@ -41,26 +70,30 @@ void IpsControlWidget::setupUI() {
         auto* box    = new QGroupBox(title, this);
         box->setStyleSheet(group_style);
         auto* layout = new QVBoxLayout(box);
-        layout->setSpacing(4);
-        layout->setContentsMargins(8, 10, 8, 8);
+        layout->setSpacing(5);
+        layout->setContentsMargins(10, 12, 10, 10);
 
-        // Row: status dot + label + toggle button
+        // Row: status dot + toggle button
         auto* row    = new QWidget(box);
+        row->setStyleSheet("QWidget { background: transparent; }");
         auto* row_ly = new QHBoxLayout(row);
         row_ly->setContentsMargins(0, 0, 0, 0);
         row_ly->setSpacing(6);
 
         status_lbl = new QLabel("● ACTIVE", row);
         status_lbl->setStyleSheet(
-            "color: #00ff88; font-weight: bold; font-size: 11px;");
+            "QLabel { background: transparent;"
+            "         color: #227744; font-weight: bold; font-size: 11px; }");
 
         toggle_btn = new QPushButton("Disable", row);
-        toggle_btn->setFixedSize(64, 22);
+        toggle_btn->setFixedSize(68, 24);
         toggle_btn->setStyleSheet(
-            "QPushButton { background: #2a1010; color: #ff6666; "
-            "border: 1px solid #553333; border-radius: 3px; "
-            "font-size: 10px; font-weight: bold; }"
-            "QPushButton:hover { background: #3a1818; }");
+            "QPushButton {"
+            "  background: #fff0f0; color: #cc2222;"
+            "  border: 1px solid #f0b8b8; border-radius: 4px;"
+            "  font-size: 10px; font-weight: bold; }"
+            "QPushButton:hover { background: #ffe0e0; border-color: #cc2222; }"
+            "QPushButton:pressed { background: #ffd0d0; }");
 
         row_ly->addWidget(status_lbl);
         row_ly->addStretch();
@@ -71,7 +104,8 @@ void IpsControlWidget::setupUI() {
         desc_lbl = new QLabel(desc, box);
         desc_lbl->setWordWrap(true);
         desc_lbl->setStyleSheet(
-            "color: #555577; font-size: 9px; padding: 0;");
+            "QLabel { background: transparent;"
+            "         color: #666688; font-size: 9px; }");
         layout->addWidget(desc_lbl);
 
         return box;
@@ -95,26 +129,34 @@ void IpsControlWidget::setupUI() {
     auto* qa_group  = new QGroupBox("⚡ Quick Actions", this);
     qa_group->setStyleSheet(group_style);
     auto* qa_layout = new QHBoxLayout(qa_group);
-    qa_layout->setSpacing(6);
-    qa_layout->setContentsMargins(8, 10, 8, 8);
+    qa_layout->setSpacing(8);
+    qa_layout->setContentsMargins(10, 12, 10, 10);
 
-    auto* btn_enable_all = new QPushButton("✅ Enable All", qa_group);
-    btn_enable_all->setFixedHeight(24);
+    auto* btn_enable_all = new QPushButton("✅  Enable All", qa_group);
+    btn_enable_all->setFixedHeight(26);
     btn_enable_all->setStyleSheet(
-        "QPushButton { background: #0d2a0d; color: #00ff88; "
-        "border: 1px solid #1a5a1a; border-radius: 3px; font-size: 10px; }"
-        "QPushButton:hover { background: #1a3a1a; }");
+        "QPushButton {"
+        "  background: #f0fff4; color: #227744;"
+        "  border: 1px solid #a5d6a7; border-radius: 4px;"
+        "  font-size: 10px; font-weight: bold; }"
+        "QPushButton:hover   { background: #c8e6c9; border-color: #388e3c; }"
+        "QPushButton:pressed { background: #b2dfdb; }");
 
-    auto* btn_disable_all = new QPushButton("⛔ Disable All", qa_group);
-    btn_disable_all->setFixedHeight(24);
+    auto* btn_disable_all = new QPushButton("⛔  Disable All", qa_group);
+    btn_disable_all->setFixedHeight(26);
     btn_disable_all->setStyleSheet(
-        "QPushButton { background: #2a0d0d; color: #ff4444; "
-        "border: 1px solid #5a1a1a; border-radius: 3px; font-size: 10px; }"
-        "QPushButton:hover { background: #3a1a1a; }");
+        "QPushButton {"
+        "  background: #fff0f0; color: #cc2222;"
+        "  border: 1px solid #f0b8b8; border-radius: 4px;"
+        "  font-size: 10px; font-weight: bold; }"
+        "QPushButton:hover   { background: #ffe0e0; border-color: #cc2222; }"
+        "QPushButton:pressed { background: #ffd0d0; }");
 
     qa_layout->addWidget(btn_enable_all);
     qa_layout->addWidget(btn_disable_all);
     root->addWidget(qa_group);
+
+    root->addStretch();
 
     // ── Connections ───────────────────────────────────────────────────────────
     connect(btn_det_toggle_, &QPushButton::clicked,
@@ -131,6 +173,7 @@ void IpsControlWidget::setupUI() {
         if (ml_enabled_)   onMlBtnClicked();
     });
 }
+
 // ─── Slots từ button ──────────────────────────────────────────────────────────
 void IpsControlWidget::onDetectionBtnClicked() {
     emit toggleDetection(!det_enabled_);
@@ -153,7 +196,7 @@ void IpsControlWidget::onMlStatusChanged(bool enabled) {
     updateModeBadge();
 }
 
-// ─── syncState — gọi khi khởi tạo ────────────────────────────────────────────
+// ─── syncState ────────────────────────────────────────────────────────────────
 void IpsControlWidget::syncState(bool detection_enabled, bool ml_enabled) {
     det_enabled_ = detection_enabled;
     ml_enabled_  = ml_enabled;
@@ -162,83 +205,101 @@ void IpsControlWidget::syncState(bool detection_enabled, bool ml_enabled) {
     updateModeBadge();
 }
 
-// ─── UI update helpers ────────────────────────────────────────────────────────
+// ─── setDetectionUI ───────────────────────────────────────────────────────────
 void IpsControlWidget::setDetectionUI(bool enabled) {
     if (enabled) {
         lbl_det_status_->setText("● ACTIVE");
         lbl_det_status_->setStyleSheet(
-            "color: #00ff88; font-weight: bold; font-size: 12px;");
+            "QLabel { background: transparent;"
+            "         color: #227744; font-weight: bold; font-size: 12px; }");
         btn_det_toggle_->setText("Disable");
         btn_det_toggle_->setStyleSheet(
-            "QPushButton { background: #3a1a1a; color: #ff6666; "
-            "border: 1px solid #664444; border-radius: 4px; "
-            "font-size: 11px; font-weight: bold; }"
-            "QPushButton:hover { background: #4a2a2a; }");
+            "QPushButton {"
+            "  background: #fff0f0; color: #cc2222;"
+            "  border: 1px solid #f0b8b8; border-radius: 4px;"
+            "  font-size: 11px; font-weight: bold; }"
+            "QPushButton:hover   { background: #ffe0e0; border-color: #cc2222; }"
+            "QPushButton:pressed { background: #ffd0d0; }");
     } else {
         lbl_det_status_->setText("○ DISABLED");
         lbl_det_status_->setStyleSheet(
-            "color: #666666; font-weight: bold; font-size: 12px;");
+            "QLabel { background: transparent;"
+            "         color: #888899; font-weight: bold; font-size: 12px; }");
         btn_det_toggle_->setText("Enable");
         btn_det_toggle_->setStyleSheet(
-            "QPushButton { background: #1a3a1a; color: #00ff88; "
-            "border: 1px solid #336633; border-radius: 4px; "
-            "font-size: 11px; font-weight: bold; }"
-            "QPushButton:hover { background: #2a4a2a; }");
+            "QPushButton {"
+            "  background: #f0fff4; color: #227744;"
+            "  border: 1px solid #a5d6a7; border-radius: 4px;"
+            "  font-size: 11px; font-weight: bold; }"
+            "QPushButton:hover   { background: #c8e6c9; border-color: #388e3c; }"
+            "QPushButton:pressed { background: #b2dfdb; }");
     }
 }
 
+// ─── setMlUI ──────────────────────────────────────────────────────────────────
 void IpsControlWidget::setMlUI(bool enabled) {
     if (enabled) {
         lbl_ml_status_->setText("● ACTIVE");
         lbl_ml_status_->setStyleSheet(
-            "color: #00ff88; font-weight: bold; font-size: 12px;");
+            "QLabel { background: transparent;"
+            "         color: #227744; font-weight: bold; font-size: 12px; }");
         btn_ml_toggle_->setText("Disable");
         btn_ml_toggle_->setStyleSheet(
-            "QPushButton { background: #3a1a1a; color: #ff6666; "
-            "border: 1px solid #664444; border-radius: 4px; "
-            "font-size: 11px; font-weight: bold; }"
-            "QPushButton:hover { background: #4a2a2a; }");
+            "QPushButton {"
+            "  background: #fff0f0; color: #cc2222;"
+            "  border: 1px solid #f0b8b8; border-radius: 4px;"
+            "  font-size: 11px; font-weight: bold; }"
+            "QPushButton:hover   { background: #ffe0e0; border-color: #cc2222; }"
+            "QPushButton:pressed { background: #ffd0d0; }");
     } else {
         lbl_ml_status_->setText("○ DISABLED");
         lbl_ml_status_->setStyleSheet(
-            "color: #666666; font-weight: bold; font-size: 12px;");
+            "QLabel { background: transparent;"
+            "         color: #888899; font-weight: bold; font-size: 12px; }");
         btn_ml_toggle_->setText("Enable");
         btn_ml_toggle_->setStyleSheet(
-            "QPushButton { background: #1a3a1a; color: #00ff88; "
-            "border: 1px solid #336633; border-radius: 4px; "
-            "font-size: 11px; font-weight: bold; }"
-            "QPushButton:hover { background: #2a4a2a; }");
+            "QPushButton {"
+            "  background: #f0fff4; color: #227744;"
+            "  border: 1px solid #a5d6a7; border-radius: 4px;"
+            "  font-size: 11px; font-weight: bold; }"
+            "QPushButton:hover   { background: #c8e6c9; border-color: #388e3c; }"
+            "QPushButton:pressed { background: #b2dfdb; }");
     }
 }
 
+// ─── updateModeBadge ──────────────────────────────────────────────────────────
 void IpsControlWidget::updateModeBadge() {
     if (det_enabled_ && ml_enabled_) {
         lbl_mode_badge_->setText("🛡️  IPS MODE  —  Full Protection");
         lbl_mode_badge_->setStyleSheet(
-            "QLabel { background: #1a3a1a; color: #00ff88; "
-            "font-size: 13px; font-weight: bold; "
-            "border: 1px solid #00aa55; border-radius: 6px; "
-            "padding: 4px; }");
+            "QLabel {"
+            "  background: #f0fff4; color: #227744;"
+            "  font-size: 13px; font-weight: bold;"
+            "  border: 1px solid #a5d6a7; border-radius: 6px;"
+            "  padding: 4px 8px; }");
     } else if (det_enabled_ && !ml_enabled_) {
         lbl_mode_badge_->setText("🔍  IDS MODE  —  L1 Detection Only");
         lbl_mode_badge_->setStyleSheet(
-            "QLabel { background: #1a2a3a; color: #44aaff; "
-            "font-size: 13px; font-weight: bold; "
-            "border: 1px solid #2266aa; border-radius: 6px; "
-            "padding: 4px; }");
+            "QLabel {"
+            "  background: #eef0ff; color: #3355cc;"
+            "  font-size: 13px; font-weight: bold;"
+            "  border: 1px solid #b0b8e8; border-radius: 6px;"
+            "  padding: 4px 8px; }");
     } else if (!det_enabled_ && ml_enabled_) {
         lbl_mode_badge_->setText("🤖  ML ONLY  —  L2 Detection Only");
         lbl_mode_badge_->setStyleSheet(
-            "QLabel { background: #2a1a3a; color: #aa66ff; "
-            "font-size: 13px; font-weight: bold; "
-            "border: 1px solid #6633aa; border-radius: 6px; "
-            "padding: 4px; }");
+            "QLabel {"
+            "  background: #f5f0ff; color: #6633cc;"
+            "  font-size: 13px; font-weight: bold;"
+            "  border: 1px solid #c8b0e8; border-radius: 6px;"
+            "  padding: 4px 8px; }");
     } else {
         lbl_mode_badge_->setText("⛔  MONITOR ONLY  —  No Detection");
         lbl_mode_badge_->setStyleSheet(
-            "QLabel { background: #2a2a2a; color: #888888; "
-            "font-size: 13px; font-weight: bold; "
-            "border: 1px solid #555555; border-radius: 6px; "
-            "padding: 4px; }");
+            "QLabel {"
+            "  background: #f0f0f8; color: #888899;"
+            "  font-size: 13px; font-weight: bold;"
+            "  border: 1px solid #c8c8d8; border-radius: 6px;"
+            "  padding: 4px 8px; }");
     }
 }
