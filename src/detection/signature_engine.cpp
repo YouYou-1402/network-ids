@@ -91,13 +91,36 @@ std::vector<int> SignatureEngine::search(const uint8_t* data,
 }
 
 // ─── analyze ──────────────────────────────────────────────────────────────────
+//
+//  Chỉ phân tích packet thuộc flow do attacker/client khởi tạo.
+//
+//  flow.is_initiator được set trong FlowTable::createFlow():
+//    true  → SYN probe, XMAS, NULL, FIN scan, UDP/ICMP packet đầu tiên
+//    false → RST response, SYN-ACK, ACK từ server
+//
+//  Lý do filter response:
+//    Khi nmap scan 1000 port, server trả 1000 RST response.
+//    Mỗi RST có src_port khác nhau (80, 443, 22...) nhưng dst_port = ephemeral.
+//    Nếu không filter, IpStats của server sẽ tích lũy dst_ports_seen
+//    → false positive PORT_SCAN trên server IP.
+//
+//  checkFlagAbuse() vẫn chạy cho cả response flow vì:
+//    XMAS/NULL/FIN scan có is_initiator = true (set trong createFlow)
+//    → không bị filter ở đây.
+// ─────────────────────────────────────────────────────────────────────────────
 DetectionResult SignatureEngine::analyze(const PacketInfo& pkt,
                                           FlowState&        flow) {
     updateFlowState(pkt, flow);
 
-    IpStats* ip = ip_tracker_.getOrCreate(pkt.src_ip);
+    // ── Filter: chỉ analyze probe/initiator flow ──────────────────────────────
+    // Response packet từ server (RST, SYN-ACK...) → bỏ qua
+    if (!flow.is_initiator)
+        return DetectionResult::NORMAL;
 
+    // ── Rate-based detection (cần IpStats của src_ip) ────────────────────────
+    IpStats* ip = ip_tracker_.getOrCreate(pkt.src_ip);
     if (ip) {
+        // checkDDoS trước: nếu đã là flood thì không cần check port scan
         auto r = checkDDoS(pkt, *ip);
         if (r != DetectionResult::NORMAL) return r;
 
@@ -105,9 +128,11 @@ DetectionResult SignatureEngine::analyze(const PacketInfo& pkt,
         if (r != DetectionResult::NORMAL) return r;
     }
 
+    // ── Flag abuse (XMAS, NULL, FIN scan) ────────────────────────────────────
     auto r = checkFlagAbuse(pkt);
     if (r != DetectionResult::NORMAL) return r;
 
+    // ── Payload signature ─────────────────────────────────────────────────────
     if (pkt.payload_len > 0 && pkt.payload() != nullptr) {
         r = checkPayload(pkt);
         if (r != DetectionResult::NORMAL) return r;
@@ -130,6 +155,7 @@ void SignatureEngine::updateFlowState(const PacketInfo& pkt,
     if (pkt.hasRST()) { flow.rst_count++; }
     if (pkt.hasFIN()) { flow.fin_count++; }
 
+    // Reset sliding window sau WINDOW_SEC giây
     const double elapsed = std::chrono::duration<double>(
         now - flow.window_start).count();
     if (elapsed > IpTracker::WINDOW_SEC) {
@@ -140,20 +166,56 @@ void SignatureEngine::updateFlowState(const PacketInfo& pkt,
 }
 
 // ─── checkDDoS ────────────────────────────────────────────────────────────────
+//
+//  Gọi sau khi đã xác nhận flow.is_initiator = true
+//  → pkt.src_ip chắc chắn là attacker, không phải server
+//
+//  SYN Flood vs Port Scan:
+//    Cả 2 đều gửi nhiều SYN → phân biệt bằng port_diversity
+//
+//    port_diversity = unique_dst_ports / syn_count
+//      SYN Flood : flood vào 1-2 port → diversity thấp (< 0.3)
+//      Port Scan : mỗi SYN 1 port mới → diversity cao (≈ 1.0)
+//
+//    Nếu diversity cao → KHÔNG báo DDOS, để checkPortScan xử lý
+//
+//  Lưu ý: ip.dst_ports_seen được populate bởi checkPortScan()
+//         checkDDoS() chỉ đọc size() để tính diversity
+//         → thứ tự gọi: checkDDoS trước, checkPortScan sau (trong analyze)
+//         → nhưng ip.dst_ports_seen chưa có giá trị mới của packet này!
+//
+//  Fix: insert dst_port vào ip.dst_ports_seen ngay trong checkDDoS
+//       để diversity tính đúng cho packet hiện tại
+// ─────────────────────────────────────────────────────────────────────────────
 DetectionResult SignatureEngine::checkDDoS(const PacketInfo& pkt,
                                             IpStats&          ip) {
     ip.pkt_count++;
 
+    // ── SYN Flood ──────────────────────────────────────────────────────────────
     if (pkt.protocol == IPPROTO_TCP && pkt.hasSYN() && !pkt.hasACK()) {
+        // Insert dst_port trước để diversity tính đúng
+        ip.dst_ports_seen.insert(pkt.dst_port);
         ip.syn_count++;
+
         if (ip.syn_count > SYN_FLOOD_THRESHOLD) {
-            LOG_WARN("SYN Flood: src=" + pkt.flowKey()
-                     + " syn=" + std::to_string(ip.syn_count)
-                     + "/" + std::to_string(IpTracker::WINDOW_SEC) + "s");
-            return DetectionResult::DDOS_VOLUMETRIC;
+            const double diversity =
+                static_cast<double>(ip.dst_ports_seen.size()) / ip.syn_count;
+
+            if (diversity < PORT_DIVERSITY_FLOOD_THRESHOLD) {
+                // Diversity thấp → flood vào ít port → SYN Flood
+                LOG_WARN("SYN Flood: src="   + pkt.flowKey()
+                         + " syn="           + std::to_string(ip.syn_count)
+                         + " ports="         + std::to_string(ip.dst_ports_seen.size())
+                         + " diversity="     + std::to_string(diversity)
+                         + "/"               + std::to_string(IpTracker::WINDOW_SEC) + "s");
+                return DetectionResult::DDOS_VOLUMETRIC;
+            }
+            // Diversity cao → port scan, checkPortScan sẽ xử lý
+            // dst_port đã được insert ở trên → checkPortScan không cần insert lại
         }
     }
 
+    // ── UDP Flood ──────────────────────────────────────────────────────────────
     if (pkt.protocol == IPPROTO_UDP) {
         ip.udp_count++;
         if (ip.udp_count > UDP_FLOOD_THRESHOLD) {
@@ -164,6 +226,7 @@ DetectionResult SignatureEngine::checkDDoS(const PacketInfo& pkt,
         }
     }
 
+    // ── ICMP Flood ─────────────────────────────────────────────────────────────
     if (pkt.protocol == IPPROTO_ICMP) {
         ip.icmp_count++;
         if (ip.icmp_count > ICMP_FLOOD_THRESHOLD) {
@@ -179,38 +242,42 @@ DetectionResult SignatureEngine::checkDDoS(const PacketInfo& pkt,
 
 // ─── checkPortScan ────────────────────────────────────────────────────────────
 //
-//  FIX BUG 2: Phân biệt SYN Flood vs Port Scan
+//  Gọi sau khi đã xác nhận flow.is_initiator = true
+//  → pkt.dst_port là port đích thực sự bị probe, không phải ephemeral port
 //
-//  Vấn đề cũ:
-//    hping3 -S -p 80 → flood 1 port → server trả RST liên tục
-//    → rst_received > 15 → báo PORT_SCAN (sai)
+//  Chỉ track SYN probe (SYN && !ACK) và UDP probe:
+//    - RST, ACK, FIN không phải probe → bỏ qua
+//    - XMAS/NULL/FIN scan được xử lý bởi checkFlagAbuse(), không cần ở đây
 //
-//  Logic mới:
-//    Rule 1 (multi-port): dst_ports_seen > PORT_SCAN_THRESHOLD
-//                         → Port Scan rõ ràng
+//  dst_ports_seen:
+//    - TCP SYN: đã được insert trong checkDDoS() → KHÔNG insert lại
+//    - UDP:     insert ở đây
 //
-//    Rule 2 (RST-based):  rst_received > RST_SCAN_THRESHOLD
-//                         VÀ dst_ports_seen >= RST_SCAN_MIN_PORTS
-//                         → RST nhiều + nhiều port = SYN scan
-//                         → RST nhiều + 1 port = SYN flood (để checkDDoS xử lý)
-//
-//    Không reset rst_received trong hàm này — IpStats.resetWindow() lo
+//  Rule: unique dst_port > PORT_SCAN_THRESHOLD → Port Scan
 // ─────────────────────────────────────────────────────────────────────────────
 DetectionResult SignatureEngine::checkPortScan(const PacketInfo& pkt,
                                                 IpStats&          ip) {
     if (pkt.protocol != IPPROTO_TCP && pkt.protocol != IPPROTO_UDP)
         return DetectionResult::NORMAL;
 
-    if (pkt.dst_port > 0)
+    if (pkt.protocol == IPPROTO_TCP) {
+        // SYN probe: dst_port đã được insert trong checkDDoS()
+        // Chỉ cần track syn_no_ack counter
+        if (pkt.hasSYN() && !pkt.hasACK()) {
+            ip.syn_no_ack++;
+        } else {
+            // RST, ACK, FIN... → không phải probe → bỏ qua
+            // (Dù is_initiator = true, các packet này không phải scan probe)
+            return DetectionResult::NORMAL;
+        }
+    }
+
+    if (pkt.protocol == IPPROTO_UDP) {
+        // UDP probe: insert dst_port ở đây (checkDDoS không xử lý UDP port scan)
         ip.dst_ports_seen.insert(pkt.dst_port);
+    }
 
-    if (pkt.protocol == IPPROTO_TCP && pkt.hasSYN() && !pkt.hasACK())
-        ip.syn_no_ack++;
-
-    if (pkt.protocol == IPPROTO_TCP && pkt.hasRST())
-        ip.rst_received++;
-
-    // Rule 1: Nhiều unique port → Port Scan
+    // Rule: Nhiều unique dst_port → Port Scan
     if (ip.dst_ports_seen.size() > PORT_SCAN_THRESHOLD) {
         LOG_WARN("Port Scan (multi-port): src=" + pkt.flowKey()
                  + " ports=" + std::to_string(ip.dst_ports_seen.size())
@@ -218,25 +285,19 @@ DetectionResult SignatureEngine::checkPortScan(const PacketInfo& pkt,
         return DetectionResult::PORT_SCAN;
     }
 
-    // Rule 2: RST nhiều → chỉ báo PORT_SCAN khi unique ports đủ lớn
-    // FIX: thêm điều kiện dst_ports_seen.size() >= RST_SCAN_MIN_PORTS
-    if (ip.rst_received > RST_SCAN_THRESHOLD) {
-        const size_t unique_ports = ip.dst_ports_seen.size();
-        if (unique_ports >= RST_SCAN_MIN_PORTS) {
-            LOG_WARN("Port Scan (SYN scan): src=" + pkt.flowKey()
-                     + " rst=" + std::to_string(ip.rst_received)
-                     + " ports=" + std::to_string(unique_ports));
-            return DetectionResult::PORT_SCAN;
-        }
-        // unique_ports < RST_SCAN_MIN_PORTS:
-        // RST nhiều nhưng chỉ 1 port → SYN flood, không phải scan
-        // checkDDoS đã/sẽ xử lý qua syn_count threshold
-    }
-
     return DetectionResult::NORMAL;
 }
 
 // ─── checkFlagAbuse ───────────────────────────────────────────────────────────
+//
+//  Detect các scan dùng flag bất thường:
+//    XMAS scan : FIN + PSH + URG
+//    NULL scan : không có flag nào (0x00)
+//    FIN scan  : chỉ FIN, không ACK
+//
+//  Các packet này có is_initiator = true (set trong createFlow)
+//  nên vẫn đến được hàm này dù analyze() filter response.
+// ─────────────────────────────────────────────────────────────────────────────
 DetectionResult SignatureEngine::checkFlagAbuse(const PacketInfo& pkt) {
     if (pkt.protocol != IPPROTO_TCP) return DetectionResult::NORMAL;
 
