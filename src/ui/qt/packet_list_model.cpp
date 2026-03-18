@@ -112,27 +112,31 @@ void PacketListModel::appendRecords(const std::vector<PacketInfo>& batch) {
     for (const auto& pkt : batch) {
         if (base_ts_ < 0.0) base_ts_ = pkt.timestamp_d;
         if (!matchRecord(pkt, current_filter_)) continue;
-
         pending_rows_.push_back(buildRowCache(pkt));
 
-        // Flush theo chunk để Qt có thể render từng phần
-        // → UI không bị freeze khi load file 500k packets
-        if (pending_rows_.size() >= BATCH_FLUSH_SIZE)
+        // Chỉ flush khi KHÔNG frozen
+        // frozen = true → timerEvent sẽ gọi thaw() để flush 1 lần
+        if (!frozen_ && pending_rows_.size() >= BATCH_FLUSH_SIZE) {
             insertBatch(pending_rows_);
+            dirty_ = true;
+        }
     }
-    // Với LIVE mode: flush phần còn lại ngay
-    // Với OFFLINE mode: caller gọi flushPending() sau khi appendRecords() xong
-    // Ở đây flush luôn để LIVE không bị delay
-    if (!pending_rows_.empty())
+
+    // Nếu không frozen: flush phần còn lại ngay (LIVE real-time)
+    if (!frozen_ && !pending_rows_.empty()) {
         insertBatch(pending_rows_);
+        dirty_ = true;
+    }
 }
 
 // ─── flushPending ─────────────────────────────────────────────────────────────
 // Gọi sau scanFileDirect() để flush phần pending cuối cùng
 // (appendRecords đã tự flush theo chunk, hàm này là safety net)
 void PacketListModel::flushPending() {
-    if (!pending_rows_.empty())
+    if (!pending_rows_.empty()) {
         insertBatch(pending_rows_);
+        dirty_ = true;
+    }
 }
 
 // ─── applyFilter ──────────────────────────────────────────────────────────────
@@ -478,5 +482,35 @@ bool PacketListModel::evalOp(DisplayFilter::Op op,
 bool PacketListModel::applyOp(DisplayFilter::Op op, bool eq) {
     if (op == DisplayFilter::Op::EQ)  return  eq;
     if (op == DisplayFilter::Op::NEQ) return !eq;
+    return true;
+}
+
+// ─── freeze ───────────────────────────────────────────────────────────────────
+// Wireshark: PacketList::freeze(keep_current_frame)
+// Tạm dừng Qt model notification — packet vẫn vào pending_rows_
+// Gọi trước khi bắt đầu insert batch lớn (timerEvent, applyFilter)
+bool PacketListModel::freeze(bool keep_current) {
+    if (frozen_) return false;
+    frozen_ = true;
+    if (keep_current) {
+        // Caller sẽ dùng frozenCurrentRow() để restore sau thaw
+        // (PcapTab không cần vì không restore selection trong LIVE mode)
+    }
+    return true;
+}
+
+// ─── thaw ─────────────────────────────────────────────────────────────────────
+// Wireshark: PacketList::thaw(restore_selection)
+// Flush toàn bộ pending_rows_ → 1 beginInsertRows/endInsertRows duy nhất
+// → Qt chỉ schedule 1 lần repaint thay vì N lần
+bool PacketListModel::thaw(bool /*restore_selection*/) {
+    if (!frozen_) return false;
+    frozen_ = false;
+
+    // Flush tất cả packet đang chờ → 1 notify duy nhất
+    if (!pending_rows_.empty()) {
+        insertBatch(pending_rows_);
+        dirty_ = true;
+    }
     return true;
 }

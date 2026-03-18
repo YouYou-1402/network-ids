@@ -1,3 +1,4 @@
+// src/ui/qt/pcap_tab.hpp
 #pragma once
 #include <QWidget>
 #include <QTableView>
@@ -6,9 +7,11 @@
 #include <QLabel>
 #include <QFrame>
 #include <QTabWidget>
+#include <QTimerEvent>
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <atomic>
 
 #include "../../core/packet_info.hpp"
 #include "../../capture/io/pcap_reader.hpp"
@@ -35,32 +38,33 @@ public:
     explicit PcapTab(Mode mode, QWidget* parent = nullptr);
     ~PcapTab();
 
-    // ── Bridge (LIVE only) ────────────────────────────────────────────────────
-    void setUiBridge(UiBridge* bridge);
-
-    // ── File I/O ──────────────────────────────────────────────────────────────
-    void loadFile  (const QString& path);   // OFFLINE: scan + hiển thị
-    void saveToFile(const QString& path);   // LIVE: copy temp; OFFLINE: dump
-
-    // ── Live writer API — gọi từ MainWindow ───────────────────────────────────
-    // startLiveWriter: mở file tạm trước khi capture thread chạy
-    // stopLiveWriter : flush + close sau khi capture thread kết thúc
-    // writeLivePacket: ghi từng packet (thread-safe), trả về file_offset
-    void    startLiveWriter(const QString& temp_path);
-    void    stopLiveWriter ();
+    void setUiBridge   (UiBridge* bridge);
+    void loadFile      (const QString& path);
+    void saveToFile    (const QString& path);
+    void startLiveWriter(const QString& temp_path);
+    void stopLiveWriter ();
     int64_t writeLivePacket(const uint8_t*        raw_bytes,
                              uint32_t              raw_len,
                              uint32_t              orig_len,
                              const struct timeval& ts);
 
     QString liveWriterPath() const { return live_writer_path_; }
-
-    // ── Toolbar slot (public — MainWindow có thể gọi) ─────────────────────────
-    void onOpenClicked();
+    void    onOpenClicked  ();
 
 signals:
     void titleChanged  (const QString& title);
     void statusMessage (const QString& msg);
+
+protected:
+    // ── Wireshark timerEvent ──────────────────────────────────────────────────
+    // Wireshark dùng timerEvent() thay QTimer::timeout để điều tiết repaint
+    // Lý do: timerEvent được Qt queue sau khi event loop rảnh
+    //        → không block UI khi đang xử lý mouse/keyboard event
+    //        → QTimer::timeout có thể fire ngay giữa paint event → flicker
+    //
+    // overlay_timer_id_  : 100ms — poll ring_buf + freeze/thaw
+    // tail_timer_id_     : 200ms — auto-scroll nếu tail_at_end_
+    void timerEvent(QTimerEvent* event) override;
 
 private slots:
     void onPacketSelected(const QModelIndex& index);
@@ -70,47 +74,50 @@ private slots:
     void onNewPacketInfos(std::vector<PacketInfo> records);
 
 private:
-    // ── Layout builders ───────────────────────────────────────────────────────
     void setupLiveLayout   ();
     void setupOfflineLayout();
     void setupPacketTable  ();
     void connectBridgeSignals();
-
-    // ── Lazy-load raw bytes từ disk cho 1 packet ──────────────────────────────
-    // Trả về true nếu load thành công, cập nhật pkt.raw_data
     bool lazyLoadRawData(int row, PacketInfo& pkt);
 
-    // ── Mode ──────────────────────────────────────────────────────────────────
     Mode      mode_;
     UiBridge* bridge_ = nullptr;
 
-    // dummy_ring_buf_:
-    //   LIVE    — PacketListModel tạm trước khi setUiBridge() được gọi
-    //   OFFLINE — PcapReader scan vào đây, PacketListModel đọc metadata
     PacketRingBuffer dummy_ring_buf_{100'000};
 
-    // ── Packet view ───────────────────────────────────────────────────────────
-    QTableView*       packet_table_ = nullptr;
-    PacketListModel*  packet_model_ = nullptr;
-    PacketDetailTree* detail_tree_  = nullptr;
-    HexView*          hex_view_     = nullptr;
-    FilterBar*        filter_bar_   = nullptr;
-
-    // ── Live-only widgets ─────────────────────────────────────────────────────
+    QTableView*       packet_table_   = nullptr;
+    PacketListModel*  packet_model_   = nullptr;
+    PacketDetailTree* detail_tree_    = nullptr;
+    HexView*          hex_view_       = nullptr;
+    FilterBar*        filter_bar_     = nullptr;
     MetricsWidget*    metrics_widget_ = nullptr;
     TrafficChart*     traffic_chart_  = nullptr;
     AlertPanel*       alert_panel_    = nullptr;
     IpsControlWidget* ips_control_    = nullptr;
 
-    // ── I/O ───────────────────────────────────────────────────────────────────
-    // pcap_reader_: dùng cho OFFLINE load + lazy-load khi click (cả LIVE)
     std::unique_ptr<PcapReader> pcap_reader_;
-
-    // live_writer_: ghi liên tục trong khi capture
     std::unique_ptr<PcapWriter> live_writer_;
     mutable std::mutex          live_writer_mutex_;
     QString                     live_writer_path_;
 
-    // ── Misc ──────────────────────────────────────────────────────────────────
     bool auto_scroll_ = true;
+
+    // ── Wireshark-style timer IDs ─────────────────────────────────────────────
+    // overlay_timer_id_ : startTimer(100) — poll + freeze/thaw
+    // tail_timer_id_    : startTimer(200) — auto-scroll
+    // -1 = chưa start
+    int overlay_timer_id_ = -1;
+    int tail_timer_id_    = -1;
+
+    // tail_at_end_: true khi user đang ở cuối list → auto-scroll
+    // Wireshark: set true khi capture bắt đầu, false khi user scroll lên
+    bool tail_at_end_ = true;
+
+    // capture_in_progress_: true khi đang live capture
+    // timerEvent dừng overlay timer khi false + pending rỗng
+    std::atomic<bool> capture_in_progress_{false};
+
+    // last_polled_seq_: seq cuối đã poll từ ring_buf
+    // Chỉ đọc/ghi trong timerEvent (UI thread) → không cần mutex
+    uint64_t last_polled_seq_ = 0;
 };

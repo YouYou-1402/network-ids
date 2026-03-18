@@ -7,7 +7,6 @@
 #include <QAbstractTableModel>
 #include <QColor>
 #include <QString>
-#include <QTimer>
 #include <deque>
 #include <vector>
 
@@ -20,10 +19,8 @@ public:
         COL_COUNT
     };
 
-    static constexpr int    MAX_DISPLAY_ROWS  = 500'000;
-    // Số rows tối đa gom vào 1 beginInsertRows/endInsertRows
-    // Lớn hơn → ít Qt notify hơn → nhanh hơn khi load file lớn
-    static constexpr size_t BATCH_FLUSH_SIZE  = 5'000;
+    static constexpr int    MAX_DISPLAY_ROWS = 500'000;
+    static constexpr size_t BATCH_FLUSH_SIZE = 5'000;
 
     explicit PacketListModel(PacketRingBuffer& ring_buf,
                               QObject*          parent = nullptr);
@@ -33,12 +30,24 @@ public:
     QVariant headerData (int section, Qt::Orientation, int role) const override;
     QVariant data       (const QModelIndex& index, int role)     const override;
 
-    // Thêm batch — gom vào pending_rows_, flush theo BATCH_FLUSH_SIZE
-    void appendRecords(const std::vector<PacketInfo>& batch);
+    // ── Wireshark freeze/thaw ─────────────────────────────────────────────────
+    // freeze(): tạm dừng mọi beginInsertRows/endInsertRows
+    //           packet vẫn vào pending_rows_ bình thường
+    //           keep_current: giữ lại QModelIndex đang chọn (dùng khi filter)
+    // thaw() : flush toàn bộ pending_rows_ → 1 lần beginInsertRows duy nhất
+    //           → Qt chỉ repaint 1 lần thay vì N lần
+    // Trả về true nếu state thực sự thay đổi
+    bool freeze(bool keep_current = false);
+    bool thaw  (bool restore_selection = false);
 
-    // Flush toàn bộ pending_rows_ vào row_cache_ ngay lập tức
-    // Gọi sau khi scanFileDirect() hoàn thành để hiển thị ngay
-    void flushPending();
+    bool isFrozen() const { return frozen_; }
+
+    // ── Append / flush ────────────────────────────────────────────────────────
+    // appendRecords: gom vào pending_rows_
+    //   - nếu frozen_  → KHÔNG flush, chờ thaw()
+    //   - nếu !frozen_ → flush theo BATCH_FLUSH_SIZE (LIVE mode)
+    void appendRecords(const std::vector<PacketInfo>& batch);
+    void flushPending ();
 
     void applyFilter  (const DisplayFilter& filter);
     void clear        ();
@@ -46,6 +55,17 @@ public:
     bool getRecord    (int row, PacketInfo& out) const;
     void updateRawData(int row,
                        std::shared_ptr<std::vector<uint8_t>> raw_data);
+
+    // ── Wireshark overlay ─────────────────────────────────────────────────────
+    // Wireshark dùng 2 overlay timer:
+    //   near_overlay: repaint ~100ms sau insert (rows vừa thêm)
+    //   far_overlay : repaint ~500ms sau insert (rows cũ cần recolor)
+    // Ta đơn giản hóa: 1 dirty flag, PcapTab::timerEvent() check và repaint
+    bool isDirty() const { return dirty_; }
+    void clearDirty()    { dirty_ = false; }
+
+    // Frozen QModelIndex để restore sau thaw
+    QModelIndex frozenCurrentRow() const { return frozen_current_row_; }
 
 private:
     struct RowCache {
@@ -76,16 +96,18 @@ private:
     static bool evalOp (DisplayFilter::Op op, uint16_t lhs, uint16_t rhs);
     static bool applyOp(DisplayFilter::Op op, bool eq);
 
-    // Gom rows chưa flush — tránh beginInsertRows per-packet
     void insertBatch(std::vector<RowCache>& batch);
 
     PacketRingBuffer&    ring_buf_;
     std::deque<RowCache> row_cache_;
     std::deque<uint64_t> pkt_indices_;
-
-    // pending_rows_: buffer gom trước khi insertBatch()
     std::vector<RowCache> pending_rows_;
 
-    DisplayFilter        current_filter_;
-    double               base_ts_ = -1.0;
+    DisplayFilter current_filter_;
+    double        base_ts_ = -1.0;
+
+    // ── Freeze state ──────────────────────────────────────────────────────────
+    bool        frozen_             = false;
+    bool        dirty_              = false;
+    QModelIndex frozen_current_row_;
 };

@@ -25,6 +25,8 @@
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QScrollBar>
+#include <QScrollBar>
+#include <QAbstractItemView>
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Constructor / Destructor
@@ -64,6 +66,17 @@ void PcapTab::setUiBridge(UiBridge* bridge) {
                 });
 
         delete old_model;
+
+        // ── Wireshark: startTimer thay vì QTimer ──────────────────────────────
+        // overlay_timer_id_: poll ring_buf + freeze/thaw mỗi 100ms
+        // tail_timer_id_   : auto-scroll mỗi 200ms
+        if (overlay_timer_id_ == -1)
+            overlay_timer_id_ = startTimer(100);
+        if (tail_timer_id_ == -1)
+            tail_timer_id_ = startTimer(200);
+
+        capture_in_progress_.store(true, std::memory_order_release);
+        last_polled_seq_ = bridge_->ringBuf().totalPushed();
     }
 
     connectBridgeSignals();
@@ -74,11 +87,9 @@ void PcapTab::setUiBridge(UiBridge* bridge) {
             bridge_->isMlEnabled());
     }
 }
-
 // ═════════════════════════════════════════════════════════════════════════════
 // connectBridgeSignals
 // ═════════════════════════════════════════════════════════════════════════════
-
 void PcapTab::connectBridgeSignals() {
     if (!bridge_) return;
 
@@ -94,8 +105,18 @@ void PcapTab::connectBridgeSignals() {
         connect(bridge_, &UiBridge::newAlerts,
                 alert_panel_, &AlertPanel::onNewAlerts);
 
-    connect(bridge_, &UiBridge::newPacketInfos,
-            this,    &PcapTab::onNewPacketInfos);
+    // ── captureStarted / captureStopped signal → điều khiển timerEvent ────────
+    connect(bridge_, &UiBridge::captureStarted, this, [this]() {
+        capture_in_progress_.store(true, std::memory_order_release);
+        tail_at_end_     = true;
+        last_polled_seq_ = bridge_->ringBuf().totalPushed();
+        if (overlay_timer_id_ == -1) overlay_timer_id_ = startTimer(100);
+        if (tail_timer_id_    == -1) tail_timer_id_    = startTimer(200);
+    });
+
+    connect(bridge_, &UiBridge::captureStopped, this, [this]() {
+        capture_in_progress_.store(false, std::memory_order_release);
+    });
 
     if (ips_control_) {
         connect(ips_control_, &IpsControlWidget::toggleDetection,
@@ -108,7 +129,6 @@ void PcapTab::connectBridgeSignals() {
                 ips_control_, &IpsControlWidget::onMlStatusChanged);
     }
 }
-
 // ═════════════════════════════════════════════════════════════════════════════
 // setupPacketTable
 // ═════════════════════════════════════════════════════════════════════════════
@@ -430,12 +450,6 @@ bool PcapTab::lazyLoadRawData(int row, PacketInfo& pkt) {
 // Slots
 // ═════════════════════════════════════════════════════════════════════════════
 
-void PcapTab::onNewPacketInfos(std::vector<PacketInfo> records) {
-    if (records.empty()) return;
-    packet_model_->appendRecords(records);
-    if (auto_scroll_)
-        packet_table_->scrollToBottom();
-}
 
 // ─── onPacketSelected ────────────────────────────────────────────────────────
 // Lazy-load raw bytes từ disk khi user click vào row
@@ -575,4 +589,100 @@ void PcapTab::saveToFile(const QString& path) {
         QString("💾 Saved: %1  (%2 packets)")
             .arg(QFileInfo(path).fileName())
             .arg(n));
+}
+// ─── timerEvent ───────────────────────────────────────────────────────────────
+//
+//  Wireshark algorithm (packet_list.cpp::timerEvent):
+//
+//  overlay_timer (100ms):
+//    1. freeze()                   ← tắt Qt model notification
+//    2. pollRange(last_seq, MAX)   ← lấy packet mới từ ring_buf
+//    3. appendRecords(batch)       ← gom vào pending (frozen → không flush)
+//    4. thaw()                     ← 1 beginInsertRows/endInsertRows duy nhất
+//    5. viewport()->update()       ← schedule 1 repaint
+//
+//  tail_timer (200ms):
+//    scrollToBottom() nếu tail_at_end_
+//
+//  Tại sao timerEvent tốt hơn QTimer::timeout:
+//    - Qt queue timerEvent sau khi event loop rảnh
+//    - Không fire giữa paint event → không flicker
+//    - Có thể killTimer chính xác theo timer ID
+//
+void PcapTab::timerEvent(QTimerEvent* event) {
+    if (!packet_model_) return;
+
+    // ── overlay_timer: poll + freeze/thaw ─────────────────────────────────────
+    if (event->timerId() == overlay_timer_id_) {
+
+        const bool capturing = capture_in_progress_.load(std::memory_order_acquire);
+        const uint64_t total_now = bridge_
+            ? bridge_->ringBuf().totalPushed()
+            : 0;
+
+        const bool has_new = (total_now > last_polled_seq_);
+
+        if (has_new) {
+            // MAX_PER_TICK: 2000 pps × 100ms = 200 pkt/tick
+            // Dùng 500 để có buffer cho burst ngắn
+            constexpr uint64_t MAX_PER_TICK = 500;
+            const uint64_t to_fetch =
+                std::min(total_now - last_polled_seq_, MAX_PER_TICK);
+
+            auto batch = bridge_->ringBuf().pollRange(last_polled_seq_, to_fetch);
+            last_polled_seq_ += to_fetch;
+
+            if (!batch.empty()) {
+                // ── Wireshark freeze/thaw ─────────────────────────────────────
+                packet_model_->freeze();
+                packet_model_->appendRecords(batch);  // gom vào pending
+                packet_model_->thaw();                // 1 beginInsertRows duy nhất
+
+                // 1 lần viewport update thay vì N lần
+                if (packet_model_->isDirty()) {
+                    packet_table_->viewport()->update();
+                    packet_model_->clearDirty();
+                }
+            }
+        }
+
+        // Dừng timer khi capture kết thúc VÀ đã drain hết ring_buf
+        if (!capturing && !has_new) {
+            killTimer(overlay_timer_id_);
+            overlay_timer_id_ = -1;
+            emit statusMessage(
+                QString("⏹ Capture stopped — %1 packets")
+                    .arg(packet_model_->rowCount()));
+        }
+
+        return;
+    }
+
+    // ── tail_timer: auto-scroll ───────────────────────────────────────────────
+    if (event->timerId() == tail_timer_id_) {
+        if (tail_at_end_ && packet_model_->rowCount() > 0) {
+            auto* vsb = packet_table_->verticalScrollBar();
+            // Chỉ scroll nếu user đang ở gần cuối (±3 rows)
+            // Tránh scroll khi user đang xem packet ở giữa
+            if (vsb->value() >= vsb->maximum() - 3)
+                packet_table_->scrollToBottom();
+        }
+
+        // Dừng tail timer khi capture kết thúc
+        if (!capture_in_progress_.load(std::memory_order_acquire)) {
+            killTimer(tail_timer_id_);
+            tail_timer_id_ = -1;
+        }
+        return;
+    }
+
+    QWidget::timerEvent(event);
+}
+
+// ─── onNewPacketInfos (giữ lại để tương thích) ───────────────────────────────
+// timerEvent đã xử lý LIVE mode → hàm này chỉ dùng nếu ai đó vẫn emit signal
+void PcapTab::onNewPacketInfos(std::vector<PacketInfo> records) {
+    if (records.empty() || mode_ == Mode::LIVE) return;
+    // OFFLINE fallback
+    packet_model_->appendRecords(records);
 }

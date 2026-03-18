@@ -189,3 +189,13 @@ void UiBridge::setMlEnabled(bool enabled) {
         emit mlStatusChanged(enabled);
     }
 }
+
+void UiBridge::notifyCaptureStarted() {
+    LOG_INFO("UiBridge: capture started");
+    emit captureStarted();
+}
+
+void UiBridge::notifyCaptureStopped() {
+    LOG_INFO("UiBridge: capture stopped");
+    emit captureStopped();
+}

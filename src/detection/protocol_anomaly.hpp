@@ -9,11 +9,22 @@
 //
 //  Detect Slow DDoS dựa trên hành vi giao thức HTTP/TCP:
 //
-//    Slowloris:  HTTP header không hoàn chỉnh sau HTTP_HEADER_TIMEOUT_SEC
-//    Slow POST:  Content-Length khai báo nhưng body/s < MIN_BYTES_PER_SEC
-//    Slow Read:  TCP window = 0 kéo dài (client không đọc response)
+//    HTTP  port 80/8080:
+//      Slowloris : header không hoàn chỉnh sau HTTP_HEADER_TIMEOUT_SEC
+//      Slow POST : Content-Length khai báo nhưng body/s < MIN_BYTES_PER_SEC
 //
-//  Cần IpTracker để check concurrent_conn per src_ip
+//    HTTPS port 443:
+//      Slowloris : KHÔNG inspect TLS payload
+//                  → detect qua TCP behavior:
+//                    elapsed > timeout + bps < MIN + concurrent_conn > SLOWLORIS_CONN_MIN
+//      Slow POST : bỏ qua (delegate sang ML layer)
+//
+//    Slow Read (HTTP + HTTPS):
+//      TCP window = 0 kéo dài sau khi đã có data exchange
+//
+//  Alert suppression:
+//    flow.slowloris_alerted / slow_post_alerted
+//    → mỗi flow chỉ sinh 1 alert, tránh spam log
 // ─────────────────────────────────────────────────────────────────────────────
 class ProtocolAnomalyEngine {
 public:
@@ -32,6 +43,12 @@ private:
     static constexpr double   HTTP_HEADER_TIMEOUT_SEC = 30.0;
     static constexpr double   MIN_BYTES_PER_SEC       = 10.0;
     static constexpr uint32_t MAX_CONCURRENT_CONN     = 50;
+
+    // Ngưỡng concurrent conn để detect Slowloris qua TLS
+    // Thấp hơn MAX_CONCURRENT_CONN: Slowloris cần nhiều conn nhưng
+    // không nhất thiết phải đạt flood threshold
+    static constexpr uint32_t SLOWLORIS_CONN_MIN      = 10;
+
     static constexpr uint16_t HTTP_PORT               = 80;
     static constexpr uint16_t HTTPS_PORT              = 443;
     static constexpr uint16_t HTTP_ALT_PORT           = 8080;

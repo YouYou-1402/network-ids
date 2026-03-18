@@ -10,12 +10,9 @@ SignatureEngine::SignatureEngine(IpTracker& ip_tracker)
 {
     ac_nodes_.emplace_back(); // root
 
-    // Slowloris: gửi header fragment liên tục để giữ connection
     addPattern("X-a: b\r\n", SIG_SLOWLORIS);
     addPattern("X-c: d\r\n", SIG_SLOWLORIS);
     addPattern("X-b: c\r\n", SIG_SLOWLORIS);
-
-    // Slow POST: khai báo Content-Length lớn, body gửi nhỏ giọt
     addPattern("Content-Length:", SIG_SLOW_POST);
 
     buildFailLinks();
@@ -50,7 +47,6 @@ void SignatureEngine::buildFailLinks() {
         int u = q.front(); q.pop();
 
         for (auto& [c, v] : ac_nodes_[u].children) {
-            // Tìm fail link cho v
             int f = ac_nodes_[u].fail_link;
             while (f != 0 && !ac_nodes_[f].children.count(c))
                 f = ac_nodes_[f].fail_link;
@@ -62,7 +58,6 @@ void SignatureEngine::buildFailLinks() {
 
             ac_nodes_[v].fail_link = candidate;
 
-            // Kế thừa outputs từ fail link
             const auto& fail_out = ac_nodes_[candidate].outputs;
             ac_nodes_[v].outputs.insert(
                 ac_nodes_[v].outputs.end(),
@@ -95,30 +90,24 @@ std::vector<int> SignatureEngine::search(const uint8_t* data,
     return results;
 }
 
-// ─── analyze — entry point ────────────────────────────────────────────────────
+// ─── analyze ──────────────────────────────────────────────────────────────────
 DetectionResult SignatureEngine::analyze(const PacketInfo& pkt,
                                           FlowState&        flow) {
-    // 1. Cập nhật flow state
     updateFlowState(pkt, flow);
 
-    // 2. Lấy IpStats — nếu bảng đầy thì bỏ qua IP-level check
     IpStats* ip = ip_tracker_.getOrCreate(pkt.src_ip);
 
     if (ip) {
-        // 3. DDoS check (per-IP)
         auto r = checkDDoS(pkt, *ip);
         if (r != DetectionResult::NORMAL) return r;
 
-        // 4. Port scan check (per-IP)
         r = checkPortScan(pkt, *ip);
         if (r != DetectionResult::NORMAL) return r;
     }
 
-    // 5. TCP flag abuse (per-packet, không cần IP state)
     auto r = checkFlagAbuse(pkt);
     if (r != DetectionResult::NORMAL) return r;
 
-    // 6. Payload signature (Aho-Corasick)
     if (pkt.payload_len > 0 && pkt.payload() != nullptr) {
         r = checkPayload(pkt);
         if (r != DetectionResult::NORMAL) return r;
@@ -141,12 +130,11 @@ void SignatureEngine::updateFlowState(const PacketInfo& pkt,
     if (pkt.hasRST()) { flow.rst_count++; }
     if (pkt.hasFIN()) { flow.fin_count++; }
 
-    // Sliding window — snapshot now trước khi reset để tránh lệch timestamp
     const double elapsed = std::chrono::duration<double>(
         now - flow.window_start).count();
     if (elapsed > IpTracker::WINDOW_SEC) {
         flow.pkt_rate_window = 0;
-        flow.window_start    = now;   // dùng snapshot, không gọi Clock::now() lần 2
+        flow.window_start    = now;
     }
     flow.pkt_rate_window++;
 }
@@ -154,10 +142,8 @@ void SignatureEngine::updateFlowState(const PacketInfo& pkt,
 // ─── checkDDoS ────────────────────────────────────────────────────────────────
 DetectionResult SignatureEngine::checkDDoS(const PacketInfo& pkt,
                                             IpStats&          ip) {
-    // Cập nhật per-IP counters
     ip.pkt_count++;
 
-    // SYN Flood: SYN không có ACK
     if (pkt.protocol == IPPROTO_TCP && pkt.hasSYN() && !pkt.hasACK()) {
         ip.syn_count++;
         if (ip.syn_count > SYN_FLOOD_THRESHOLD) {
@@ -168,7 +154,6 @@ DetectionResult SignatureEngine::checkDDoS(const PacketInfo& pkt,
         }
     }
 
-    // UDP Flood
     if (pkt.protocol == IPPROTO_UDP) {
         ip.udp_count++;
         if (ip.udp_count > UDP_FLOOD_THRESHOLD) {
@@ -179,7 +164,6 @@ DetectionResult SignatureEngine::checkDDoS(const PacketInfo& pkt,
         }
     }
 
-    // ICMP Flood
     if (pkt.protocol == IPPROTO_ICMP) {
         ip.icmp_count++;
         if (ip.icmp_count > ICMP_FLOOD_THRESHOLD) {
@@ -195,27 +179,38 @@ DetectionResult SignatureEngine::checkDDoS(const PacketInfo& pkt,
 
 // ─── checkPortScan ────────────────────────────────────────────────────────────
 //
-//  Dùng IpStats.dst_ports_seen — tích lũy qua TẤT CẢ flow từ src_ip
-//  → Fix bug cũ: per-flow dst_ports_seen chỉ có 1 port
+//  FIX BUG 2: Phân biệt SYN Flood vs Port Scan
+//
+//  Vấn đề cũ:
+//    hping3 -S -p 80 → flood 1 port → server trả RST liên tục
+//    → rst_received > 15 → báo PORT_SCAN (sai)
+//
+//  Logic mới:
+//    Rule 1 (multi-port): dst_ports_seen > PORT_SCAN_THRESHOLD
+//                         → Port Scan rõ ràng
+//
+//    Rule 2 (RST-based):  rst_received > RST_SCAN_THRESHOLD
+//                         VÀ dst_ports_seen >= RST_SCAN_MIN_PORTS
+//                         → RST nhiều + nhiều port = SYN scan
+//                         → RST nhiều + 1 port = SYN flood (để checkDDoS xử lý)
+//
+//    Không reset rst_received trong hàm này — IpStats.resetWindow() lo
 // ─────────────────────────────────────────────────────────────────────────────
 DetectionResult SignatureEngine::checkPortScan(const PacketInfo& pkt,
                                                 IpStats&          ip) {
     if (pkt.protocol != IPPROTO_TCP && pkt.protocol != IPPROTO_UDP)
         return DetectionResult::NORMAL;
 
-    // Ghi nhận dst_port
     if (pkt.dst_port > 0)
         ip.dst_ports_seen.insert(pkt.dst_port);
 
-    // SYN không có ACK → port scan probe
     if (pkt.protocol == IPPROTO_TCP && pkt.hasSYN() && !pkt.hasACK())
         ip.syn_no_ack++;
 
-    // RST nhận về → port closed, xác nhận đang scan
     if (pkt.protocol == IPPROTO_TCP && pkt.hasRST())
         ip.rst_received++;
 
-    // Rule 1: Quá nhiều unique port trong window
+    // Rule 1: Nhiều unique port → Port Scan
     if (ip.dst_ports_seen.size() > PORT_SCAN_THRESHOLD) {
         LOG_WARN("Port Scan (multi-port): src=" + pkt.flowKey()
                  + " ports=" + std::to_string(ip.dst_ports_seen.size())
@@ -223,11 +218,19 @@ DetectionResult SignatureEngine::checkPortScan(const PacketInfo& pkt,
         return DetectionResult::PORT_SCAN;
     }
 
-    // Rule 2: Nhiều RST nhận về → SYN scan (port closed response)
+    // Rule 2: RST nhiều → chỉ báo PORT_SCAN khi unique ports đủ lớn
+    // FIX: thêm điều kiện dst_ports_seen.size() >= RST_SCAN_MIN_PORTS
     if (ip.rst_received > RST_SCAN_THRESHOLD) {
-        LOG_WARN("Port Scan (SYN scan RST): src=" + pkt.flowKey()
-                 + " rst=" + std::to_string(ip.rst_received));
-        return DetectionResult::PORT_SCAN;
+        const size_t unique_ports = ip.dst_ports_seen.size();
+        if (unique_ports >= RST_SCAN_MIN_PORTS) {
+            LOG_WARN("Port Scan (SYN scan): src=" + pkt.flowKey()
+                     + " rst=" + std::to_string(ip.rst_received)
+                     + " ports=" + std::to_string(unique_ports));
+            return DetectionResult::PORT_SCAN;
+        }
+        // unique_ports < RST_SCAN_MIN_PORTS:
+        // RST nhiều nhưng chỉ 1 port → SYN flood, không phải scan
+        // checkDDoS đã/sẽ xử lý qua syn_count threshold
     }
 
     return DetectionResult::NORMAL;
@@ -237,20 +240,17 @@ DetectionResult SignatureEngine::checkPortScan(const PacketInfo& pkt,
 DetectionResult SignatureEngine::checkFlagAbuse(const PacketInfo& pkt) {
     if (pkt.protocol != IPPROTO_TCP) return DetectionResult::NORMAL;
 
-    // XMAS scan: FIN + PSH + URG
     constexpr uint8_t XMAS = TCPFlags::FIN | TCPFlags::PSH | TCPFlags::URG;
     if ((pkt.tcp_flags & XMAS) == XMAS) {
         LOG_WARN("XMAS Scan: " + pkt.flowKey());
         return DetectionResult::PORT_SCAN;
     }
 
-    // NULL scan: không có flag nào
     if (pkt.tcp_flags == 0x00) {
         LOG_WARN("NULL Scan: " + pkt.flowKey());
         return DetectionResult::PORT_SCAN;
     }
 
-    // FIN scan: chỉ có FIN, không có ACK (không phải close bình thường)
     if ((pkt.tcp_flags & TCPFlags::FIN) && !(pkt.tcp_flags & TCPFlags::ACK)) {
         LOG_WARN("FIN Scan: " + pkt.flowKey());
         return DetectionResult::PORT_SCAN;
@@ -268,7 +268,6 @@ DetectionResult SignatureEngine::checkPayload(const PacketInfo& pkt) {
             LOG_WARN("Slowloris header pattern: " + pkt.flowKey());
             return DetectionResult::SLOW_DDOS;
         }
-        // SIG_SLOW_POST: chỉ ghi nhận, validate thêm ở ProtocolAnomalyEngine
     }
     return DetectionResult::NORMAL;
 }

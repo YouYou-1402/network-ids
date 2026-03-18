@@ -61,7 +61,8 @@ public:
     void stopPolling();
 
     void setMaxBatchPerTick(uint64_t n) { max_batch_per_tick_ = n; }
-
+    void notifyCaptureStarted();   // ← THÊM
+    void notifyCaptureStopped();   // ← THÊM
     // ── Public accessor — PcapTab dùng để rebuild PacketListModel ─────────────
     PacketRingBuffer& ringBuf() { return ring_buf_; }
 
@@ -80,10 +81,13 @@ signals:
     void newPacketInfos        (std::vector<PacketInfo> records);
     void detectionStatusChanged(bool enabled);
     void mlStatusChanged       (bool enabled);
+    void captureStarted        ();   // ← THÊM
+    void captureStopped        ();   // ← THÊM
 
 public slots:
     void setDetectionEnabled(bool enabled);
     void setMlEnabled       (bool enabled);
+
 
 private slots:
     void onTimer();
