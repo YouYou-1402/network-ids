@@ -107,10 +107,10 @@ if(BUILD_UI)
 endif()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Source groups — theo cấu trúc thư mục mới
+# Source groups
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── core/ — domain objects ────────────────────────────────────────────────────
+# ── core/ ─────────────────────────────────────────────────────────────────────
 set(CORE_SOURCES
     src/core/packet_info.cpp
 )
@@ -119,7 +119,7 @@ set(CORE_HEADERS
     src/core/threat_types.hpp
 )
 
-# ── common/ — pure utilities ──────────────────────────────────────────────────
+# ── common/ ───────────────────────────────────────────────────────────────────
 set(COMMON_SOURCES
     src/common/logger.cpp
     src/common/metrics.cpp
@@ -132,7 +132,7 @@ set(COMMON_HEADERS
     src/common/config_loader.hpp
 )
 
-# ── capture/ — thu thập packet từ NIC ────────────────────────────────────────
+# ── capture/ ──────────────────────────────────────────────────────────────────
 set(CAPTURE_SOURCES
     src/capture/packet_capture.cpp
     src/capture/bpf_filter.cpp
@@ -144,7 +144,7 @@ set(CAPTURE_HEADERS
     src/capture/protocol_decoder.hpp
 )
 
-# ── capture/io/ — đọc/ghi pcap file + ring buffer ────────────────────────────
+# ── capture/io/ ───────────────────────────────────────────────────────────────
 set(CAPTURE_IO_SOURCES
     src/capture/io/packet_ring_buffer.cpp
     src/capture/io/pcap_reader.cpp
@@ -156,7 +156,7 @@ set(CAPTURE_IO_HEADERS
     src/capture/io/pcap_writer.hpp
 )
 
-# ── detection/ — IDS engine rule-based ───────────────────────────────────────
+# ── detection/ ────────────────────────────────────────────────────────────────
 set(DETECTION_SOURCES
     src/detection/flow_table.cpp
     src/detection/ip_tracker.cpp
@@ -179,7 +179,7 @@ set(DETECTION_HEADERS
     src/detection/action_handler.hpp
 )
 
-# ── ml/ — ML engine ──────────────────────────────────────────────────────────
+# ── ml/ ───────────────────────────────────────────────────────────────────────
 set(ML_SOURCES
     src/ml/feature_extractor.cpp
     src/ml/onnx_model.cpp
@@ -195,7 +195,7 @@ set(ML_HEADERS
     src/ml/feedback_loop.hpp
 )
 
-# ── analysis/ — alert + stats ─────────────────────────────────────────────────
+# ── analysis/ ─────────────────────────────────────────────────────────────────
 set(ANALYSIS_SOURCES
     src/analysis/alert_manager.cpp
     src/analysis/stats_collector.cpp
@@ -205,11 +205,24 @@ set(ANALYSIS_HEADERS
     src/analysis/stats_collector.hpp
 )
 
-# ── ui/qt/ — Qt6 GUI ─────────────────────────────────────────────────────────
+# ── firewall/ ─────────────────────────────────────────────────────────────────  ← THÊM
+set(FIREWALL_SOURCES
+    src/firewall/firewall_manager.cpp
+    # src/firewall/firewall_rule.cpp
+    src/firewall/firewall_backend.cpp
+)
+set(FIREWALL_HEADERS
+    src/firewall/firewall_manager.hpp
+    src/firewall/firewall_rule.hpp
+    src/firewall/firewall_backend.hpp
+)
+
+# ── ui/qt/ ────────────────────────────────────────────────────────────────────
 set(UI_SOURCES
     src/ui/qt/ui_bridge.cpp
     src/ui/qt/main_window.cpp
     src/ui/qt/ips_control_widget.cpp
+    src/ui/qt/firewall_widget.cpp           # ← THÊM
     src/ui/qt/pcap_tab.cpp
     src/ui/qt/packet_list_model.cpp
     src/ui/qt/packet_detail_tree.cpp
@@ -224,6 +237,7 @@ set(UI_HEADERS
     src/ui/qt/ui_bridge.hpp
     src/ui/qt/main_window.hpp
     src/ui/qt/ips_control_widget.hpp
+    src/ui/qt/firewall_widget.hpp           # ← THÊM
     src/ui/qt/pcap_tab.hpp
     src/ui/qt/packet_list_model.hpp
     src/ui/qt/packet_detail_tree.hpp
@@ -244,6 +258,7 @@ set(ENGINE_SOURCES
     ${DETECTION_SOURCES}
     ${ML_SOURCES}
     ${ANALYSIS_SOURCES}
+    ${FIREWALL_SOURCES}     # ← THÊM
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -251,7 +266,7 @@ set(ENGINE_SOURCES
 # ─────────────────────────────────────────────────────────────────────────────
 function(apply_common_settings TARGET_NAME)
     target_include_directories(${TARGET_NAME} PRIVATE
-        ${CMAKE_SOURCE_DIR}/src   # include "core/packet_info.hpp" etc.
+        ${CMAKE_SOURCE_DIR}/src
         ${PCAP_INCLUDE_DIR}
     )
 
@@ -364,6 +379,12 @@ install(DIRECTORY models/
     DESTINATION ${CMAKE_INSTALL_DATADIR}/network-ids/models
     OPTIONAL)
 
+# Tạo thư mục /etc/ids nếu chưa có (cho firewall rules)
+install(CODE "
+    file(MAKE_DIRECTORY \"\$ENV{DESTDIR}/etc/ids\")
+    message(STATUS \"Created /etc/ids for firewall rules\")
+")
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Print summary
 # ─────────────────────────────────────────────────────────────────────────────
@@ -380,5 +401,3 @@ message(STATUS "║ ONNX Runtime: ${USE_ONNX}")
 message(STATUS "║ libpcap     : ${PCAP_LIB}")
 message(STATUS "╚══════════════════════════════════════╝")
 message(STATUS "")
-
-

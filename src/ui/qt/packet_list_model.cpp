@@ -6,6 +6,30 @@
 #include <algorithm>
 #include <cctype>
 
+// ─── Palette (light theme) ────────────────────────────────────────────────────
+//  FG_DEFAULT   #1a1a3e    chữ mặc định
+//
+//  — Threat rows —
+//  ROW_DDOS_VOL #ffe8e8    DDoS volumetric  (đỏ nhạt)
+//  ROW_SLOW     #fff8e0    Slow DDoS        (vàng nhạt)
+//  ROW_SCAN     #fff3e0    Port scan        (cam nhạt)
+//  ROW_THREAT   #fdecea    threat khác      (đỏ pastel)
+//
+//  — Protocol rows —
+//  ROW_ARP      #fffde7    ARP              (vàng rất nhạt)
+//  ROW_IPV6     #e8f5fd    IPv6             (xanh dương nhạt)
+//  ROW_TCP_RST  #fce4ec    TCP RST          (hồng nhạt)
+//  ROW_TCP_SYN  #e8f5e9    TCP SYN          (xanh lá nhạt)
+//  ROW_HTTP     #e3f2fd    HTTP             (xanh dương nhạt)
+//  ROW_HTTPS    #e8eaf6    HTTPS            (tím nhạt)
+//  ROW_TCP      #f3f4fc    TCP thường       (xanh rất nhạt)
+//  ROW_DNS      #f3e5f5    DNS              (tím nhạt)
+//  ROW_UDP      #f1f8e9    UDP              (xanh lá rất nhạt)
+//  ROW_ICMP     #e0f7fa    ICMP             (cyan nhạt)
+//  ROW_ICMPV6   #e0f2f1    ICMPv6           (teal nhạt)
+//  ROW_DEFAULT  #f8f9fd    mặc định         (trắng xám)
+// ─────────────────────────────────────────────────────────────────────────────
+
 static const QStringList HEADERS = {
     "No.", "Time", "Source", "Destination",
     "Protocol", "Length", "Info", "Threat"
@@ -43,7 +67,7 @@ QVariant PacketListModel::data(const QModelIndex& index, int role) const {
     const RowCache& c = row_cache_[static_cast<size_t>(row)];
 
     if (role == Qt::BackgroundRole)    return c.bg_color;
-    if (role == Qt::ForegroundRole)    return QColor("#dddddd");
+    if (role == Qt::ForegroundRole)    return QColor("#1a1a3e");   // ← dark text
     if (role == Qt::FontRole)          return QFont("Monospace", 10);
     if (role == Qt::TextAlignmentRole) {
         const int col = index.column();
@@ -66,13 +90,10 @@ QVariant PacketListModel::data(const QModelIndex& index, int role) const {
     }
 }
 
-// ─── insertBatch ─────────────────────────────────────────────────────────────
-// Gom N rows vào row_cache_ với 1 lần beginInsertRows/endInsertRows
-// Giảm số Qt model notification từ N xuống còn N/BATCH_FLUSH_SIZE
+// ─── insertBatch ──────────────────────────────────────────────────────────────
 void PacketListModel::insertBatch(std::vector<RowCache>& batch) {
     if (batch.empty()) return;
 
-    // Trim nếu vượt MAX_DISPLAY_ROWS
     const int total_after = static_cast<int>(row_cache_.size())
                           + static_cast<int>(batch.size());
     if (total_after > MAX_DISPLAY_ROWS) {
@@ -101,11 +122,6 @@ void PacketListModel::insertBatch(std::vector<RowCache>& batch) {
 }
 
 // ─── appendRecords ────────────────────────────────────────────────────────────
-// LIVE mode: gọi liên tục với batch nhỏ (vài chục packets)
-//            → flush ngay khi pending đủ BATCH_FLUSH_SIZE
-// OFFLINE:   gọi 1 lần với toàn bộ N packets
-//            → flush theo chunk BATCH_FLUSH_SIZE, tránh 1 beginInsertRows khổng lồ
-//            → sau khi xong gọi flushPending() để flush phần còn lại
 void PacketListModel::appendRecords(const std::vector<PacketInfo>& batch) {
     if (batch.empty()) return;
 
@@ -114,15 +130,12 @@ void PacketListModel::appendRecords(const std::vector<PacketInfo>& batch) {
         if (!matchRecord(pkt, current_filter_)) continue;
         pending_rows_.push_back(buildRowCache(pkt));
 
-        // Chỉ flush khi KHÔNG frozen
-        // frozen = true → timerEvent sẽ gọi thaw() để flush 1 lần
         if (!frozen_ && pending_rows_.size() >= BATCH_FLUSH_SIZE) {
             insertBatch(pending_rows_);
             dirty_ = true;
         }
     }
 
-    // Nếu không frozen: flush phần còn lại ngay (LIVE real-time)
     if (!frozen_ && !pending_rows_.empty()) {
         insertBatch(pending_rows_);
         dirty_ = true;
@@ -130,8 +143,6 @@ void PacketListModel::appendRecords(const std::vector<PacketInfo>& batch) {
 }
 
 // ─── flushPending ─────────────────────────────────────────────────────────────
-// Gọi sau scanFileDirect() để flush phần pending cuối cùng
-// (appendRecords đã tự flush theo chunk, hàm này là safety net)
 void PacketListModel::flushPending() {
     if (!pending_rows_.empty()) {
         insertBatch(pending_rows_);
@@ -196,11 +207,8 @@ void PacketListModel::updateRawData(
 }
 
 // ─── ipv4Str ──────────────────────────────────────────────────────────────────
-// Dùng lookup table thay vì inet_ntop để tránh syscall overhead
-// khi gọi 500k lần trong buildRowCache()
 QString PacketListModel::ipv4Str(uint32_t ip_net) {
     if (ip_net == 0) return {};
-    // inet_ntop nhanh hơn inet_ntoa (thread-safe, không dùng static buffer)
     char buf[INET_ADDRSTRLEN]{};
     struct in_addr a{};
     a.s_addr = ip_net;
@@ -436,32 +444,42 @@ QString PacketListModel::computeInfo(const PacketInfo& pkt) const {
 }
 
 // ─── computeRowColor ──────────────────────────────────────────────────────────
+// Light theme: nền pastel nhạt thay vì màu tối
 QColor PacketListModel::computeRowColor(const PacketInfo& pkt) const {
+    // ── Threat rows ───────────────────────────────────────────────────────────
     if (!pkt.threat_type.empty()) {
         if (pkt.threat_type.find("DDOS_VOLUMETRIC") != std::string::npos)
-            return {60, 15, 15};
+            return QColor("#ffe8e8");   // đỏ nhạt
         if (pkt.threat_type.find("SLOW_DDOS")       != std::string::npos)
-            return {55, 50, 10};
+            return QColor("#fff8e0");   // vàng nhạt
         if (pkt.threat_type.find("PORT_SCAN")        != std::string::npos)
-            return {60, 38, 10};
-        return {50, 10, 10};
+            return QColor("#fff3e0");   // cam nhạt
+        return QColor("#fdecea");       // threat khác — đỏ pastel
     }
-    if (pkt.eth_type == EtherType::ARP)  return {25, 25, 10};
-    if (pkt.eth_type == EtherType::IPv6) return {10, 25, 25};
+
+    // ── Protocol rows ─────────────────────────────────────────────────────────
+    if (pkt.eth_type == EtherType::ARP)  return QColor("#fffde7"); // vàng nhạt
+    if (pkt.eth_type == EtherType::IPv6) return QColor("#e8f5fd"); // xanh dương nhạt
+
     switch (pkt.protocol) {
         case IPPROTO_TCP:
-            if (pkt.hasRST()) return {40, 10, 10};
-            if (pkt.hasSYN()) return {15, 35, 15};
+            if (pkt.hasRST()) return QColor("#fce4ec");  // hồng nhạt
+            if (pkt.hasSYN()) return QColor("#e8f5e9");  // xanh lá nhạt
             if (pkt.src_port == 80   || pkt.dst_port == 80   ||
-                pkt.src_port == 8080 || pkt.dst_port == 8080) return {15, 25, 45};
-            if (pkt.src_port == 443  || pkt.dst_port == 443)  return {20, 30, 50};
-            return {15, 15, 30};
+                pkt.src_port == 8080 || pkt.dst_port == 8080)
+                              return QColor("#e3f2fd");  // xanh dương nhạt (HTTP)
+            if (pkt.src_port == 443  || pkt.dst_port == 443)
+                              return QColor("#e8eaf6");  // indigo nhạt (HTTPS)
+            return QColor("#f3f4fc");                    // TCP thường
+
         case IPPROTO_UDP:
-            if (pkt.src_port == 53 || pkt.dst_port == 53) return {35, 20, 45};
-            return {20, 20, 35};
-        case IPPROTO_ICMP:   return {10, 35, 35};
-        case IPPROTO_ICMPV6: return {10, 30, 30};
-        default:             return {15, 15, 15};
+            if (pkt.src_port == 53 || pkt.dst_port == 53)
+                              return QColor("#f3e5f5");  // tím nhạt (DNS)
+            return QColor("#f1f8e9");                    // xanh lá rất nhạt
+
+        case IPPROTO_ICMP:   return QColor("#e0f7fa");  // cyan nhạt
+        case IPPROTO_ICMPV6: return QColor("#e0f2f1");  // teal nhạt
+        default:             return QColor("#f8f9fd");  // trắng xám
     }
 }
 
@@ -486,28 +504,18 @@ bool PacketListModel::applyOp(DisplayFilter::Op op, bool eq) {
 }
 
 // ─── freeze ───────────────────────────────────────────────────────────────────
-// Wireshark: PacketList::freeze(keep_current_frame)
-// Tạm dừng Qt model notification — packet vẫn vào pending_rows_
-// Gọi trước khi bắt đầu insert batch lớn (timerEvent, applyFilter)
 bool PacketListModel::freeze(bool keep_current) {
     if (frozen_) return false;
     frozen_ = true;
-    if (keep_current) {
-        // Caller sẽ dùng frozenCurrentRow() để restore sau thaw
-        // (PcapTab không cần vì không restore selection trong LIVE mode)
-    }
+    (void)keep_current;
     return true;
 }
 
 // ─── thaw ─────────────────────────────────────────────────────────────────────
-// Wireshark: PacketList::thaw(restore_selection)
-// Flush toàn bộ pending_rows_ → 1 beginInsertRows/endInsertRows duy nhất
-// → Qt chỉ schedule 1 lần repaint thay vì N lần
 bool PacketListModel::thaw(bool /*restore_selection*/) {
     if (!frozen_) return false;
     frozen_ = false;
 
-    // Flush tất cả packet đang chờ → 1 notify duy nhất
     if (!pending_rows_.empty()) {
         insertBatch(pending_rows_);
         dirty_ = true;

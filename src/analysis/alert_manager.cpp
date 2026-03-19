@@ -4,11 +4,20 @@
 #include <arpa/inet.h>
 #include <sstream>
 #include <chrono>
+#include <iomanip>
+#include <ctime>
 
 // ─── UnifiedAlert helpers ─────────────────────────────────────────────────────
+
 std::string UnifiedAlert::srcIpString() const {
     struct in_addr addr{};
     addr.s_addr = src_ip;
+    return inet_ntoa(addr);
+}
+
+std::string UnifiedAlert::dstIpString() const {
+    struct in_addr addr{};
+    addr.s_addr = dst_ip;
     return inet_ntoa(addr);
 }
 
@@ -17,16 +26,39 @@ std::string UnifiedAlert::colorCode() const {
         case DetectionResult::DDOS_VOLUMETRIC: return "\033[31m";        // Đỏ
         case DetectionResult::SLOW_DDOS:       return "\033[33m";        // Vàng
         case DetectionResult::PORT_SCAN:       return "\033[38;5;208m";  // Cam
+        case DetectionResult::MALFORMED:       return "\033[35m";        // Tím
         default:                               return "\033[32m";        // Xanh lá
     }
 }
 
-// ─── Constructor ──────────────────────────────────────────────────────────────
+// ─── Constructor / Destructor ─────────────────────────────────────────────────
+
 AlertManager::AlertManager(size_t max_alerts)
     : max_alerts_(max_alerts)
 {}
 
+AlertManager::~AlertManager() {
+    std::lock_guard<std::mutex> lock(alert_log_mutex_);
+    if (alert_log_file_.is_open())
+        alert_log_file_.close();
+}
+
+// ─── setAlertLogFile ──────────────────────────────────────────────────────────
+// Gọi 1 lần sau constructor, trước khi có alert nào
+void AlertManager::setAlertLogFile(const std::string& path) {
+    std::lock_guard<std::mutex> lock(alert_log_mutex_);
+    if (alert_log_file_.is_open())
+        alert_log_file_.close();
+
+    alert_log_file_.open(path, std::ios::app);
+    if (!alert_log_file_.is_open())
+        LOG_ERROR("AlertManager: cannot open alert log file: " + path);
+    else
+        LOG_INFO("AlertManager: alert log → " + path);
+}
+
 // ─── addL1Alert ───────────────────────────────────────────────────────────────
+
 void AlertManager::addL1Alert(const DetectionEvent& event) {
     UnifiedAlert alert;
     alert.source     = UnifiedAlert::Source::LAYER1;
@@ -43,6 +75,7 @@ void AlertManager::addL1Alert(const DetectionEvent& event) {
 }
 
 // ─── addL2Alert ───────────────────────────────────────────────────────────────
+
 void AlertManager::addL2Alert(const MLResult& result) {
     UnifiedAlert alert;
     alert.source     = UnifiedAlert::Source::LAYER2;
@@ -61,6 +94,7 @@ void AlertManager::addL2Alert(const MLResult& result) {
 // ─── addAlert ─────────────────────────────────────────────────────────────────
 // FIX: lưu local copy trước khi move alert vào deque
 //      → tránh dùng alerts_.back() sau khi release lock
+
 void AlertManager::addAlert(UnifiedAlert alert) {
     // ── Lưu local trước khi move ──────────────────────────────────────────────
     const DetectionResult result_copy = alert.result;
@@ -68,6 +102,8 @@ void AlertManager::addAlert(UnifiedAlert alert) {
                                       + "[ALERT] " + threatToString(alert.result)
                                       + " | "      + alert.srcIpString()
                                       + ":"        + std::to_string(alert.src_port)
+                                      + " → "      + alert.dstIpString()
+                                      + ":"        + std::to_string(alert.dst_port)
                                       + " | "      + alert.detail
                                       + "\033[0m";
 
@@ -78,7 +114,10 @@ void AlertManager::addAlert(UnifiedAlert alert) {
         << static_cast<int>(alert.result);
     const std::string dedup_key = oss.str();
 
-    // ── Log NGOÀI lock → không block worker thread ────────────────────────────
+    // ── Snapshot alert để ghi file (NGOÀI lock) ───────────────────────────────
+    const UnifiedAlert alert_snapshot = alert;  // copy trước khi move
+
+    // ── Log console NGOÀI lock → không block worker thread ───────────────────
     LOG_INFO(log_str);
 
     // ── Critical section: ngắn nhất có thể ───────────────────────────────────
@@ -105,9 +144,12 @@ void AlertManager::addAlert(UnifiedAlert alert) {
     }
     // ── Hết lock ──────────────────────────────────────────────────────────────
 
-    // ── Tăng counter NGOÀI lock, dùng local copy ─────────────────────────────
     if (!did_push) return;
 
+    // ── Ghi file log NGOÀI mutex_ (dùng alert_log_mutex_ riêng) ──────────────
+    writeAlertToFile(alert_snapshot);
+
+    // ── Tăng counter NGOÀI lock, dùng local copy ─────────────────────────────
     total_alerts_.fetch_add(1, std::memory_order_relaxed);
 
     switch (result_copy) {
@@ -127,6 +169,7 @@ void AlertManager::addAlert(UnifiedAlert alert) {
 
 // ─── shouldSuppress ───────────────────────────────────────────────────────────
 // PHẢI gọi khi đang giữ mutex_
+
 bool AlertManager::shouldSuppress(const std::string& key) {
     auto it = suppress_map_.find(key);
     if (it == suppress_map_.end()) return false;
@@ -137,7 +180,43 @@ bool AlertManager::shouldSuppress(const std::string& key) {
     return (now_sec - it->second) < static_cast<double>(SUPPRESS_SEC);
 }
 
+// ─── writeAlertToFile ─────────────────────────────────────────────────────────
+// Gọi NGOÀI mutex_ — dùng alert_log_mutex_ riêng để không block in-memory ring
+
+void AlertManager::writeAlertToFile(const UnifiedAlert& alert) {
+    std::lock_guard<std::mutex> lock(alert_log_mutex_);
+    if (!alert_log_file_.is_open()) return;
+
+    // Format timestamp → "YYYY-MM-DD HH:MM:SS.mmm"
+    const auto ts_sec  = static_cast<std::time_t>(alert.timestamp);
+    const auto ts_ms   = static_cast<int>(
+                             (alert.timestamp - static_cast<double>(ts_sec)) * 1000.0);
+    std::tm tm_buf{};
+    localtime_r(&ts_sec, &tm_buf);
+
+    char time_buf[32];
+    std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", &tm_buf);
+
+    const char* layer = (alert.source == UnifiedAlert::Source::LAYER1) ? "L1" : "L2";
+
+    alert_log_file_
+        << time_buf
+        << '.' << std::setfill('0') << std::setw(3) << ts_ms
+        << " [" << layer << "]"
+        << " seq="        << alert.seq
+        << " type="       << threatToString(alert.result)
+        << " action="     << actionToString(alert.action)
+        << " src="        << alert.srcIpString() << ":" << alert.src_port
+        << " dst="        << alert.dstIpString() << ":" << alert.dst_port
+        << " conf="       << std::fixed << std::setprecision(3) << alert.confidence
+        << " detail=\""   << alert.detail << "\""
+        << '\n';
+
+    alert_log_file_.flush();   // đảm bảo ghi ngay, không mất khi crash
+}
+
 // ─── getRecent ────────────────────────────────────────────────────────────────
+
 std::vector<UnifiedAlert> AlertManager::getRecent(size_t n) const {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -150,6 +229,7 @@ std::vector<UnifiedAlert> AlertManager::getRecent(size_t n) const {
 // ─── getRecentFrom ────────────────────────────────────────────────────────────
 // Trả về alerts có seq > from_seq, tối đa max_n
 // Dùng alert.seq thay vì tính offset từ total_alerts_ → không còn race
+
 std::vector<UnifiedAlert> AlertManager::getRecentFrom(uint64_t from_seq,
                                                        size_t   max_n) const {
     std::lock_guard<std::mutex> lock(mutex_);

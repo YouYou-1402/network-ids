@@ -105,10 +105,6 @@ private:
     TrafficChart*     traffic_chart_    = nullptr;
     MetricsWidget*    metrics_widget_   = nullptr;
 
-    // Tab 6 — Alerts
-    AlertPanel*       alert_panel_main_ = nullptr;
-
-    int               alert_badge_count_ = 0;
 
     // ── Toolbar widgets ───────────────────────────────────────────────────────
     QPushButton*      btn_start_cap_    = nullptr;

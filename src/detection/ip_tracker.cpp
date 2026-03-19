@@ -1,50 +1,33 @@
 // src/detection/ip_tracker.cpp
 #include "ip_tracker.hpp"
-#include "../common/logger.hpp"
 
-IpStats* IpTracker::getOrCreate(uint32_t src_ip) {
+bool IpTracker::withStats(uint32_t src_ip,
+                           const std::function<void(IpStats&)>& fn) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     auto it = table_.find(src_ip);
-    if (it != table_.end()) {
-        last_seen_[src_ip] = Clock::now();
-
-        // Reset window nếu hết hạn
-        IpStats& stats = it->second;
-        if (stats.windowElapsed() > WINDOW_SEC)
-            stats.resetWindow();
-
-        return &stats;
+    if (it == table_.end()) {
+        if (table_.size() >= MAX_TRACKED_IP)
+            return false;   // bảng đầy, bỏ qua
+        auto [ins, ok] = table_.emplace(src_ip, IpStats{});
+        ins->second.src_ip       = src_ip;
+        ins->second.window_start = Clock::now();
+        it = ins;
     }
 
-    if (table_.size() >= MAX_TRACKED_IP) {
-        LOG_WARN("IpTracker: table full (" 
-                 + std::to_string(MAX_TRACKED_IP) + " IPs)");
-        return nullptr;
-    }
-
-    IpStats& stats   = table_[src_ip];
-    stats.src_ip     = src_ip;
-    stats.window_start = Clock::now();
-    last_seen_[src_ip] = stats.window_start;
-    return &stats;
-}
-
-IpStats* IpTracker::get(uint32_t src_ip) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto it = table_.find(src_ip);
-    return (it != table_.end()) ? &it->second : nullptr;
+    last_seen_[src_ip] = Clock::now();
+    fn(it->second);   // chạy callback TRONG lock
+    return true;
 }
 
 size_t IpTracker::cleanup(double idle_sec) {
     std::lock_guard<std::mutex> lock(mutex_);
-    auto   now     = Clock::now();
+    const auto now = Clock::now();
     size_t removed = 0;
-
     for (auto it = table_.begin(); it != table_.end(); ) {
         auto ls = last_seen_.find(it->first);
         if (ls != last_seen_.end()) {
-            double idle = std::chrono::duration<double>(
+            const double idle = std::chrono::duration<double>(
                 now - ls->second).count();
             if (idle > idle_sec) {
                 last_seen_.erase(ls);
@@ -55,10 +38,6 @@ size_t IpTracker::cleanup(double idle_sec) {
         }
         ++it;
     }
-
-    if (removed > 0)
-        LOG_INFO("IpTracker cleanup: removed " + std::to_string(removed)
-                 + " IPs. Active: " + std::to_string(table_.size()));
     return removed;
 }
 

@@ -49,7 +49,7 @@ MainWindow::MainWindow(AlertManager&     alert_manager,
     resize(1440, 900);
 
     applyTheme();
-    setupUI();       // tạo tất cả widgets trước
+    setupUI();
     setupMenuBar();
     setupStatusBar();
 
@@ -62,21 +62,15 @@ MainWindow::MainWindow(AlertManager&     alert_manager,
     live_tab_->setUiBridge(ui_bridge_.get());
 
     // ── IpsControlWidget ← UiBridge signals ───────────────────────────────────
-    //    IpsControlWidget dùng signal/slot, không có setUiBridge()
     connect(ui_bridge_.get(), &UiBridge::detectionStatusChanged,
             ips_widget_,      &IpsControlWidget::onDetectionStatusChanged);
     connect(ui_bridge_.get(), &UiBridge::mlStatusChanged,
             ips_widget_,      &IpsControlWidget::onMlStatusChanged);
 
-    //    IpsControlWidget → UiBridge slots
     connect(ips_widget_, &IpsControlWidget::toggleDetection,
             ui_bridge_.get(), &UiBridge::setDetectionEnabled);
     connect(ips_widget_, &IpsControlWidget::toggleMl,
             ui_bridge_.get(), &UiBridge::setMlEnabled);
-
-    // ── AlertPanel (tab Alerts) ← UiBridge::newAlerts ─────────────────────────
-    connect(ui_bridge_.get(), &UiBridge::newAlerts,
-            alert_panel_main_, &AlertPanel::onNewAlerts);
 
     // ── AlertPanel (tab IPS — live feed) ← UiBridge::newAlerts ───────────────
     connect(ui_bridge_.get(), &UiBridge::newAlerts,
@@ -86,18 +80,18 @@ MainWindow::MainWindow(AlertManager&     alert_manager,
     connect(ui_bridge_.get(), &UiBridge::trafficUpdated,
             traffic_chart_,    &TrafficChart::onTrafficUpdated);
 
-    // ── MetricsWidget ← UiBridge::metricsUpdated ─────────────────────────────
-    connect(ui_bridge_.get(), &UiBridge::metricsUpdated,
-            metrics_widget_,   &MetricsWidget::onMetricsUpdated);
+    // // ── MetricsWidget ← UiBridge::metricsUpdated ─────────────────────────────
+    // connect(ui_bridge_.get(), &UiBridge::metricsUpdated,
+    //         metrics_widget_,   &MetricsWidget::onMetricsUpdated);
 
-    // ── FirewallWidget (Tab 4) ────────────────────────────────────────────────
-    if (firewall_manager_ && firewall_tab_) {
-        firewall_tab_->setFirewallManager(firewall_manager_);
-        connect(firewall_tab_, &FirewallWidget::statusMessage,
-                this, [this](const QString& msg) {
-                    statusBar()->showMessage(msg, 4000);
-                });
-    }
+    // ── FirewallWidget ────────────────────────────────────────────────────────
+    // if (firewall_manager_ && firewall_tab_) {
+    //     firewall_tab_->setFirewallManager(firewall_manager_);
+    //     connect(firewall_tab_, &FirewallWidget::statusMessage,
+    //             this, [this](const QString& msg) {
+    //                 statusBar()->showMessage(msg, 4000);
+    //             });
+    // }
 
     // ── Firewall stats badge ───────────────────────────────────────────────────
     connect(ui_bridge_.get(), &UiBridge::firewallStatsUpdated,
@@ -113,28 +107,6 @@ MainWindow::MainWindow(AlertManager&     alert_manager,
             this, &MainWindow::onDetectionToggled);
     connect(ui_bridge_.get(), &UiBridge::mlStatusChanged,
             this, &MainWindow::onMlToggled);
-
-    // ── Alert badge trên tab 6 (dùng newAlerts, không phải newAlertReceived) ──
-    connect(ui_bridge_.get(), &UiBridge::newAlerts,
-            this, [this](const std::vector<UnifiedAlert>& alerts) {
-                if (alerts.empty()) return;
-                const int alerts_idx = 5;
-                if (tab_widget_->currentIndex() != alerts_idx) {
-                    alert_badge_count_ += static_cast<int>(alerts.size());
-                    tab_widget_->setTabText(
-                        alerts_idx,
-                        QString("🚨  Alerts (%1)").arg(alert_badge_count_));
-                }
-            });
-
-    // Reset badge khi chuyển sang tab Alerts
-    connect(tab_widget_, &QTabWidget::currentChanged,
-            this, [this](int idx) {
-                if (idx == 5 && alert_badge_count_ > 0) {
-                    alert_badge_count_ = 0;
-                    tab_widget_->setTabText(5, "🚨  Alerts");
-                }
-            });
 
     // ── Sync trạng thái ban đầu cho IpsControlWidget ──────────────────────────
     ips_widget_->syncState(
@@ -221,7 +193,6 @@ void MainWindow::applyTheme() {
         "QSplitter::handle:horizontal { width: 2px; }"
         "QSplitter::handle:vertical   { height: 2px; }"
 
-        // ── Scrollbar — dùng min-height / min-width, KHÔNG dùng min-length ──
         "QScrollBar:vertical   { background: #f0f0f8; width: 10px; }"
         "QScrollBar:horizontal { background: #f0f0f8; height: 10px; }"
         "QScrollBar::handle:vertical   { background: #b0b8d8;"
@@ -234,7 +205,6 @@ void MainWindow::applyTheme() {
         "QToolTip { background: #1e2a4a; color: #ddeeff;"
         "           border: 1px solid #3355cc; padding: 4px; font-size: 11px; }");
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // setupUI
@@ -269,12 +239,12 @@ void MainWindow::setupUI() {
         "}"
         "QTabBar::tab:hover:!selected { background: #dde0f8; color: #222244; }");
 
-    tab_widget_->addTab(buildTab_LiveCapture(),  "📡  Live Capture");
-    tab_widget_->addTab(buildTab_FileAnalysis(), "📂  File Analysis");
-    tab_widget_->addTab(buildTab_IPS(),          "🛡️  IPS / Detection");
-    tab_widget_->addTab(buildTab_Firewall(),     "🔥  Firewall");
-    tab_widget_->addTab(buildTab_Statistics(),   "📊  Statistics");
-    tab_widget_->addTab(buildTab_Alerts(),       "🚨  Alerts");
+    // ── 5 tabs (bỏ Alerts) ────────────────────────────────────────────────────
+    tab_widget_->addTab(buildTab_LiveCapture(),  "📡  Live Capture");   // 0
+    tab_widget_->addTab(buildTab_FileAnalysis(), "📂  File Analysis");  // 1
+    tab_widget_->addTab(buildTab_IPS(),          "🛡️  IPS / Detection");// 2
+    tab_widget_->addTab(buildTab_Firewall(),     "🔥  Firewall");       // 3
+    tab_widget_->addTab(buildTab_Statistics(),   "📊  Statistics");     // 4
 
     root->addWidget(tab_widget_, 1);
 }
@@ -311,7 +281,6 @@ QWidget* MainWindow::buildCaptureToolbar() {
     sep1->setFixedWidth(1);
     layout->addWidget(sep1);
 
-    // ── Capture buttons ───────────────────────────────────────────────────────
     btn_start_cap_ = new QPushButton("▶  Start Capture", bar);
     btn_stop_cap_  = new QPushButton("■  Stop",          bar);
     btn_save_cap_  = new QPushButton("💾  Save",         bar);
@@ -402,7 +371,6 @@ QWidget* MainWindow::buildTab_FileAnalysis() {
         "                        border-bottom: 2px solid #3355cc; }"
         "QTabBar::tab:hover    { background: #dde0f8; }");
 
-    // Placeholder
     auto* placeholder = new QWidget(file_tab_widget_);
     auto* ph_layout   = new QVBoxLayout(placeholder);
     ph_layout->setAlignment(Qt::AlignCenter);
@@ -444,7 +412,7 @@ QWidget* MainWindow::buildTab_FileAnalysis() {
 
     connect(file_tab_widget_, &QTabWidget::tabCloseRequested,
             this, [this](int idx) {
-                if (idx == 0) return;   // Welcome tab không đóng
+                if (idx == 0) return;
                 delete file_tab_widget_->widget(idx);
             });
 
@@ -455,7 +423,7 @@ QWidget* MainWindow::buildTab_FileAnalysis() {
 // ─── addPcapTab ───────────────────────────────────────────────────────────────
 
 void MainWindow::addPcapTab(const QString& filepath) {
-    tab_widget_->setCurrentIndex(1);   // chuyển sang File Analysis
+    tab_widget_->setCurrentIndex(1);
 
     auto* tab = new PcapTab(PcapTab::Mode::OFFLINE, file_tab_widget_);
     const int idx = file_tab_widget_->addTab(tab, "📄  New File");
@@ -478,6 +446,16 @@ void MainWindow::addPcapTab(const QString& filepath) {
 }
 
 // ─── buildTab_IPS ─────────────────────────────────────────────────────────────
+//
+//  Layout:
+//    ┌─────────────────────────────────────────────────────────┐
+//    │  [IpsControlWidget 320px]  │  [Live Alert Feed]        │
+//    │                            │                            │
+//    │  - Toggle Detection        │  AlertPanel (full height) │
+//    │  - Toggle ML               │                            │
+//    │  - Engine status           │                            │
+//    └─────────────────────────────────────────────────────────┘
+// ─────────────────────────────────────────────────────────────────────────────
 
 QWidget* MainWindow::buildTab_IPS() {
     auto* container = new QWidget(tab_widget_);
@@ -485,19 +463,19 @@ QWidget* MainWindow::buildTab_IPS() {
     layout->setSpacing(8);
     layout->setContentsMargins(10, 10, 10, 10);
 
-    // Left: IPS controls
+    // ── Left: IPS controls ────────────────────────────────────────────────────
     ips_widget_ = new IpsControlWidget(container);
     ips_widget_->setFixedWidth(320);
     layout->addWidget(ips_widget_);
 
-    // Separator
+    // ── Separator ─────────────────────────────────────────────────────────────
     auto* sep = new QFrame(container);
     sep->setFrameShape(QFrame::VLine);
     sep->setStyleSheet("color: #c5cae9; background: #c5cae9;");
     sep->setFixedWidth(1);
     layout->addWidget(sep);
 
-    // Right: live alert feed
+    // ── Right: Live Alert Feed ────────────────────────────────────────────────
     auto* right     = new QWidget(container);
     auto* right_lay = new QVBoxLayout(right);
     right_lay->setSpacing(6);
@@ -509,7 +487,6 @@ QWidget* MainWindow::buildTab_IPS() {
         "background: transparent; padding: 2px 0;");
     right_lay->addWidget(feed_label);
 
-    // AlertPanel — connect tới UiBridge::newAlerts sau khi ui_bridge_ được tạo
     alert_panel_ips_ = new AlertPanel(right);
     right_lay->addWidget(alert_panel_ips_, 1);
 
@@ -520,13 +497,22 @@ QWidget* MainWindow::buildTab_IPS() {
 // ─── buildTab_Firewall ────────────────────────────────────────────────────────
 
 QWidget* MainWindow::buildTab_Firewall() {
-    // FirewallWidget tự quản lý layout — setFirewallManager() gọi sau
-    // khi constructor xong (cần firewall_manager_ inject)
     firewall_tab_ = new FirewallWidget(tab_widget_);
     return firewall_tab_;
 }
 
 // ─── buildTab_Statistics ──────────────────────────────────────────────────────
+//
+//  Chỉ giữ TrafficChart + MetricsWidget (bỏ stats panel cũ)
+//
+//  Layout:
+//    ┌──────────────────────────────────────────┐
+//    │  [MetricsWidget — cards hàng ngang]      │  ← fixed height 120px
+//    ├──────────────────────────────────────────┤
+//    │  📈 Traffic Monitor                      │
+//    │  [TrafficChart — chiếm phần còn lại]     │
+//    └──────────────────────────────────────────┘
+// ─────────────────────────────────────────────────────────────────────────────
 
 QWidget* MainWindow::buildTab_Statistics() {
     auto* container = new QWidget(tab_widget_);
@@ -534,41 +520,16 @@ QWidget* MainWindow::buildTab_Statistics() {
     layout->setSpacing(8);
     layout->setContentsMargins(10, 10, 10, 10);
 
-    // Metrics cards (fixed height)
-    metrics_widget_ = new MetricsWidget(container);
-    metrics_widget_->setFixedHeight(120);
-    layout->addWidget(metrics_widget_);
-
-    // Chart label
+    // ── Chart label ───────────────────────────────────────────────────────────
     auto* chart_label = new QLabel("📈  Traffic Monitor", container);
     chart_label->setStyleSheet(
         "font-size: 13px; font-weight: bold; color: #3355cc;"
         "background: transparent; padding: 2px 0;");
     layout->addWidget(chart_label);
 
-    // Traffic chart
+    // ── Traffic chart (chiếm toàn bộ phần còn lại) ───────────────────────────
     traffic_chart_ = new TrafficChart(container);
     layout->addWidget(traffic_chart_, 1);
-
-    return container;
-}
-
-// ─── buildTab_Alerts ──────────────────────────────────────────────────────────
-
-QWidget* MainWindow::buildTab_Alerts() {
-    auto* container = new QWidget(tab_widget_);
-    auto* layout    = new QVBoxLayout(container);
-    layout->setSpacing(6);
-    layout->setContentsMargins(10, 10, 10, 10);
-
-    auto* title = new QLabel("🚨  Alert Log", container);
-    title->setStyleSheet(
-        "font-size: 14px; font-weight: bold; color: #cc2222;"
-        "background: transparent; padding: 2px 0;");
-    layout->addWidget(title);
-
-    alert_panel_main_ = new AlertPanel(container);
-    layout->addWidget(alert_panel_main_, 1);
 
     return container;
 }
@@ -670,6 +631,8 @@ void MainWindow::setupMenuBar() {
 
     // ── View ──────────────────────────────────────────────────────────────────
     auto* view_menu = menuBar()->addMenu("&View");
+
+    // ── 5 tabs (bỏ Alerts) ────────────────────────────────────────────────────
     struct TabEntry { QString name; int idx; QString sc; };
     const TabEntry tabs[] = {
         { "📡  Live Capture",    0, "Ctrl+1" },
@@ -677,7 +640,6 @@ void MainWindow::setupMenuBar() {
         { "🛡️  IPS / Detection", 2, "Ctrl+3" },
         { "🔥  Firewall",        3, "Ctrl+4" },
         { "📊  Statistics",      4, "Ctrl+5" },
-        { "🚨  Alerts",          5, "Ctrl+6" },
     };
     for (const auto& t : tabs) {
         auto* act = new QAction(t.name, this);
@@ -827,14 +789,11 @@ void MainWindow::setupStatusBar() {
         l->setStyleSheet(style);
         return l;
     };
-    const QString sep_s =
-        "color: #b0b8d8; background: transparent;";
-    const QString base_s =
-        "background: transparent;";
+    const QString sep_s  = "color: #b0b8d8; background: transparent;";
+    const QString base_s = "background: transparent;";
 
     status_state_ = mkLabel("  ● READY  ",
-        "color: #228822; font-weight: bold; font-size: 11px;"
-        + base_s);
+        "color: #228822; font-weight: bold; font-size: 11px;" + base_s);
 
     status_iface_ = mkLabel("",
         "color: #3355cc; font-size: 11px; font-weight: bold;" + base_s);
@@ -891,13 +850,9 @@ void MainWindow::updateIpsModeBadge() {
     const bool det = ENGINE_CFG.detection_enabled.load(std::memory_order_relaxed);
     const bool ml  = ENGINE_CFG.ml_enabled       .load(std::memory_order_relaxed);
 
-    struct Badge {
-        QString text;
-        QString light_style;   // statusbar (light bg)
-        QString dark_style;    // toolbar   (dark bg)
-    };
-
+    struct Badge { QString text, light_style, dark_style; };
     Badge b;
+
     if (det && ml) {
         b = { "🛡️ IPS",
               "color:#116611;background:#e8f8e8;border:1px solid #88cc88;",
@@ -1100,10 +1055,9 @@ void MainWindow::onAbout() {
         "<b>Tabs:</b><br>"
         "&nbsp;&nbsp;📡 <b>Live Capture</b> — bắt gói tin realtime<br>"
         "&nbsp;&nbsp;📂 <b>File Analysis</b> — phân tích PCAP offline<br>"
-        "&nbsp;&nbsp;🛡️ <b>IPS/Detection</b> — quản lý engine phát hiện<br>"
+        "&nbsp;&nbsp;🛡️ <b>IPS/Detection</b> — quản lý engine + live alerts<br>"
         "&nbsp;&nbsp;🔥 <b>Firewall</b> — blacklist / whitelist<br>"
-        "&nbsp;&nbsp;📊 <b>Statistics</b> — biểu đồ traffic & metrics<br>"
-        "&nbsp;&nbsp;🚨 <b>Alerts</b> — danh sách cảnh báo<br>"
+        "&nbsp;&nbsp;📊 <b>Statistics</b> — metrics cards & traffic chart<br>"
         "<br>"
         "<b>IPS Modes:</b><br>"
         "&nbsp;&nbsp;🛡️ <b>IPS</b> — Detection + ML enabled<br>"

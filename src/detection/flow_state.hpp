@@ -18,7 +18,7 @@ struct FlowState {
     uint16_t    src_port = 0;
     uint16_t    dst_port = 0;
     uint8_t     protocol = 0;
-
+    uint32_t win_zero_count = 0;
     // --- Flow Direction ---
     // true  = packet đầu tiên là SYN (không ACK) → attacker khởi tạo
     // false = packet đầu tiên là response (RST/SYN-ACK/ACK) → server response

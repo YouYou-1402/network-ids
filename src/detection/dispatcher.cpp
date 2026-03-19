@@ -8,7 +8,7 @@ Dispatcher::Dispatcher(int num_workers, PacketRingBuffer& ring_buf)
     : num_workers_   (num_workers)
     , dummy_ring_buf_(1)        // không dùng, size=1 tránh assert
     , ring_buf_      (ring_buf)
-    , flow_table_    (100000)
+    , flow_table_    (1000000)
 {}
 
 // ── CLI mode ──────────────────────────────────────────────────────────────────
@@ -16,7 +16,7 @@ Dispatcher::Dispatcher(int num_workers)
     : num_workers_   (num_workers)
     , dummy_ring_buf_(1)
     , ring_buf_      (dummy_ring_buf_)  // trỏ vào dummy
-    , flow_table_    (100000)
+    , flow_table_    (1000000)
 {}
 
 Dispatcher::~Dispatcher() { stop(); }

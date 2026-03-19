@@ -4,14 +4,29 @@
 #include <QBrush>
 #include <algorithm>
 
+// ─── Palette (light theme) ────────────────────────────────────────────────────
+//  BG_CHART     #f5f6fa    nền chart (match widget)
+//  BG_PLOT      #ffffff    nền plot area
+//  BORDER       #d0d4e8    viền chartview
+//  TITLE_FG     #1a1a3e    tiêu đề chart
+//  LEGEND_FG    #444466    legend labels
+//  AXIS_FG      #666688    axis labels / title
+//  GRID_MAJOR   #e0e4f0    gridline chính
+//  GRID_MINOR   #eef0f8    gridline phụ
+//  AXIS_LINE    #c0c4d8    đường trục
+//  SER_TOTAL    #227744    Total pkt/s  — xanh lá đậm
+//  SER_DROP     #cc2222    Dropped      — đỏ đậm
+//  SER_ALERT    #cc8800    Alerted      — vàng/amber đậm
+// ─────────────────────────────────────────────────────────────────────────────
+
 TrafficChart::TrafficChart(QWidget* parent)
     : QWidget(parent)
 {
+    setStyleSheet("QWidget { background: #f5f6fa; }");
     setupUI();
 }
 
 void TrafficChart::setupUI() {
-    // ── Widget tự giãn ────────────────────────────────────────────────────────
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     auto* layout = new QVBoxLayout(this);
@@ -27,9 +42,9 @@ void TrafficChart::setupUI() {
     series_drop_ ->setName("Dropped");
     series_alert_->setName("Alerted");
 
-    QPen pen_total(QColor("#00ff88")); pen_total.setWidth(2);
-    QPen pen_drop (QColor("#ff4444")); pen_drop .setWidth(2);
-    QPen pen_alert(QColor("#ffcc00")); pen_alert.setWidth(2);
+    QPen pen_total(QColor("#227744")); pen_total.setWidth(2);
+    QPen pen_drop (QColor("#cc2222")); pen_drop .setWidth(2);
+    QPen pen_alert(QColor("#cc8800")); pen_alert.setWidth(2);
     series_total_->setPen(pen_total);
     series_drop_ ->setPen(pen_drop);
     series_alert_->setPen(pen_alert);
@@ -39,16 +54,19 @@ void TrafficChart::setupUI() {
     chart_->addSeries(series_total_);
     chart_->addSeries(series_drop_);
     chart_->addSeries(series_alert_);
+
     chart_->setTitle("Traffic Monitor (60s window)");
-    chart_->setTitleBrush(QBrush(QColor("#cccccc")));
-    chart_->setBackgroundBrush(QBrush(QColor("#0f0f1a")));
-    chart_->setPlotAreaBackgroundBrush(QBrush(QColor("#0a0a14")));
+    chart_->setTitleBrush(QBrush(QColor("#1a1a3e")));
+
+    chart_->setBackgroundBrush(QBrush(QColor("#f5f6fa")));
+    chart_->setPlotAreaBackgroundBrush(QBrush(QColor("#ffffff")));
     chart_->setPlotAreaBackgroundVisible(true);
-    chart_->legend()->setLabelColor(QColor("#aaaaaa"));
+
+    chart_->legend()->setLabelColor(QColor("#444466"));
     chart_->legend()->setAlignment(Qt::AlignBottom);
+
     // ✅ Tắt animation — tránh giật/lag khi update liên tục
     chart_->setAnimationOptions(QChart::NoAnimation);
-    // ✅ Thêm margin phải để trục X không bị cắt khi setReverse
     chart_->setMargins(QMargins(8, 8, 16, 8));
 
     // ── Axes ──────────────────────────────────────────────────────────────────
@@ -57,12 +75,12 @@ void TrafficChart::setupUI() {
     axis_x_->setLabelFormat("%d s");
     axis_x_->setTickCount(7);
     axis_x_->setMinorTickCount(1);
-    axis_x_->setLabelsColor(QColor("#888888"));
-    axis_x_->setGridLineColor(QColor("#1e1e2e"));
-    axis_x_->setMinorGridLineColor(QColor("#161622"));
-    axis_x_->setLinePen(QPen(QColor("#444444")));
+    axis_x_->setLabelsColor(QColor("#666688"));
+    axis_x_->setGridLineColor(QColor("#e0e4f0"));
+    axis_x_->setMinorGridLineColor(QColor("#eef0f8"));
+    axis_x_->setLinePen(QPen(QColor("#c0c4d8")));
     axis_x_->setTitleText("seconds ago");
-    axis_x_->setTitleBrush(QBrush(QColor("#888888")));
+    axis_x_->setTitleBrush(QBrush(QColor("#666688")));
     // ✅ Reverse: 60 bên trái (quá khứ) → 0 bên phải (hiện tại)
     axis_x_->setReverse(true);
 
@@ -71,12 +89,12 @@ void TrafficChart::setupUI() {
     axis_y_->setLabelFormat("%d");
     axis_y_->setTickCount(6);
     axis_y_->setMinorTickCount(1);
-    axis_y_->setLabelsColor(QColor("#888888"));
-    axis_y_->setGridLineColor(QColor("#1e1e2e"));
-    axis_y_->setMinorGridLineColor(QColor("#161622"));
-    axis_y_->setLinePen(QPen(QColor("#444444")));
+    axis_y_->setLabelsColor(QColor("#666688"));
+    axis_y_->setGridLineColor(QColor("#e0e4f0"));
+    axis_y_->setMinorGridLineColor(QColor("#eef0f8"));
+    axis_y_->setLinePen(QPen(QColor("#c0c4d8")));
     axis_y_->setTitleText("Packets/sec");
-    axis_y_->setTitleBrush(QBrush(QColor("#888888")));
+    axis_y_->setTitleBrush(QBrush(QColor("#666688")));
 
     chart_->addAxis(axis_x_, Qt::AlignBottom);
     chart_->addAxis(axis_y_, Qt::AlignLeft);
@@ -95,8 +113,10 @@ void TrafficChart::setupUI() {
     chart_view_->setMinimumSize(400, 300);
     chart_view_->setObjectName("trafficChartView");
     chart_view_->setStyleSheet(
-        "#trafficChartView { border: 1px solid #2a2a3e; "
-        "border-radius: 6px; background: transparent; }");
+        "#trafficChartView {"
+        "  border: 1px solid #d0d4e8;"
+        "  border-radius: 6px;"
+        "  background: transparent; }");
 
     layout->addWidget(chart_view_, 1);
 }
@@ -107,7 +127,7 @@ void TrafficChart::onTrafficUpdated(TrafficPoint point) {
 
     history_.push_back(point);
 
-    // ✅ Xóa điểm ngoài cửa sổ theo thời gian thực (không dùng MAX_POINTS cứng)
+    // ✅ Xóa điểm ngoài cửa sổ theo thời gian thực
     while (history_.size() > 1 &&
            now - history_.front().timestamp > static_cast<double>(WINDOW_SEC) + 2.0)
         history_.pop_front();
@@ -125,7 +145,7 @@ void TrafficChart::onTrafficUpdated(TrafficPoint point) {
     uint64_t max_y = 100;
 
     for (const auto& p : history_) {
-        const double age = now - p.timestamp;   // 0 = now, 60 = 60s trước
+        const double age = now - p.timestamp;
         if (age < 0.0 || age > static_cast<double>(WINDOW_SEC)) continue;
 
         pts_total.append({ age, static_cast<double>(p.total_pps) });
@@ -134,11 +154,12 @@ void TrafficChart::onTrafficUpdated(TrafficPoint point) {
 
         max_y = std::max(max_y, p.total_pps);
     }
+
     series_total_->replace(pts_total);
     series_drop_ ->replace(pts_drop);
     series_alert_->replace(pts_alert);
 
-    //    Thêm 10% headroom để đường không chạm đỉnh
+    // Thêm 10% headroom để đường không chạm đỉnh
     const uint64_t headroom = max_y / 10;
     const uint64_t y_top    = max_y + headroom;
     const uint64_t y_max    = (y_top / 100 + 1) * 100;

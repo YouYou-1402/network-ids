@@ -1,4 +1,3 @@
-// src/firewall/firewall_manager.hpp
 #pragma once
 #include "firewall_rule.hpp"
 #include "firewall_backend.hpp"
@@ -14,17 +13,22 @@
 
 class FirewallManager {
 public:
+    // ── Constructors ──────────────────────────────────────────────────────────
+    // Mặc định: thử nftables/iptables, fallback in-memory
     explicit FirewallManager(bool use_nftables = false);
+
+    // In-memory only — không cần root, dùng cho UI / testing
+    struct InMemoryTag {};
+    explicit FirewallManager(InMemoryTag);
+
     ~FirewallManager();
 
     // ── Blacklist ─────────────────────────────────────────────────────────────
-    // Auto-block từ detection engine (TTL mặc định AUTO_BLOCK_TTL_SEC)
     uint64_t autoBlock  (const std::string& src_ip,
                          uint8_t            protocol = 0,
                          uint16_t           src_port = 0,
                          const std::string& reason   = "");
 
-    // Manual block từ UI/API
     uint64_t manualBlock(const std::string& src_ip,
                          uint8_t            protocol  = 0,
                          uint16_t           src_port  = 0,
@@ -59,6 +63,7 @@ public:
 
     // ── Callback ──────────────────────────────────────────────────────────────
     void setRuleChangeCallback(RuleChangeCallback cb) {
+        std::lock_guard<std::mutex> lock(cb_mutex_);
         on_rule_change_ = std::move(cb);
     }
 
@@ -66,24 +71,32 @@ public:
     size_t blacklistSize() const;
     size_t whitelistSize() const;
 
+    // ── Backend info ──────────────────────────────────────────────────────────
+    std::string backendName() const {
+        return backend_ ? backend_->name() : "in-memory";
+    }
+
 private:
-    uint64_t nextId();
-    void     expireLoop();
-    bool     applyToKernel  (const FirewallRule& rule);
+    void     init       (bool use_nftables);
+    uint64_t nextId     ();
+    void     expireLoop ();
+    bool     applyToKernel   (const FirewallRule& rule);
     bool     removeFromKernel(const FirewallRule& rule);
-    void     notifyChange   (const FirewallRule& rule, bool added);
+    void     notifyChange    (const FirewallRule& rule, bool added);
 
-    std::unique_ptr<IFirewallBackend>              backend_;
+    std::unique_ptr<IFirewallBackend>          backend_;
 
-    mutable std::mutex                             mutex_;
-    std::unordered_map<uint64_t, FirewallRule>     rules_;         // id  → rule
-    std::unordered_map<std::string, uint64_t>      ip_to_rule_;    // ip  → id
-    std::unordered_set<std::string>                whitelist_ips_; // fast lookup
+    mutable std::mutex                         mutex_;
+    std::unordered_map<uint64_t, FirewallRule> rules_;
+    std::unordered_map<std::string, uint64_t>  ip_to_rule_;
+    std::unordered_set<std::string>            whitelist_ips_;
 
-    std::atomic<uint64_t>  next_id_ {1};
-    std::atomic<bool>      running_ {true};
-    std::thread            expire_thread_;
-    RuleChangeCallback     on_rule_change_;
+    mutable std::mutex  cb_mutex_;
+    RuleChangeCallback  on_rule_change_;
 
-    static constexpr uint32_t AUTO_BLOCK_TTL_SEC = 600; // 10 phút
+    std::atomic<uint64_t> next_id_ {1};
+    std::atomic<bool>     running_ {true};
+    std::thread           expire_thread_;
+
+    static constexpr uint32_t AUTO_BLOCK_TTL_SEC = 600;
 };

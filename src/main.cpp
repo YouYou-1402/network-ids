@@ -1,3 +1,4 @@
+// src/main.cpp
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -8,6 +9,7 @@
 #include <arpa/inet.h>
 #include <cstring>
 #include <unistd.h>
+#include <filesystem>
 
 #include "common/logger.hpp"
 #include "common/metrics.hpp"
@@ -147,6 +149,7 @@ struct Config {
     bool        use_mock      = true;
     bool        enable_l2     = true;
     int         num_workers   = 4;
+    std::string log_dir       = "./logs";
     std::string if_model_path = "models/isolation_forest.onnx";
     std::string ae_model_path = "models/autoencoder.onnx";
 };
@@ -164,6 +167,10 @@ bool parseArgs(int argc, char* argv[], Config& cfg) {
             cfg.num_workers = std::stoi(argv[++i]);
             continue;
         }
+        if (arg == "--log-dir" && i + 1 < argc) {
+            cfg.log_dir = argv[++i];
+            continue;
+        }
     }
     return true;
 }
@@ -173,16 +180,18 @@ void printUsage(const char* prog) {
         << "\n\033[1mNetwork IDS/IPS System — Lab Prototype\033[0m\n"
         << "─────────────────────────────────────────\n"
         << "Usage:\n"
-        << "  Live capture  : " << prog << " -i <interface> [--mock]\n"
-        << "  Offline pcap  : " << prog << " -f <pcap_file>  [--mock]\n"
+        << "  Live capture  : " << prog << " -i <interface> [options]\n"
+        << "  Offline pcap  : " << prog << " -f <pcap_file>  [options]\n"
         << "\nOptions:\n"
-        << "  --mock        Use mock ML models (no ONNX required)\n"
-        << "  --no-l2       Disable Layer 2 AI/ML engine\n"
-        << "  --workers N   Number of worker threads (default: 4)\n"
+        << "  --mock          Use mock ML models (no ONNX required)\n"
+        << "  --no-l2         Disable Layer 2 AI/ML engine\n"
+        << "  --workers N     Number of worker threads (default: 4)\n"
+        << "  --log-dir PATH  Directory for log files (default: ./logs)\n"
         << "\nExamples:\n"
         << "  " << prog << " -i eth0 --mock\n"
         << "  " << prog << " -f data/raw/cicids2017.pcap --mock\n"
         << "  " << prog << " -i lo --workers 2 --no-l2\n"
+        << "  " << prog << " -i eth0 --log-dir /var/log/ids\n"
         << "\nPress Ctrl+C to stop.\n\n";
 }
 
@@ -198,6 +207,7 @@ void printBanner(const Config& cfg) {
               << "  Workers : " << cfg.num_workers << "\n"
               << "  Layer 2 : " << (cfg.enable_l2 ? "ENABLED" : "DISABLED")
               << (cfg.use_mock ? " (MOCK models)" : " (ONNX models)") << "\n"
+              << "  Log dir : " << cfg.log_dir << "\n"
               << "  Press Ctrl+C to stop.\n"
               << "──────────────────────────────────────────────────\n\n";
 }
@@ -221,15 +231,27 @@ int main(int argc, char* argv[]) {
     sigaction(SIGTERM, &sa, nullptr);
     sigaction(SIGHUP,  &sa, nullptr);
 
+    // ── Setup logging ─────────────────────────────────────────────────────────
+    //
+    //  logs/
+    //  ├── system.log  ← LOG_INFO/WARN/ERROR toàn bộ engine (Logger)
+    //  └── alert.log   ← detection event (AlertManager)
+    // ─────────────────────────────────────────────────────────────────────────
+    std::filesystem::create_directories(cfg.log_dir);
+
     Logger::instance().setLevel(Logger::Level::INFO);
-    Logger::instance().setLogFile("ids_system.log");
+    Logger::instance().setLogFile(cfg.log_dir + "/system.log");
 
     printBanner(cfg);
-    LOG_INFO("System starting...");
+    LOG_INFO("=== Network IDS started ==="
+             " mode=" + cfg.mode +
+             " target=" + cfg.target +
+             " workers=" + std::to_string(cfg.num_workers));
 
     // ── Shared components ─────────────────────────────────────────────────────
     MLJobQueue   ml_queue;
     AlertManager alert_manager(1000);
+    alert_manager.setAlertLogFile(cfg.log_dir + "/alert.log");
 
     // ── Layer 1 ───────────────────────────────────────────────────────────────
     Dispatcher dispatcher(cfg.num_workers);
@@ -271,7 +293,7 @@ int main(int argc, char* argv[]) {
         : capture.openOffline(cfg.target, "");
 
     if (!opened) {
-        LOG_ERROR("Failed to open capture source. Exiting.");
+        LOG_ERROR("Failed to open capture source: " + cfg.target);
         dispatcher.stop();
         if (cfg.enable_l2) ml_engine.stop();
         return 1;
@@ -320,12 +342,8 @@ int main(int argc, char* argv[]) {
                               uint32_t          raw_len)
     {
         if (!g_running) return;
-
-        // CLI mode: copy raw_data vào pkt để detection engine có payload
-        // (không có disk writer — raw_data là nguồn duy nhất)
         pkt.raw_data = std::make_shared<std::vector<uint8_t>>(
                            raw_bytes, raw_bytes + raw_len);
-
         dispatcher.dispatch(std::move(pkt));
     });
 
@@ -388,6 +406,7 @@ int main(int argc, char* argv[]) {
               << "╚══════════════════════════════════════════════╝\n"
               << "\033[0m\n";
 
-    LOG_INFO("=== System stopped cleanly ===");
+    LOG_INFO("=== System stopped cleanly ==="
+             " total_alerts=" + std::to_string(alert_manager.totalAlerts()));
     return 0;
 }
