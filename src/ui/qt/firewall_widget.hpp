@@ -109,5 +109,10 @@ private:
     enum BlCol { BL_IP=0, BL_PROTO, BL_CMT, BL_TTL, BL_SRC, BL_DEL, BL_NCOLS };
     enum WlCol { WL_IP=0, WL_CMT,   WL_DEL, WL_NCOLS };
 
-    static constexpr const char* RULES_PATH = "../../../config/firewall_rules.json";
+    // ── Config path ───────────────────────────────────────────────────────────
+    static constexpr const char* RULES_PATH =
+        "/media/linhlinh/learn/nckh/network-ids/config/firewall_rules.json";
+
+    static constexpr const char* RULES_DIR =
+        "/media/linhlinh/learn/nckh/network-ids/config";
 };

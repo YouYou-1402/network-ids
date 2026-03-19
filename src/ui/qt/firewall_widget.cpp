@@ -578,23 +578,27 @@ void FirewallWidget::onFlushBlacklist() {
 void FirewallWidget::onSaveRules() {
     if (!fw_) return;
 
-    QDir().mkpath("./logs");
+    // Đảm bảo thư mục config tồn tại
+    QDir().mkpath(RULES_DIR);
+
     const QString path = QFileDialog::getSaveFileName(
-        this, "Save Firewall Rules", RULES_PATH,
+        this, "Save Firewall Rules",
+        RULES_PATH,
         "JSON (*.json);;All (*)");
     if (path.isEmpty()) return;
 
     const bool ok = fw_->saveRules(path.toStdString());
     emit statusMessage(ok
         ? QString("💾  Saved → %1").arg(path)
-        : QString("❌  Save failed → %1").arg(path));
+        : QString("❌  Save failed → %1  (check permissions)").arg(path));
 }
 
 void FirewallWidget::onLoadRules() {
     if (!fw_) return;
 
     const QString path = QFileDialog::getOpenFileName(
-        this, "Load Firewall Rules", "./logs/",
+        this, "Load Firewall Rules",
+        RULES_DIR,
         "JSON (*.json);;All (*)");
     if (path.isEmpty()) return;
 

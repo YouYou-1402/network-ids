@@ -85,13 +85,16 @@ MainWindow::MainWindow(AlertManager&     alert_manager,
     //         metrics_widget_,   &MetricsWidget::onMetricsUpdated);
 
     // ── FirewallWidget ────────────────────────────────────────────────────────
-    // if (firewall_manager_ && firewall_tab_) {
-    //     firewall_tab_->setFirewallManager(firewall_manager_);
-    //     connect(firewall_tab_, &FirewallWidget::statusMessage,
-    //             this, [this](const QString& msg) {
-    //                 statusBar()->showMessage(msg, 4000);
-    //             });
-    // }
+    if (firewall_tab_) {
+        // Luôn gọi setFirewallManager — kể cả khi firewall_manager_ == nullptr
+        // để widget hiển thị trạng thái "No backend" thay vì bị disabled hoàn toàn
+        firewall_tab_->setFirewallManager(firewall_manager_);
+
+        connect(firewall_tab_, &FirewallWidget::statusMessage,
+                this, [this](const QString& msg) {
+                    statusBar()->showMessage(msg, 4000);
+                });
+    }
 
     // ── Firewall stats badge ───────────────────────────────────────────────────
     connect(ui_bridge_.get(), &UiBridge::firewallStatsUpdated,
@@ -498,6 +501,19 @@ QWidget* MainWindow::buildTab_IPS() {
 
 QWidget* MainWindow::buildTab_Firewall() {
     firewall_tab_ = new FirewallWidget(tab_widget_);
+
+    // Kết nối statusMessage → statusBar
+    connect(firewall_tab_, &FirewallWidget::statusMessage,
+            this, [this](const QString& msg) {
+                statusBar()->showMessage(msg, 4000);
+            });
+
+    // QUAN TRỌNG: gọi ngay tại đây, trước khi widget được show
+    // firewall_manager_ đã được gán trong constructor trước khi setupUI()
+    if (firewall_manager_) {
+        firewall_tab_->setFirewallManager(firewall_manager_);
+    }
+
     return firewall_tab_;
 }
 
