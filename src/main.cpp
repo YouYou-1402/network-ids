@@ -350,7 +350,7 @@ int main(int argc, char* argv[]) {
     // ── Shutdown ──────────────────────────────────────────────────────────────
     std::cout << "\n\033[1;33m[SHUTDOWN] Stopping all components...\033[0m\n";
     LOG_INFO("Shutdown sequence started");
-    LOG_INFO("Shutdown sequence started");
+    
     g_running = false;
     capture.stopCapture();
     LOG_INFO("PacketCapture stopped");
