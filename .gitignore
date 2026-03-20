@@ -18,3 +18,5 @@ Makefile
 
 # Logs
 *.log
+
+.onnxruntime-linux-x64-1.17.3
