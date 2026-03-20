@@ -55,32 +55,45 @@ message(STATUS "pcap include: ${PCAP_INCLUDE_DIR}")
 # Find ONNX Runtime (optional)
 # ─────────────────────────────────────────────────────────────────────────────
 if(USE_ONNX)
+    # Hỗ trợ 3 layout header phổ biến:
+    #   Layout A: /usr/local/include/onnxruntime_cxx_api.h          ← apt Debian mới
+    #   Layout B: /usr/local/include/onnxruntime/core/session/...   ← Microsoft tarball
+    #   Layout C: /usr/include/onnxruntime/core/session/...         ← repo Microsoft
     find_path(ONNX_INCLUDE_DIR
-        NAMES onnxruntime_cxx_api.h
+        NAMES
+            onnxruntime_cxx_api.h                           # Layout A
+            onnxruntime/core/session/onnxruntime_cxx_api.h  # Layout B/C
         PATHS
-            /usr/local/include/onnxruntime
-            /usr/include/onnxruntime
+            /usr/local/include
+            /usr/include
             $ENV{ONNXRUNTIME_ROOT}/include
+        REQUIRED
     )
+
     find_library(ONNX_LIB
-        NAMES onnxruntime
+        NAMES
+            onnxruntime
+            onnxruntime1.21                                 # Debian versioned
         PATHS
             /usr/local/lib
             /usr/lib
+            /usr/lib/x86_64-linux-gnu
             $ENV{ONNXRUNTIME_ROOT}/lib
+        REQUIRED
     )
 
     if(ONNX_INCLUDE_DIR AND ONNX_LIB)
-        message(STATUS "ONNX Runtime: ${ONNX_LIB}")
+        message(STATUS "ONNX Runtime include: ${ONNX_INCLUDE_DIR}")
+        message(STATUS "ONNX Runtime lib    : ${ONNX_LIB}")
         add_compile_definitions(USE_ONNX)
     else()
         message(WARNING
             "ONNX Runtime not found — falling back to Mock models.\n"
-            "Set ONNXRUNTIME_ROOT or install to /usr/local.")
+            "Set ONNXRUNTIME_ROOT=/path/to/onnxruntime or install:\n"
+            "  sudo apt install libonnxruntime-dev")
         set(USE_ONNX OFF)
     endif()
 endif()
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Qt6
 # ─────────────────────────────────────────────────────────────────────────────

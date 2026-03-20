@@ -1,22 +1,25 @@
-// src/detection/dispatcher.cpp
 #include "dispatcher.hpp"
 #include "../common/logger.hpp"
 #include "../common/metrics.hpp"
 
 // ── UI mode ───────────────────────────────────────────────────────────────────
-Dispatcher::Dispatcher(int num_workers, PacketRingBuffer& ring_buf)
+Dispatcher::Dispatcher(int               num_workers,
+                       PacketRingBuffer& ring_buf,
+                       MLJobQueue*       ml_job_queue)
     : num_workers_   (num_workers)
-    , dummy_ring_buf_(1)        // không dùng, size=1 tránh assert
+    , dummy_ring_buf_(1)
     , ring_buf_      (ring_buf)
     , flow_table_    (1000000)
+    , ml_job_queue_  (ml_job_queue)
 {}
 
 // ── CLI mode ──────────────────────────────────────────────────────────────────
-Dispatcher::Dispatcher(int num_workers)
+Dispatcher::Dispatcher(int num_workers, MLJobQueue* ml_job_queue)
     : num_workers_   (num_workers)
     , dummy_ring_buf_(1)
-    , ring_buf_      (dummy_ring_buf_)  // trỏ vào dummy
+    , ring_buf_      (dummy_ring_buf_)
     , flow_table_    (1000000)
+    , ml_job_queue_  (ml_job_queue)
 {}
 
 Dispatcher::~Dispatcher() { stop(); }
@@ -28,18 +31,27 @@ void Dispatcher::start(AlertCallback on_alert) {
     workers_.reserve(num_workers_);
 
     for (int i = 0; i < num_workers_; ++i) {
-        workers_.push_back(std::make_unique<WorkerThread>(
+        auto worker = std::make_unique<WorkerThread>(
             i,
             flow_table_,
             ip_tracker_,
             on_alert,
-            ring_buf_));
-        workers_.back()->start();
+            ring_buf_,
+            ml_job_queue_);   // ← inject MLJobQueue vào mỗi worker
+
+        // Inject FirewallManager nếu có
+        if (firewall_manager_)
+            worker->setFirewallManager(firewall_manager_);
+
+        worker->start();
+        workers_.push_back(std::move(worker));
     }
 
-    LOG_INFO("Dispatcher started: " + std::to_string(num_workers_)
-             + " workers, flow_table=100000, ip_tracker="
-             + std::to_string(IpTracker::MAX_TRACKED_IP));
+    LOG_INFO("Dispatcher started: workers=" + std::to_string(num_workers_)
+             + " flow_table=1000000"
+             + " ip_tracker=" + std::to_string(IpTracker::MAX_TRACKED_IP)
+             + (ml_job_queue_     ? " ML=ON"      : " ML=OFF")
+             + (firewall_manager_ ? " firewall=ON" : " firewall=OFF"));
 }
 
 // ─── stop ─────────────────────────────────────────────────────────────────────
@@ -54,33 +66,32 @@ void Dispatcher::stop() {
 void Dispatcher::dispatch(PacketInfo pkt) {
     if (!running_.load(std::memory_order_relaxed)) return;
 
-    // Hash trước để biết worker nào
     const uint32_t worker_idx = hashToWorker(pkt);
 
-    // Push vào ring_buf → gán index (single push, đúng chỗ)
+    // Push vào ring_buf → gán index
     pkt.index = ring_buf_.push(pkt);
 
-    // Enqueue vào worker với pkt.index đã đúng
     if (!workers_[worker_idx]->enqueue(std::move(pkt))) {
         METRICS.queue_drops.fetch_add(1, std::memory_order_relaxed);
         LOG_WARN("Worker " + std::to_string(worker_idx)
                  + " queue full, packet dropped");
     }
 }
+
 // ─── cleanupFlows ─────────────────────────────────────────────────────────────
 void Dispatcher::cleanupFlows(double idle_timeout_sec) {
     const size_t removed = flow_table_.cleanup(idle_timeout_sec);
     if (removed > 0)
-        LOG_INFO("FlowTable cleanup: " + std::to_string(removed)
-                 + " removed, active=" + std::to_string(flow_table_.size()));
+        LOG_INFO("FlowTable cleanup: removed=" + std::to_string(removed)
+                 + " active=" + std::to_string(flow_table_.size()));
 }
 
 // ─── cleanupIps ───────────────────────────────────────────────────────────────
 void Dispatcher::cleanupIps(double idle_timeout_sec) {
     const size_t removed = ip_tracker_.cleanup(idle_timeout_sec);
     if (removed > 0)
-        LOG_INFO("IpTracker cleanup: " + std::to_string(removed)
-                 + " removed, active=" + std::to_string(ip_tracker_.size()));
+        LOG_INFO("IpTracker cleanup: removed=" + std::to_string(removed)
+                 + " active=" + std::to_string(ip_tracker_.size()));
 }
 
 // ─── hashToWorker ─────────────────────────────────────────────────────────────

@@ -1,59 +1,67 @@
-// src/firewall/firewall_backend.hpp
 #pragma once
 #include "firewall_rule.hpp"
 #include <string>
-#include <vector>
 
-// Interface — dễ swap backend (iptables ↔ nftables ↔ mock cho test)
+// ════════════════════════════════════════════════════════════════════════════
+// Interface
+// ════════════════════════════════════════════════════════════════════════════
+
 class IFirewallBackend {
 public:
     virtual ~IFirewallBackend() = default;
 
-    virtual bool applyRule  (const FirewallRule& rule)   = 0;
-    virtual bool removeRule (const FirewallRule& rule)   = 0;
-    virtual bool flushChain (const std::string& chain)   = 0;
-    virtual bool isAvailable()                     const = 0;
-    virtual std::string name()                     const = 0;
+    virtual bool        isAvailable() const = 0;
+    virtual std::string name()        const = 0;
+    virtual bool        applyRule (const FirewallRule& rule) = 0;
+    virtual bool        removeRule(const FirewallRule& rule) = 0;
+    virtual bool        flush()                              = 0;
 };
 
-// ── iptables backend ─────────────────────────────────────────────────────────
-class IptablesBackend : public IFirewallBackend {
-public:
-    explicit IptablesBackend(const std::string& chain = "IDS_BLOCK");
+// ════════════════════════════════════════════════════════════════════════════
+// NftablesBackend
+// ════════════════════════════════════════════════════════════════════════════
 
-    bool applyRule  (const FirewallRule& rule)   override;
-    bool removeRule (const FirewallRule& rule)   override;
-    bool flushChain (const std::string& chain)   override;
-    bool isAvailable()                     const override;
-    std::string name()                     const override { return "iptables"; }
-
-private:
-    std::string chain_;
-    bool        initialized_ = false;
-
-    bool        execCmd     (const std::string& cmd) const;
-    bool        initChain   ();
-    std::string buildIptablesArgs(const FirewallRule& rule,
-                                  const std::string&  op) const;
-};
-
-// ── nftables backend ─────────────────────────────────────────────────────────
 class NftablesBackend : public IFirewallBackend {
 public:
-    explicit NftablesBackend(const std::string& table = "ids",
-                             const std::string& set   = "blacklist");
+    NftablesBackend();
+    ~NftablesBackend() override;
 
-    bool applyRule  (const FirewallRule& rule)   override;
-    bool removeRule (const FirewallRule& rule)   override;
-    bool flushChain (const std::string& chain)   override;
-    bool isAvailable()                     const override;
-    std::string name()                     const override { return "nftables"; }
+    bool        isAvailable() const override;
+    std::string name()        const override { return "nftables"; }
+    bool        applyRule (const FirewallRule& rule) override;
+    bool        removeRule(const FirewallRule& rule) override;
+    bool        flush()                              override;
 
 private:
-    std::string table_;
-    std::string set_;
-    bool        initialized_ = false;
+    // Dùng nft -f - (heredoc qua stdin) để tránh shell escape
+    bool nftBatch(const std::string& script) const;
+    // Dùng cho lệnh đơn giản không có { }
+    bool nftCmd  (const std::string& args)   const;
+    bool ensureTable();
 
-    bool initTable();
-    bool execCmd(const std::string& cmd) const;
+    bool available_   = false;
+    bool chain_ready_ = false;
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// IptablesBackend  (fallback)
+// ════════════════════════════════════════════════════════════════════════════
+
+class IptablesBackend : public IFirewallBackend {
+public:
+    IptablesBackend();
+    ~IptablesBackend() override;
+
+    bool        isAvailable() const override;
+    std::string name()        const override { return "iptables"; }
+    bool        applyRule (const FirewallRule& rule) override;
+    bool        removeRule(const FirewallRule& rule) override;
+    bool        flush()                              override;
+
+private:
+    bool shell(const std::string& cmd) const;
+    bool ensureChain();
+
+    bool available_   = false;
+    bool chain_ready_ = false;
 };

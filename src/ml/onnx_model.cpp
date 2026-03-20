@@ -1,232 +1,306 @@
-//src/ml/onnx_model.cpp
 #include "onnx_model.hpp"
 #include "../common/logger.hpp"
-#include <cmath>
-#include <numeric>
 #include <sstream>
-#include <algorithm> 
+#include <iomanip>
+#include <stdexcept>
 
-// ─── OnnxModel Implementation ─────────────────────────────────────────────────
-// Phần này compile khi có ONNX Runtime
-// Trong lab không có ONNX → dùng Mock models bên dưới
-
+// =============================================================================
+//  Include ONNX Runtime header
+//
+//  Hỗ trợ 3 layout phổ biến (tự động chọn đúng qua CMake):
+//
+//  Layout A — apt install libonnxruntime-dev (Debian/Ubuntu mới):
+//    /usr/local/include/onnxruntime_cxx_api.h          ← máy này
+//
+//  Layout B — Microsoft tarball giải nén vào /usr/local:
+//    /usr/local/include/onnxruntime/core/session/onnxruntime_cxx_api.h
+//
+//  Layout C — apt install onnxruntime-dev (repo Microsoft):
+//    /usr/include/onnxruntime/core/session/onnxruntime_cxx_api.h
+//
+//  CMakeLists.txt sẽ định nghĩa đúng ONNX_INCLUDE_DIR
+//  và truyền vào compiler qua -I flag.
+//  File này chỉ cần #include tên file, không cần đường dẫn đầy đủ.
+// =============================================================================
 #ifdef USE_ONNX
 #include <onnxruntime_cxx_api.h>
+#endif
 
-struct OnnxModel::OnnxImpl {
-    Ort::Env            env{ORT_LOGGING_LEVEL_WARNING, "NetworkIDS"};
-    Ort::SessionOptions session_options;
-    std::unique_ptr<Ort::Session> session;
-    std::vector<const char*> input_names  = {"input"};
-    std::vector<const char*> output_names = {"output"};
-};
+// =============================================================================
+//  Nếu KHÔNG có ONNX Runtime → Mock implementation
+//  Toàn bộ class vẫn compile và link bình thường
+//  load() trả về false, infer() trả về score=0 / is_anomaly=false
+// =============================================================================
+#ifndef USE_ONNX
 
-OnnxModel::OnnxModel(const std::string& model_name, float threshold)
-    : name_(model_name)
-    , threshold_(threshold)
-    , impl_(std::make_unique<OnnxImpl>()) {
-    impl_->session_options.SetIntraOpNumThreads(1);
-    impl_->session_options.SetGraphOptimizationLevel(
-        GraphOptimizationLevel::ORT_ENABLE_BASIC);
+// ── OnnxXGBoost Mock ──────────────────────────────────────────────────────────
+struct OnnxXGBoost::Impl {};
+
+OnnxXGBoost::OnnxXGBoost(float threshold) : threshold_(threshold) {}
+OnnxXGBoost::~OnnxXGBoost() = default;
+
+bool OnnxXGBoost::load(const std::string& path) {
+    LOG_WARN("OnnxXGBoost::load — built without USE_ONNX, model ignored: " + path);
+    return false;
 }
 
-OnnxModel::~OnnxModel() = default;
+ModelOutput OnnxXGBoost::infer(
+    const std::array<float, FeatureVector::SIZE>&)
+{
+    return { false, 0.f, 0, "XGBoost: USE_ONNX not enabled" };
+}
 
-bool OnnxModel::load(const std::string& model_path) {
+// ── OnnxAutoencoder Mock ──────────────────────────────────────────────────────
+struct OnnxAutoencoder::Impl {};
+
+OnnxAutoencoder::OnnxAutoencoder(float mse_threshold)
+    : mse_threshold_(mse_threshold) {}
+OnnxAutoencoder::~OnnxAutoencoder() = default;
+
+bool OnnxAutoencoder::load(const std::string& path) {
+    LOG_WARN("OnnxAutoencoder::load — built without USE_ONNX, model ignored: " + path);
+    return false;
+}
+
+ModelOutput OnnxAutoencoder::infer(
+    const std::array<float, FeatureVector::SIZE>&)
+{
+    return { false, 0.f, 0, "Autoencoder: USE_ONNX not enabled" };
+}
+
+float OnnxAutoencoder::computeMSE(
+    const std::array<float, FeatureVector::SIZE>&,
+    const float*, size_t)
+{
+    return 0.f;
+}
+
+#else // USE_ONNX — Real implementation
+
+// =============================================================================
+//  ORT helpers — dùng chung cho cả 2 model
+// =============================================================================
+namespace {
+
+// Global ORT environment — khởi tạo 1 lần, thread-safe
+Ort::Env& getOrtEnv() {
+    static Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "network-ids");
+    return env;
+}
+
+Ort::SessionOptions makeSessionOptions() {
+    Ort::SessionOptions opts;
+    opts.SetIntraOpNumThreads(1);   // 1 thread/model — tránh tranh chấp CPU
+    opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+    opts.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+    return opts;
+}
+
+} // namespace
+
+// =============================================================================
+//  OnnxXGBoost
+// =============================================================================
+
+struct OnnxXGBoost::Impl {
+    Ort::Session                     session;
+    Ort::AllocatorWithDefaultOptions allocator;
+
+    std::string input_name;
+    std::string output_label_name;
+    std::string output_prob_name;
+
+    // Input shape: [1, 21]
+    std::array<int64_t, 2> input_shape {
+        1, static_cast<int64_t>(FeatureVector::SIZE)
+    };
+
+    explicit Impl(const std::string& path)
+        : session(getOrtEnv(), path.c_str(), makeSessionOptions())
+    {
+        // XGBoost ONNX thường có:
+        //   input:  "X"
+        //   output: "label", "probabilities"
+        input_name        = session.GetInputNameAllocated (0, allocator).get();
+        output_label_name = session.GetOutputNameAllocated(0, allocator).get();
+        output_prob_name  = session.GetOutputNameAllocated(1, allocator).get();
+
+        LOG_INFO("OnnxXGBoost loaded — input=" + input_name
+                 + " label=" + output_label_name
+                 + " prob="  + output_prob_name);
+    }
+};
+
+OnnxXGBoost::OnnxXGBoost(float threshold) : threshold_(threshold) {}
+OnnxXGBoost::~OnnxXGBoost() = default;
+
+bool OnnxXGBoost::load(const std::string& path) {
     try {
-        impl_->session = std::make_unique<Ort::Session>(
-            impl_->env,
-            model_path.c_str(),
-            impl_->session_options
-        );
-        loaded_ = true;
-        LOG_INFO("ONNX model loaded: " + model_path);
+        impl_  = std::make_unique<Impl>(path);
+        ready_ = true;
         return true;
     } catch (const Ort::Exception& e) {
-        LOG_ERROR("ONNX load failed: " + std::string(e.what()));
+        LOG_ERROR("OnnxXGBoost::load ORT: " + std::string(e.what()));
+        return false;
+    } catch (const std::exception& e) {
+        LOG_ERROR("OnnxXGBoost::load: " + std::string(e.what()));
         return false;
     }
 }
 
-ModelOutput OnnxModel::infer(const FeatureVector& fv) {
+ModelOutput OnnxXGBoost::infer(
+    const std::array<float, FeatureVector::SIZE>& input)
+{
     ModelOutput out;
-    out.model_name = name_;
-
-    if (!loaded_) {
-        out.detail = "Model not loaded";
-        return out;
-    }
+    out.detail = "XGBoost: ";
+    if (!ready_) { out.detail += "not loaded"; return out; }
 
     try {
-        auto arr = fv.toArray();
-
-        // Tạo input tensor
-        std::vector<int64_t> input_shape = {1, FeatureVector::SIZE};
-        Ort::MemoryInfo mem_info = Ort::MemoryInfo::CreateCpu(
+        auto mem_info = Ort::MemoryInfo::CreateCpu(
             OrtArenaAllocator, OrtMemTypeDefault);
+
+        // ORT API cần non-const pointer
+        std::array<float, FeatureVector::SIZE> buf = input;
 
         Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
             mem_info,
-            arr.data(), arr.size(),
-            input_shape.data(), input_shape.size()
-        );
+            buf.data(), buf.size(),
+            impl_->input_shape.data(), impl_->input_shape.size());
 
-        // Run inference
-        auto outputs = impl_->session->Run(
+        const char* in_names[]  = { impl_->input_name.c_str()        };
+        const char* out_names[] = { impl_->output_label_name.c_str(),
+                                    impl_->output_prob_name.c_str()   };
+
+        auto outputs = impl_->session.Run(
             Ort::RunOptions{nullptr},
-            impl_->input_names.data(),  &input_tensor, 1,
-            impl_->output_names.data(), 1
-        );
+            in_names,  &input_tensor, 1,
+            out_names, 2);
 
-        // Lấy score từ output
-        float* output_data = outputs[0].GetTensorMutableData<float>();
-        out.score      = output_data[0];
-        out.is_anomaly = (out.score > threshold_);
-        out.detail     = "ONNX inference score: "
-                       + std::to_string(out.score);
+        const int64_t label     = outputs[0].GetTensorData<int64_t>()[0];
+        const float*  probs     = outputs[1].GetTensorData<float>();
+        const float   prob_norm = probs[0];   // P(normal)
+
+        out.label      = static_cast<int>(label);
+        out.score      = 1.f - prob_norm;
+        out.is_anomaly = (label != 0) && (out.score >= threshold_);
+
+        static const char* CLASS_NAMES[] = {
+            "Normal", "DDoS Volumetric", "Slow DDoS", "Port Scan"
+        };
+        const char* cls = (label >= 0 && label < 4)
+            ? CLASS_NAMES[label] : "Unknown";
+
+        std::ostringstream oss;
+        oss << cls
+            << " (score=" << std::fixed << std::setprecision(3) << out.score
+            << " p_norm=" << prob_norm << ")";
+        out.detail += oss.str();
 
     } catch (const Ort::Exception& e) {
-        LOG_ERROR("ONNX inference failed: " + std::string(e.what()));
+        LOG_ERROR("OnnxXGBoost::infer ORT: " + std::string(e.what()));
+        out.detail += "ORT error";
     }
-
     return out;
 }
 
-#else
-// Stub khi không có ONNX Runtime
-struct OnnxModel::OnnxImpl {};
-OnnxModel::OnnxModel(const std::string& n, float t)
-    : name_(n), threshold_(t) {}
-OnnxModel::~OnnxModel() = default;
-bool OnnxModel::load(const std::string&) {
-    LOG_WARN("ONNX Runtime not available. Use Mock models.");
-    return false;
-}
-ModelOutput OnnxModel::infer(const FeatureVector&) {
-    return ModelOutput{};
-}
-#endif
+// =============================================================================
+//  OnnxAutoencoder
+// =============================================================================
 
-// ─── Mock Isolation Forest ────────────────────────────────────────────────────
-// Simulate anomaly score dựa trên heuristics từ báo cáo
-ModelOutput MockIsolationForest::infer(const FeatureVector& fv) {
-    ModelOutput out;
-    out.model_name = name();
+struct OnnxAutoencoder::Impl {
+    Ort::Session                     session;
+    Ort::AllocatorWithDefaultOptions allocator;
 
-    float score = 0.f;
+    std::string input_name;
+    std::string output_name;
 
-    // ── DDoS Volumetric signal ────────────────────────────────────────────────
-    // pkt_rate cao + syn_no_ack_ratio cao → score tăng
-    float ddos_signal = 0.f;
-    if (fv.pkt_rate > 1000.f)
-        ddos_signal += std::min((fv.pkt_rate - 1000.f) / 9000.f, 0.4f);
-    if (fv.syn_no_ack_ratio > 0.7f)
-        ddos_signal += (fv.syn_no_ack_ratio - 0.7f) / 0.3f * 0.3f;
+    std::array<int64_t, 2> input_shape {
+        1, static_cast<int64_t>(FeatureVector::SIZE)
+    };
 
-    // ── Slow DDoS signal ──────────────────────────────────────────────────────
-    // conn_duration cao + bytes_per_second thấp → score tăng
-    float slow_signal = 0.f;
-    if (fv.conn_duration > 30.f && fv.bytes_per_second < 10.f) {
-        slow_signal += std::min(fv.conn_duration / 300.f, 0.35f);
-        slow_signal += (1.f - std::min(fv.bytes_per_second / 10.f, 1.f))
-                     * 0.25f;
+    explicit Impl(const std::string& path)
+        : session(getOrtEnv(), path.c_str(), makeSessionOptions())
+    {
+        input_name  = session.GetInputNameAllocated (0, allocator).get();
+        output_name = session.GetOutputNameAllocated(0, allocator).get();
+        LOG_INFO("OnnxAutoencoder loaded — input=" + input_name
+                 + " output=" + output_name);
     }
-    if (fv.header_complete < 0.5f && fv.conn_duration > 30.f)
-        slow_signal += 0.2f;
+};
 
-    // ── Port Scan signal ──────────────────────────────────────────────────────
-    // unique_dst_ports cao + rst_ratio cao → score tăng
-    float scan_signal = 0.f;
-    if (fv.unique_dst_ports > 20.f)
-        scan_signal += std::min((fv.unique_dst_ports - 20.f) / 80.f, 0.4f);
-    if (fv.rst_ratio > 0.5f)
-        scan_signal += (fv.rst_ratio - 0.5f) / 0.5f * 0.3f;
+OnnxAutoencoder::OnnxAutoencoder(float mse_threshold)
+    : mse_threshold_(mse_threshold) {}
+OnnxAutoencoder::~OnnxAutoencoder() = default;
 
-    // Tổng hợp — lấy max signal
-    score = std::max(ddos_signal, std::max(slow_signal, scan_signal));
-
-    // Thêm noise nhỏ để simulate tính ngẫu nhiên của IF
-    // (trong production: IF thực sự có randomness từ random trees)
-    score = std::clamp(score, 0.f, 1.f);
-
-    out.score      = score;
-    out.is_anomaly = (score > threshold_);
-
-    // Xác định loại tấn công dựa trên signal mạnh nhất
-    if (out.is_anomaly) {
-        if (ddos_signal >= slow_signal && ddos_signal >= scan_signal)
-            out.detail = "IF: DDoS Volumetric (score=" + std::to_string(score) + ")";
-        else if (slow_signal >= scan_signal)
-            out.detail = "IF: Slow DDoS (score=" + std::to_string(score) + ")";
-        else
-            out.detail = "IF: Port Scan (score=" + std::to_string(score) + ")";
-    } else {
-        out.detail = "IF: Normal (score=" + std::to_string(score) + ")";
+bool OnnxAutoencoder::load(const std::string& path) {
+    try {
+        impl_  = std::make_unique<Impl>(path);
+        ready_ = true;
+        return true;
+    } catch (const Ort::Exception& e) {
+        LOG_ERROR("OnnxAutoencoder::load ORT: " + std::string(e.what()));
+        return false;
+    } catch (const std::exception& e) {
+        LOG_ERROR("OnnxAutoencoder::load: " + std::string(e.what()));
+        return false;
     }
-
-    return out;
 }
 
-// ─── Mock Autoencoder ─────────────────────────────────────────────────────────
-// Simulate reconstruction error
-// Autoencoder học phân phối traffic bình thường
-// → Error cao với traffic bất thường
-ModelOutput MockAutoencoder::infer(const FeatureVector& fv) {
-    ModelOutput out;
-    out.model_name = name();
-
-    // Simulate "normal" baseline (trung bình của traffic bình thường)
-    // Production: baseline này được học từ training data
-    static const FeatureVector NORMAL_BASELINE = []() {
-        FeatureVector b;
-        b.flow_duration      = 5.f;
-        b.pkt_rate           = 50.f;
-        b.byte_rate          = 5000.f;
-        b.syn_no_ack_ratio   = 0.05f;
-        b.conn_duration      = 5.f;
-        b.bytes_per_second   = 1000.f;
-        b.inter_arrival_mean = 100.f;
-        b.inter_arrival_std  = 30.f;
-        b.header_complete    = 1.f;
-        b.unique_dst_ports   = 2.f;
-        b.rst_ratio          = 0.02f;
-        return b;
-    }();
-
-    // Tính reconstruction error = ||x - x̂||²
-    // x̂ ≈ NORMAL_BASELINE (simplified)
-    // auto fv_arr   = fv.toArray();
-    // auto base_arr = NORMAL_BASELINE.toArray();
-
-    // Normalize trước khi tính error
-    FeatureExtractor extractor;
-    auto fv_norm   = extractor.normalize(fv).toArray();
-    auto base_norm = extractor.normalize(NORMAL_BASELINE).toArray();
-
+float OnnxAutoencoder::computeMSE(
+    const std::array<float, FeatureVector::SIZE>& input,
+    const float* recon, size_t size)
+{
     float mse = 0.f;
-    for (size_t i = 0; i < FeatureVector::SIZE; i++) {
-        float diff = fv_norm[i] - base_norm[i];
-        mse += diff * diff;
+    for (size_t i = 0; i < size; ++i) {
+        const float d = input[i] - recon[i];
+        mse += d * d;
     }
-    mse /= static_cast<float>(FeatureVector::SIZE);
+    return mse / static_cast<float>(size);
+}
 
-    out.score      = mse;
-    out.is_anomaly = (mse > threshold_);
+ModelOutput OnnxAutoencoder::infer(
+    const std::array<float, FeatureVector::SIZE>& input)
+{
+    ModelOutput out;
+    out.detail = "Autoencoder: ";
+    if (!ready_) { out.detail += "not loaded"; return out; }
 
-    if (out.is_anomaly) {
-        // Xác định loại dựa trên features nổi bật
-        if (fv.conn_duration > 30.f && fv.bytes_per_second < 10.f)
-            out.detail = "AE: Slow DDoS pattern (MSE="
-                       + std::to_string(mse) + ")";
-        else if (fv.pkt_rate > 1000.f)
-            out.detail = "AE: DDoS Volumetric pattern (MSE="
-                       + std::to_string(mse) + ")";
-        else
-            out.detail = "AE: Anomaly detected (MSE="
-                       + std::to_string(mse) + ")";
-    } else {
-        out.detail = "AE: Normal (MSE=" + std::to_string(mse) + ")";
+    try {
+        auto mem_info = Ort::MemoryInfo::CreateCpu(
+            OrtArenaAllocator, OrtMemTypeDefault);
+
+        std::array<float, FeatureVector::SIZE> buf = input;
+
+        Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
+            mem_info,
+            buf.data(), buf.size(),
+            impl_->input_shape.data(), impl_->input_shape.size());
+
+        const char* in_names[]  = { impl_->input_name.c_str()  };
+        const char* out_names[] = { impl_->output_name.c_str() };
+
+        auto outputs = impl_->session.Run(
+            Ort::RunOptions{nullptr},
+            in_names,  &input_tensor, 1,
+            out_names, 1);
+
+        const float* recon = outputs[0].GetTensorData<float>();
+        const float  mse   = computeMSE(input, recon, FeatureVector::SIZE);
+
+        out.score      = mse;
+        out.is_anomaly = (mse > mse_threshold_);
+
+        std::ostringstream oss;
+        oss << (out.is_anomaly ? "ANOMALY" : "normal")
+            << " (MSE=" << std::fixed << std::setprecision(5) << mse
+            << " thr="  << mse_threshold_ << ")";
+        out.detail += oss.str();
+
+    } catch (const Ort::Exception& e) {
+        LOG_ERROR("OnnxAutoencoder::infer ORT: " + std::string(e.what()));
+        out.detail += "ORT error";
     }
-
     return out;
 }
+
+#endif // USE_ONNX

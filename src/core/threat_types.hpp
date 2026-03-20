@@ -8,7 +8,8 @@ enum class DetectionResult {
     DDOS_VOLUMETRIC,   // SYN flood, UDP flood, ICMP flood
     SLOW_DDOS,         // Slowloris, Slow POST, Slow Read
     PORT_SCAN,         // SYN scan, NULL scan, XMAS scan, connect scan
-    MALFORMED          // Reserved — header bất hợp lệ
+    MALFORMED,          // Reserved — header bất hợp lệ
+    UNKNOWN_ANOMALY          
 };
 
 enum class PacketAction {

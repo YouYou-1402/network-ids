@@ -1,64 +1,141 @@
-//src/ml/ml_engine.cpp
 #include "ml_engine.hpp"
 #include "../common/logger.hpp"
 #include "../common/metrics.hpp"
-#include "../common/engine_config.hpp" 
+#include "../common/engine_config.hpp"
 #include <arpa/inet.h>
 #include <sstream>
+#include <iomanip>
+#include <algorithm>
 
-MLEngine::MLEngine(MLJobQueue& job_queue, MLAlertCallback on_ml_alert)
-    : job_queue_(job_queue)
-    , on_ml_alert_(std::move(on_ml_alert)) {}
+// Label constants — phải khớp với training script
+// 0 = BENIGN, 1 = DDoS Volumetric, 2 = Slow DDoS, 3 = Port Scan
+static constexpr int XGB_LABEL_NORMAL    = 0;
+static constexpr int XGB_LABEL_DDOS      = 1;
+static constexpr int XGB_LABEL_SLOW_DDOS = 2;
+static constexpr int XGB_LABEL_SCAN      = 3;
 
-MLEngine::~MLEngine() {
-    stop();
+static std::string ipToStr(uint32_t ip) {
+    struct in_addr a; a.s_addr = ip;
+    return inet_ntoa(a);
 }
 
-// ─── Start ────────────────────────────────────────────────────────────────────
-void MLEngine::start(bool        use_mock,
-                     const std::string& if_model_path,
-                     const std::string& ae_model_path) {
-    // Khởi tạo models
-    if (use_mock) {
-        if_model_ = std::make_unique<MockIsolationForest>(0.6f);
-        ae_model_ = std::make_unique<MockAutoencoder>(0.05f);
-        if_model_->load("");
-        ae_model_->load("");
-        LOG_INFO("MLEngine: Using MOCK models (no ONNX Runtime)");
-    } else {
-        if_model_ = std::make_unique<OnnxModel>("IsolationForest", 0.6f);
-        ae_model_ = std::make_unique<OnnxModel>("Autoencoder",     0.05f);
+// =============================================================================
+//  MLEngine
+// =============================================================================
 
-        if (!if_model_->load(if_model_path)) {
-            LOG_WARN("IF model load failed, falling back to mock");
-            if_model_ = std::make_unique<MockIsolationForest>(0.6f);
-            if_model_->load("");
-        }
-        if (!ae_model_->load(ae_model_path)) {
-            LOG_WARN("AE model load failed, falling back to mock");
-            ae_model_ = std::make_unique<MockAutoencoder>(0.05f);
-            ae_model_->load("");
-        }
+MLEngine::MLEngine(MLJobQueue& job_queue, MLAlertCallback on_ml_alert)
+    : job_queue_   (job_queue)
+    , on_ml_alert_ (std::move(on_ml_alert))
+{}
+
+MLEngine::~MLEngine() { stop(); }
+
+// --- start (full config) -----------------------------------------------------
+void MLEngine::start(const MLConfig& cfg) {
+    cfg_ = cfg;
+
+    // Load scaler
+    if (!cfg_.scaler_path.empty()) {
+        if (!extractor_.loadScaler(cfg_.scaler_path))
+            LOG_WARN("MLEngine: scaler load failed — features will NOT be scaled");
+    } else {
+        LOG_WARN("MLEngine: no scaler_path — features will NOT be scaled");
     }
+
+    // Load XGBoost
+    xgb_model_ = std::make_unique<OnnxXGBoost>(cfg_.xgb_threshold);
+    if (!cfg_.xgb_model_path.empty()) {
+        if (!xgb_model_->load(cfg_.xgb_model_path)) {
+            LOG_ERROR("MLEngine: XGBoost load FAILED: " + cfg_.xgb_model_path);
+            xgb_model_.reset();
+        }
+    } else {
+        LOG_WARN("MLEngine: no xgb_model_path — XGBoost disabled");
+        xgb_model_.reset();
+    }
+
+    // Load Autoencoder
+    ae_model_ = std::make_unique<OnnxAutoencoder>(cfg_.ae_threshold);
+    if (!cfg_.ae_model_path.empty()) {
+        if (!ae_model_->load(cfg_.ae_model_path)) {
+            LOG_ERROR("MLEngine: Autoencoder load FAILED: " + cfg_.ae_model_path);
+            ae_model_.reset();
+        }
+    } else {
+        LOG_WARN("MLEngine: no ae_model_path — Autoencoder disabled");
+        ae_model_.reset();
+    }
+
+    if (!xgb_model_ && !ae_model_)
+        LOG_ERROR("MLEngine: BOTH models failed — ML Layer 2 DISABLED");
 
     running_ = true;
     thread_  = std::thread(&MLEngine::run, this);
-    LOG_INFO("MLEngine started");
+
+    LOG_INFO("MLEngine started:"
+             " XGBoost="  + std::string(xgb_model_ ? "OK" : "DISABLED")
+             + " AE="     + std::string(ae_model_  ? "OK" : "DISABLED")
+             + " scaler=" + std::string(extractor_.scalerLoaded() ? "OK" : "DISABLED")
+             + " xgb_w="  + std::to_string(cfg_.xgb_weight)
+             + " ae_w="   + std::to_string(cfg_.ae_weight)
+             + " min_conf=" + std::to_string(cfg_.min_confidence));
 }
 
+// --- start (backward compat) -------------------------------------------------
+void MLEngine::start(bool               use_mock,
+                     const std::string& xgb_path,
+                     const std::string& ae_path,
+                     const std::string& scaler_path)
+{
+    if (use_mock) {
+        LOG_WARN("MLEngine: use_mock=true — running WITHOUT models");
+        running_ = true;
+        thread_  = std::thread(&MLEngine::run, this);
+        return;
+    }
+    MLConfig cfg;
+    cfg.xgb_model_path = xgb_path;
+    cfg.ae_model_path  = ae_path;
+    cfg.scaler_path    = scaler_path;
+    start(cfg);
+}
+
+// --- stop --------------------------------------------------------------------
 void MLEngine::stop() {
     running_ = false;
-    if (thread_.joinable())
-        thread_.join();
-    LOG_INFO("MLEngine stopped. Jobs processed: "
-             + std::to_string(jobs_processed_)
-             + ", Anomalies: " + std::to_string(anomalies_found_));
+    if (thread_.joinable()) thread_.join();
+    LOG_INFO("MLEngine stopped."
+             " jobs="       + std::to_string(jobs_processed_)
+             + " anomalies=" + std::to_string(anomalies_found_));
 }
 
-// ─── Main inference loop ──────────────────────────────────────────────────────
+// --- reloadModels ------------------------------------------------------------
+bool MLEngine::reloadModels(const MLConfig& cfg) {
+    cfg_ = cfg;
+
+    auto new_xgb = std::make_unique<OnnxXGBoost>(cfg_.xgb_threshold);
+    auto new_ae  = std::make_unique<OnnxAutoencoder>(cfg_.ae_threshold);
+
+    bool xgb_ok = !cfg_.xgb_model_path.empty()
+               && new_xgb->load(cfg_.xgb_model_path);
+    bool ae_ok  = !cfg_.ae_model_path.empty()
+               && new_ae->load(cfg_.ae_model_path);
+
+    // Swap sau khi load xong — run() chỉ đọc trong 1 thread → không cần lock
+    if (xgb_ok) xgb_model_ = std::move(new_xgb);
+    if (ae_ok)  ae_model_  = std::move(new_ae);
+
+    extractor_.loadScaler(cfg_.scaler_path);
+
+    LOG_INFO("MLEngine::reloadModels:"
+             " XGBoost=" + std::string(xgb_ok ? "OK" : "FAIL")
+             + " AE="    + std::string(ae_ok  ? "OK" : "FAIL"));
+    return xgb_ok || ae_ok;
+}
+
+// --- run ---------------------------------------------------------------------
 void MLEngine::run() {
     LOG_INFO("MLEngine inference loop running");
-
     while (running_) {
         auto job_opt = job_queue_.pop(200);
         if (!job_opt.has_value()) continue;
@@ -66,19 +143,23 @@ void MLEngine::run() {
         if (!ENGINE_CFG.ml_enabled.load(std::memory_order_relaxed))
             continue;
 
-        const MLJob& job = job_opt.value();
-        MLResult result  = processJob(job);
-        jobs_processed_++;
+        if (!xgb_model_ && !ae_model_) continue;
 
-        if (result.final_result != DetectionResult::NORMAL) {
-            anomalies_found_++;
-            if (on_ml_alert_)
-                on_ml_alert_(result);
+        const MLJob& job    = job_opt.value();
+        MLResult     result = processJob(job);
+        jobs_processed_.fetch_add(1, std::memory_order_relaxed);
+
+        if (result.final_result != DetectionResult::NORMAL
+            && result.confidence >= cfg_.min_confidence)
+        {
+            anomalies_found_.fetch_add(1, std::memory_order_relaxed);
+            //METRICS.ml_anomalies.fetch_add(1, std::memory_order_relaxed);
+            if (on_ml_alert_) on_ml_alert_(result);
         }
     }
 }
 
-// ─── Process một job ──────────────────────────────────────────────────────────
+// --- processJob --------------------------------------------------------------
 MLResult MLEngine::processJob(const MLJob& job) {
     MLResult result;
     result.flow_key  = job.flow_key;
@@ -88,108 +169,67 @@ MLResult MLEngine::processJob(const MLJob& job) {
     result.dst_port  = job.dst_port;
     result.timestamp = job.timestamp;
 
-    // Normalize features trước khi inference
-    FeatureVector norm_fv = extractor_.normalize(job.features);
+    // Normalize features bằng StandardScaler
+    // job.features: FeatureVector đã được extract() trong WorkerThread
+    const auto norm = extractor_.normalizeRaw(job.features);
 
-    // ── Isolation Forest inference ────────────────────────────────────────────
-    result.if_result = if_model_->infer(norm_fv);
+    if (xgb_model_) result.xgb_result = xgb_model_->infer(norm);
+    else            result.xgb_result.detail = "XGBoost: disabled";
 
-    // ── Autoencoder inference ─────────────────────────────────────────────────
-    result.ae_result = ae_model_->infer(norm_fv);
+    if (ae_model_)  result.ae_result  = ae_model_->infer(norm);
+    else            result.ae_result.detail  = "Autoencoder: disabled";
 
-    // ── Tổng hợp kết quả ─────────────────────────────────────────────────────
     result.final_result = combineResults(
-        result.if_result,
-        result.ae_result,
-        norm_fv,
-        result.confidence
-    );
+        result.xgb_result, result.ae_result, result.confidence);
 
-    // Build detail string
     std::ostringstream oss;
-    oss << "[L2] " << result.if_result.detail
-        << " | " << result.ae_result.detail
-        << " | Confidence: " << result.confidence;
+    oss << "[L2] " << result.xgb_result.detail
+        << " | "   << result.ae_result.detail
+        << " | conf=" << std::fixed << std::setprecision(3) << result.confidence
+        << " src="  << ipToStr(result.src_ip) << ":" << result.src_port;
     result.detail = oss.str();
 
     return result;
 }
 
-// ─── Combine IF + AE results ──────────────────────────────────────────────────
-DetectionResult MLEngine::combineResults(const ModelOutput& if_out,
+// --- combineResults ----------------------------------------------------------
+DetectionResult MLEngine::combineResults(const ModelOutput& xgb_out,
                                           const ModelOutput& ae_out,
-                                          const FeatureVector& fv,
-                                          float& confidence) const {
-    // Voting strategy:
-    // ┌─────────────┬──────────────┬──────────────────────────────┐
-    // │ IF result   │ AE result    │ Decision                     │
-    // ├─────────────┼──────────────┼──────────────────────────────┤
-    // │ Anomaly     │ Anomaly      │ HIGH confidence anomaly      │
-    // │ Anomaly     │ Normal       │ MEDIUM — classify by IF      │
-    // │ Normal      │ Anomaly      │ MEDIUM — classify by AE      │
-    // │ Normal      │ Normal       │ Normal                       │
-    // └─────────────┴──────────────┴──────────────────────────────┘
+                                          float&             confidence) const
+{
+    const bool xgb_attack = xgb_out.is_anomaly;
+    const bool ae_anomaly = ae_out.is_anomaly;
 
-    bool if_anomaly = if_out.is_anomaly;
-    bool ae_anomaly = ae_out.is_anomaly;
-
-    if (!if_anomaly && !ae_anomaly) {
-        confidence = 1.f - std::max(if_out.score, ae_out.score);
+    if (!xgb_attack && !ae_anomaly) {
+        confidence = std::max(0.f,
+            1.f - (cfg_.xgb_weight * xgb_out.score
+                 + cfg_.ae_weight  * ae_out.score));
         return DetectionResult::NORMAL;
     }
 
-    if (if_anomaly && ae_anomaly) {
-        // Cả hai đồng ý → confidence cao
-        confidence = (if_out.score + ae_out.score) / 2.f;
-        return classifyThreat(fv);
+    if (xgb_attack && ae_anomaly) {
+        confidence = std::min(1.f,
+            cfg_.xgb_weight * xgb_out.score
+          + cfg_.ae_weight  * ae_out.score);
+        return xgbLabelToThreat(xgb_out.label);
     }
 
-    // Chỉ một model phát hiện → confidence thấp hơn
-    if (if_anomaly) {
-        confidence = if_out.score * 0.7f;
-        return classifyThreat(fv);
+    if (xgb_attack) {
+        confidence = xgb_out.score * 0.80f;
+        return xgbLabelToThreat(xgb_out.label);
     }
 
-    // ae_anomaly only
-    confidence = ae_out.score * 0.7f;
-    return classifyThreat(fv);
+    // Chỉ AE detect → có thể zero-day
+    confidence = ae_out.score * 0.60f;
+    return DetectionResult::UNKNOWN_ANOMALY;
 }
 
-// ─── Classify threat type từ features ────────────────────────────────────────
-DetectionResult MLEngine::classifyThreat(const FeatureVector& fv) const {
-    // Ma trận phát hiện từ báo cáo:
-    // Slow DDoS:        conn_duration cao + bytes_per_second thấp
-    // DDoS Volumetric:  pkt_rate cao + syn_no_ack_ratio cao
-    // Port Scan:        unique_dst_ports cao + rst_ratio cao
-
-    float slow_ddos_score = 0.f;
-    float ddos_score      = 0.f;
-    float scan_score      = 0.f;
-
-    // Slow DDoS indicators
-    if (fv.conn_duration > 0.1f)       // normalized > 0.1 → > 360s raw
-        slow_ddos_score += 0.4f;
-    if (fv.bytes_per_second < 0.001f)  // normalized rất thấp
-        slow_ddos_score += 0.3f;
-    if (fv.header_complete < 0.5f)
-        slow_ddos_score += 0.3f;
-
-    // DDoS Volumetric indicators
-    if (fv.pkt_rate > 0.02f)           // normalized > 0.02 → > 1000 pps raw
-        ddos_score += 0.5f;
-    if (fv.syn_no_ack_ratio > 0.7f)
-        ddos_score += 0.5f;
-
-    // Port Scan indicators
-    if (fv.unique_dst_ports > 0.0003f) // normalized > 0.0003 → > 20 ports raw
-        scan_score += 0.5f;
-    if (fv.rst_ratio > 0.5f)
-        scan_score += 0.5f;
-
-    // Trả về loại có score cao nhất
-    if (slow_ddos_score >= ddos_score && slow_ddos_score >= scan_score)
-        return DetectionResult::SLOW_DDOS;
-    if (ddos_score >= scan_score)
-        return DetectionResult::DDOS_VOLUMETRIC;
-    return DetectionResult::PORT_SCAN;
+// --- xgbLabelToThreat --------------------------------------------------------
+DetectionResult MLEngine::xgbLabelToThreat(int label) {
+    switch (label) {
+        case XGB_LABEL_DDOS:      return DetectionResult::DDOS_VOLUMETRIC;
+        case XGB_LABEL_SLOW_DDOS: return DetectionResult::SLOW_DDOS;
+        case XGB_LABEL_SCAN:      return DetectionResult::PORT_SCAN;
+        default:                  return DetectionResult::UNKNOWN_ANOMALY;
+    }
 }

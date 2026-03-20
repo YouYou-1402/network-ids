@@ -1,9 +1,10 @@
-// src/detection/worker_thread.hpp
 #pragma once
 #include "../core/packet_info.hpp"
 #include "../core/threat_types.hpp"
 #include "../capture/io/packet_ring_buffer.hpp"
-#include "../firewall/firewall_manager.hpp"      
+#include "../firewall/firewall_manager.hpp"
+#include "../ml/data_queue.hpp"
+#include "../ml/feature_extractor.hpp"
 #include "flow_table.hpp"
 #include "ip_tracker.hpp"
 #include "signature_engine.hpp"
@@ -17,7 +18,9 @@
 
 using AlertCallback = std::function<void(const DetectionEvent&)>;
 
-// ─── PacketQueue — SPSC lock-free ring buffer ─────────────────────────────────
+// =============================================================================
+//  PacketQueue — SPSC lock-free ring buffer
+// =============================================================================
 class PacketQueue {
 public:
     explicit PacketQueue(size_t max_size = 65536);
@@ -39,26 +42,32 @@ private:
     char pad1_[64 - sizeof(std::atomic<size_t>)];
 };
 
-// ─── WorkerThread ─────────────────────────────────────────────────────────────
+// =============================================================================
+//  WorkerThread
 //
 //  Pipeline per packet:
-//    1. updateFlowState (trong SignatureEngine)
-//    2. Firewall quickCheck → WHITELIST=skip / BLACKLIST=drop(kernel đã drop)
-//    3. SignatureEngine    → DDoS, Port Scan, Flag abuse, Payload
-//    4. ProtocolAnomaly   → Slow DDoS (nếu HTTP port)
-//    5. BehavioralEngine  → HTTP Flood, SYN no-handshake, Dist scan
-//    6. ActionHandler     → quyết định DROP/ALERT/PASS
-//    7. ring_buf_.updateRecord() → ghi threat/action vào slot
-//    8. on_alert_() nếu có threat
-//    9. autoBlock(src_ip) → iptables/nftables kernel rule
-// ─────────────────────────────────────────────────────────────────────────────
+//    1.  parsePacket()          — parse nếu chưa parse
+//    2.  flow lookup            — getOrCreate FlowState
+//    2b. update ML features     — fwd/bwd bytes, Welford's IAT  ← MỚI
+//    3.  Firewall quickCheck    — WHITELIST=skip / BLACKLIST=drop
+//    4.  Detection guard        — skip nếu detection_enabled=false
+//    5.  SignatureEngine        — DDoS rate, Port Scan, Flag abuse, Payload
+//    6.  ProtocolAnomalyEngine  — Slow DDoS (HTTP port)
+//    7.  BehavioralEngine       — HTTP Flood, SYN no-handshake, Dist scan
+//    8.  ActionHandler          — quyết định DROP/ALERT/PASS
+//    9.  ring_buf_.updateRecord — ghi threat/action vào slot
+//    10. on_alert_()            — callback → AlertManager
+//    11. autoBlock(src_ip)      — kernel firewall
+//    12. ML sampling            — push MLJob vào MLJobQueue (mỗi 10/50 pkts)
+// =============================================================================
 class WorkerThread {
 public:
     WorkerThread(int               id,
                  FlowTable&        flow_table,
                  IpTracker&        ip_tracker,
                  AlertCallback     on_alert,
-                 PacketRingBuffer& ring_buf);
+                 PacketRingBuffer& ring_buf,
+                 MLJobQueue*       ml_job_queue = nullptr);
     ~WorkerThread();
 
     WorkerThread(const WorkerThread&)            = delete;
@@ -73,15 +82,13 @@ public:
     size_t queueSize   () const { return queue_.size(); }
     size_t queueDropped() const { return queue_dropped_.load(std::memory_order_relaxed); }
 
-    // Dùng raw pointer (không own) — lifetime do caller quản lý
-    // nullptr = firewall integration disabled
-    void setFirewallManager(FirewallManager* fw) {
-        firewall_manager_ = fw;
-    }
+    // Firewall integration — set trước khi gọi start()
+    void setFirewallManager(FirewallManager* fw) { firewall_manager_ = fw; }
+    FirewallManager* firewallManager() const     { return firewall_manager_; }
 
-    FirewallManager* firewallManager() const {
-        return firewall_manager_;
-    }
+    // ML integration — set trước khi gọi start()
+    void setMLJobQueue(MLJobQueue* q) { ml_job_queue_ = q; }
+    MLJobQueue* mlJobQueue() const    { return ml_job_queue_; }
 
 private:
     void run();
@@ -90,6 +97,11 @@ private:
                          DetectionSource    source,
                          const PacketInfo&  pkt,
                          FlowState&         flow);
+
+    bool shouldSampleForML(const FlowState& flow) const;
+    void pushMLJob(const PacketInfo&  pkt,
+                   const FlowState&   flow,
+                   const std::string& flow_key);
 
     int               id_;
     FlowTable&        flow_table_;
@@ -101,9 +113,10 @@ private:
     ProtocolAnomalyEngine anomaly_engine_;
     BehavioralEngine      behavioral_engine_;
     ActionHandler         action_handler_;
+    FeatureExtractor      feature_extractor_;
 
-    // Thread-safe: chỉ được set trước khi gọi start()
-    FirewallManager*      firewall_manager_ = nullptr;
+    FirewallManager* firewall_manager_ = nullptr;
+    MLJobQueue*      ml_job_queue_     = nullptr;
 
     std::thread           thread_;
     std::atomic<bool>     running_      {false};

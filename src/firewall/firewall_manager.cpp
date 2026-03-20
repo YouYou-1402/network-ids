@@ -11,22 +11,28 @@ using json = nlohmann::json;
 // ════════════════════════════════════════════════════════════════════════════
 
 void FirewallManager::init(bool use_nftables) {
+    // Thử nftables trước nếu được yêu cầu
     if (use_nftables) {
         auto nft = std::make_unique<NftablesBackend>();
         if (nft->isAvailable()) {
             backend_ = std::move(nft);
-            LOG_INFO("FirewallManager: using nftables backend");
+            LOG_INFO("FirewallManager: using nftables backend (kernel)");
+            return;
         }
+        LOG_WARN("FirewallManager: nftables unavailable, trying iptables...");
     }
-    if (!backend_) {
-        auto ipt = std::make_unique<IptablesBackend>();
-        if (ipt->isAvailable()) {
-            backend_ = std::move(ipt);
-            LOG_INFO("FirewallManager: using iptables backend");
-        } else {
-            LOG_WARN("FirewallManager: no kernel backend — in-memory only");
-        }
+
+    // Fallback iptables
+    auto ipt = std::make_unique<IptablesBackend>();
+    if (ipt->isAvailable()) {
+        backend_ = std::move(ipt);
+        LOG_INFO("FirewallManager: using iptables backend (kernel)");
+        return;
     }
+
+    // Fallback in-memory
+    LOG_WARN("FirewallManager: no kernel backend available"
+             " — using in-memory only");
 }
 
 FirewallManager::FirewallManager(bool use_nftables) {
@@ -247,7 +253,7 @@ bool FirewallManager::removeByIp(const std::string& src_ip) {
 
 void FirewallManager::flushAll() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (backend_) backend_->flushChain("IDS_BLOCK");
+    if (backend_) backend_->flush();
     rules_.clear();
     ip_to_rule_.clear();
     whitelist_ips_.clear();
