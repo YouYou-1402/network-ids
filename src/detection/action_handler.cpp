@@ -7,7 +7,7 @@ PacketAction ActionHandler::decide(DetectionResult result) const {
         case DetectionResult::DDOS_VOLUMETRIC: return policy_.ddos_action;
         case DetectionResult::SLOW_DDOS:       return policy_.slow_ddos_action;
         case DetectionResult::PORT_SCAN:       return policy_.port_scan_action;
-        case DetectionResult::MALFORMED:       return policy_.malformed_action;
+        case DetectionResult::OTHER_ATTACK:       return policy_.malformed_action;
         case DetectionResult::NORMAL:          return PacketAction::PASS;
         default:                               return PacketAction::ALERT;
     }

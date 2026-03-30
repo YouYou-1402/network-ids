@@ -282,7 +282,7 @@ bool FirewallManager::isWhitelisted(const std::string& src_ip) const {
 FirewallManager::QuickCheck
 FirewallManager::quickCheck(const PacketInfo& pkt) const {
     struct in_addr addr;
-    addr.s_addr = htonl(pkt.src_ip);
+    addr.s_addr = pkt.src_ip;
     const std::string ip = inet_ntoa(addr);
 
     std::lock_guard<std::mutex> lock(mutex_);

@@ -1,3 +1,4 @@
+//src\ml\feature_extractor.cpp
 #include "feature_extractor.hpp"
 #include "../common/logger.hpp"
 #include <sstream>
@@ -52,14 +53,18 @@ std::array<float, FeatureVector::SIZE>
 StandardScaler::transform(
     const std::array<float, FeatureVector::SIZE>& raw) const
 {
-    std::array<float, FeatureVector::SIZE> out;
+    // ── Không có scaler → identity transform ─────────────────────────────
+    // XGBoost tree-based không yêu cầu scaling → vẫn cho kết quả đúng
+    // Chỉ ảnh hưởng nếu model được train với scaled features
     if (!loaded_) {
-        out = raw;   // identity: không scale
-        return out;
+        LOG_DEBUG("StandardScaler: not loaded — using raw features (identity)");
+        return raw;
     }
+
+    std::array<float, FeatureVector::SIZE> out;
     for (size_t i = 0; i < FeatureVector::SIZE; ++i) {
         float z = (raw[i] - mean_[i]) / std_[i];
-        out[i]  = std::clamp(z, -5.f, 5.f);   // clamp tránh outlier cực đoan
+        out[i]  = std::clamp(z, -5.f, 5.f);
     }
     return out;
 }

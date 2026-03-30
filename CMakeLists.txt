@@ -34,7 +34,7 @@ endif()
 option(BUILD_UI    "Build Qt6 GUI target"      ON)
 option(BUILD_CLI   "Build headless CLI target" ON)
 option(BUILD_TESTS "Build unit tests"          OFF)
-option(USE_ONNX    "Enable ONNX Runtime"       OFF)
+option(USE_ONNX    "Enable ONNX Runtime"       ON)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Find libpcap
@@ -136,6 +136,7 @@ set(CORE_HEADERS
 set(COMMON_SOURCES
     src/common/logger.cpp
     src/common/metrics.cpp
+    src/common/engine_config.cpp
     src/common/config_loader.cpp
 )
 set(COMMON_HEADERS

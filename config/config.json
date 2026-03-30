@@ -4,35 +4,105 @@
     "max_flows": 10000,
     "flow_idle_timeout_sec": 300,
     "log_level": "INFO",
-    "log_file": "ids_system.log"
+    "log_file": "logs/system.log",
+    "alert_log_file": "logs/alert.log"
   },
+
+  "engine": {
+    "detection_enabled": true,
+    "ml_enabled": true
+  },
+
   "capture": {
     "interface": "eth0",
     "bpf_filter": "tcp or udp",
     "snaplen": 65535,
-    "promiscuous": true
+    "promiscuous": true,
+    "ring_buffer_mb": 64
   },
-  "layer1": {
-    "thresholds": {
-      "syn_rate_per_10s": 100,
-      "udp_rate_pps": 1000,
-      "port_scan_unique_ports": 20,
-      "syn_rst_ratio": 0.8,
-      "http_header_timeout_sec": 30,
-      "min_bytes_per_sec": 10.0,
-      "max_concurrent_conn": 50
+
+  "token_bucket": {
+    "syn":  { "capacity": 50,   "refill_rate": 10  },
+    "udp":  { "capacity": 1000, "refill_rate": 200 },
+    "icmp": { "capacity": 30,   "refill_rate": 3   }
+  },
+
+  "thresholds": {
+    "flood_ratio":               0.3,
+    "port_scan_ports":           15,
+    "port_scan_syn_no_ack_min":  15,
+    "min_pkt_before_flood":      10,
+    "syn_no_complete":           30,
+    "http_flood_req_per_window": 100,
+    "dist_scan_src_threshold":   5,
+    "behavior_window_sec":       5.0,
+    "ip_tracker_window_sec":     10.0,
+    "ip_tracker_idle_cleanup":   30.0,
+    "scan_idle_reset_sec":       120.0,
+    "max_tracked_ip":            65536,
+
+    "global_syn_threshold":      500,
+    "dst_syn_ratio_min_pkt":     50,
+    "dst_syn_ack_ratio":         3.0
+  },
+
+  "signatures": {
+    "flood_ratio":               0.3,
+    "port_scan_ports":           15,
+    "port_scan_syn_no_ack_min":  15,
+    "min_pkt_before_flood":      10
+  },
+
+  "protocol_anomaly": {
+    "http_header_timeout_sec":    30.0,
+    "min_bytes_per_sec":          50.0,
+    "max_concurrent_conn":        50,
+    "slowloris_conn_min":         30,
+    "slow_post_duration_min_sec": 60.0,
+    "win_zero_count_threshold":   5,
+    "http_ports":                 [80, 8080]
+  },
+
+  "ml": {
+    "xgb_model_path": "/media/linhlinh/learn/nckh/network-ids/models/xgboost_ids_model.onnx",
+    "ae_model_path":  "/media/linhlinh/learn/nckh/network-ids/models/autoencoder_ids_model_v8.onnx",
+    "scaler_path":    "/media/linhlinh/learn/nckh/network-ids/models/scaler.bin",
+    "xgb_threshold":  0.50,
+    "ae_threshold":   0.30,
+    "min_confidence": 0.45,
+    "xgb_weight":     0.65,
+    "ae_weight":      0.35
+  },
+
+  "media_ports": {
+    "quic": [80, 443, 4433, 4444],
+    "stun": [3478, 3479, 5349],
+    "rtp_heuristic": {
+      "enabled":      true,
+      "min_pkt_size": 28,
+      "max_pkt_size": 1400
     }
   },
-  "layer2": {
-    "enabled": false,
-    "models": {
-      "isolation_forest": "models/isolation_forest.onnx",
-      "autoencoder": "models/autoencoder.onnx"
-    },
-    "thresholds": {
-      "anomaly_score": 0.6,
-      "reconstruction_error": 0.05
-    },
-    "queue_size": 4096
+
+  "firewall": {
+    "rules_file":         "/media/linhlinh/learn/nckh/network-ids/config/firewall_rules.json",
+    "use_nftables":       false,
+    "auto_block_enabled": true,
+    "block_duration_sec": 300
+  },
+
+  "logging": {
+    "level":  "INFO",
+    "max_mb": 100,
+    "rotate": 5
+  },
+
+  "whitelist": {
+    "ips": ["127.0.0.1", "127.0.0.0/8", "::1",
+    "31.13.83.54",
+    "157.240.0.0/16",
+    "142.250.0.0/15",
+    "74.125.0.0/16",
+    "172.217.0.0/16"]
   }
 }

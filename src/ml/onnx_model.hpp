@@ -1,84 +1,124 @@
 #pragma once
-#include "feature_extractor.hpp"
-#include <string>
-#include <memory>
-#include <array>
+// =============================================================================
+//  onnx_model.hpp
+//  OnnxXGBoost      — XGBoost multiclass (5 class)
+//  OnnxAutoencoder  — Encoder-Classifier multiclass (5 class)
+//
+//  label: 0=BENIGN  1=DDOS_VOLUMETRIC  2=SLOW_DDOS  3=PORT_SCAN  4=OTHER_ATTACK
+//
+//  ONNX I/O (khớp với Python export):
+//    XGBoost:
+//      input[0]  "X"             float[1][21]
+//      output[0] "label"         int64[1]
+//      output[1] "probabilities" float[1][5]
+//    Autoencoder (EncoderClassifier):
+//      input[0]  "X"             float[1][21]
+//      output[0] "label"         int64[1]
+//      output[1] "probabilities" float[1][5]
+// =============================================================================
 
-// =============================================================================
-//  ModelOutput
-// =============================================================================
+#ifndef ONNX_MODEL_HPP
+#define ONNX_MODEL_HPP
+
+#include <array>
+#include <memory>
+#include <string>
+#include "feature_extractor.hpp"   // FeatureVector::SIZE = 21
+
+// ─── ModelOutput ──────────────────────────────────────────────────────────────
 struct ModelOutput {
     bool        is_anomaly = false;
-    float       score      = 0.f;   // anomaly score [0,1]
-    int         label      = 0;     // XGBoost: 0=normal,1=ddos,2=slow,3=scan
+    float       score      = 0.f;    // 1 - P(BENIGN)
+    int         label      = 0;      // predicted class id
     std::string detail;
 };
 
-// =============================================================================
-//  IModel — interface chung
-// =============================================================================
-class IModel {
-public:
-    virtual ~IModel() = default;
-    virtual bool        load  (const std::string& path)                              = 0;
-    virtual ModelOutput infer (const std::array<float, FeatureVector::SIZE>& input)  = 0;
-    virtual std::string name  () const                                               = 0;
-    virtual bool        ready () const                                               = 0;
-};
+// ─── Label constants ──────────────────────────────────────────────────────────
+static constexpr int MODEL_LABEL_BENIGN          = 0;
+static constexpr int MODEL_LABEL_DDOS_VOLUMETRIC = 1;
+static constexpr int MODEL_LABEL_SLOW_DDOS       = 2;
+static constexpr int MODEL_LABEL_PORT_SCAN       = 3;
+static constexpr int MODEL_LABEL_OTHER_ATTACK    = 4;
+static constexpr int MODEL_NUM_CLASSES           = 5;
+
+inline const char* modelLabelToStr(int label) {
+    switch (label) {
+        case MODEL_LABEL_BENIGN:          return "BENIGN";
+        case MODEL_LABEL_DDOS_VOLUMETRIC: return "DDOS_VOLUMETRIC";
+        case MODEL_LABEL_SLOW_DDOS:       return "SLOW_DDOS";
+        case MODEL_LABEL_PORT_SCAN:       return "PORT_SCAN";
+        case MODEL_LABEL_OTHER_ATTACK:    return "OTHER_ATTACK";
+        default:                          return "UNKNOWN";
+    }
+}
 
 // =============================================================================
-//  OnnxXGBoost — XGBoost multiclass classifier export sang ONNX
-//
-//  Input  : [1, 21]  float32
-//  Output :
-//    label        : [1]     int64    (0=Normal,1=DDoS,2=SlowDDoS,3=PortScan)
-//    probabilities: [1, 4]  float32  (softmax per class)
-//
-//  is_anomaly = (label != 0) && (1 - prob[0] >= threshold)
-//  score      = 1 - prob[0]
+//  OnnxXGBoost
+//  Input:   float[1][21]  → "X"
+//  Output0: int64[1]      → "label"
+//  Output1: float[1][5]   → "probabilities"
 // =============================================================================
-class OnnxXGBoost final : public IModel {
+class OnnxXGBoost {
 public:
     explicit OnnxXGBoost(float threshold = 0.5f);
-    ~OnnxXGBoost() override;
+    ~OnnxXGBoost();
 
-    bool        load  (const std::string& path) override;
-    ModelOutput infer (const std::array<float, FeatureVector::SIZE>& input) override;
-    std::string name  () const override { return "XGBoost-ONNX"; }
-    bool        ready () const override { return ready_; }
+    OnnxXGBoost(const OnnxXGBoost&)            = delete;
+    OnnxXGBoost& operator=(const OnnxXGBoost&) = delete;
+    OnnxXGBoost(OnnxXGBoost&&)                 = default;
+    OnnxXGBoost& operator=(OnnxXGBoost&&)      = default;
+
+    bool        load (const std::string& path);
+    ModelOutput infer(const std::array<float, FeatureVector::SIZE>& input);
+
+    bool  isReady()             const { return ready_;     }
+    float threshold()           const { return threshold_; }
+    void  setThreshold(float t)       { threshold_ = t;    }
 
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
-    float                 threshold_;
-    bool                  ready_ = false;
+    float threshold_ = 0.5f;
+    bool  ready_     = false;
 };
 
 // =============================================================================
-//  OnnxAutoencoder — Autoencoder anomaly detection
+//  OnnxAutoencoder  (Encoder-Classifier)
 //
-//  Input  : [1, 21]  float32  (z-score normalized)
-//  Output : [1, 21]  float32  (reconstruction)
+//  Python export (train_autoencoder.py):
+//    input_names  = ["X"]
+//    output_names = ["label", "probabilities"]
 //
-//  anomaly_score = MSE(input, reconstruction)
-//  is_anomaly    = (MSE > mse_threshold_)
+//  C++ tự động đọc tên từ ONNX metadata tại runtime (không hardcode)
+//  → tương thích cả onnxmltools lẫn torch.onnx.export
+//
+//  Tính toán:
+//    label      = output[0] (int64) hoặc argmax(output[1])
+//    score      = 1 - probabilities[BENIGN]
+//    is_anomaly = (label != BENIGN) && (score >= threshold)
 // =============================================================================
-class OnnxAutoencoder final : public IModel {
+class OnnxAutoencoder {
 public:
-    explicit OnnxAutoencoder(float mse_threshold = 0.1f);
-    ~OnnxAutoencoder() override;
+    explicit OnnxAutoencoder(float threshold = 0.5f);
+    ~OnnxAutoencoder();
 
-    bool        load  (const std::string& path) override;
-    ModelOutput infer (const std::array<float, FeatureVector::SIZE>& input) override;
-    std::string name  () const override { return "Autoencoder-ONNX"; }
-    bool        ready () const override { return ready_; }
+    OnnxAutoencoder(const OnnxAutoencoder&)            = delete;
+    OnnxAutoencoder& operator=(const OnnxAutoencoder&) = delete;
+    OnnxAutoencoder(OnnxAutoencoder&&)                 = default;
+    OnnxAutoencoder& operator=(OnnxAutoencoder&&)      = default;
 
-    static float computeMSE(const std::array<float, FeatureVector::SIZE>& input,
-                             const float* recon, size_t size);
+    bool        load (const std::string& path);
+    ModelOutput infer(const std::array<float, FeatureVector::SIZE>& input);
+
+    bool  isReady()             const { return ready_;     }
+    float threshold()           const { return threshold_; }
+    void  setThreshold(float t)       { threshold_ = t;    }
 
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
-    float                 mse_threshold_;
-    bool                  ready_ = false;
+    float threshold_ = 0.5f;
+    bool  ready_     = false;
 };
+
+#endif // ONNX_MODEL_HPP

@@ -1,6 +1,15 @@
 #pragma once
+// =============================================================================
+//  ml_engine.hpp
+//  MLEngine — worker thread: đọc MLJob từ queue, chạy XGBoost + AEClassifier,
+//             voting, emit MLResult qua callback.
+// =============================================================================
+
+#ifndef ML_ENGINE_HPP
+#define ML_ENGINE_HPP
+
 #include "data_queue.hpp"
-#include "onnx_model.hpp"
+#include "onnx_model.hpp"           // OnnxXGBoost, OnnxAutoencoder, ModelOutput
 #include "feature_extractor.hpp"
 #include "../core/threat_types.hpp"
 #include <thread>
@@ -10,8 +19,9 @@
 #include <string>
 
 // =============================================================================
-//  MLResult — kết quả tổng hợp từ XGBoost + Autoencoder
+//  MLResult — kết quả tổng hợp từ XGBoost + AEClassifier
 // =============================================================================
+
 struct MLResult {
     std::string     flow_key;
     uint32_t        src_ip    = 0;
@@ -20,8 +30,8 @@ struct MLResult {
     uint16_t        dst_port  = 0;
     double          timestamp = 0.0;
 
-    ModelOutput     xgb_result;    // XGBoost classifier
-    ModelOutput     ae_result;     // Autoencoder anomaly
+    ModelOutput     xgb_result;
+    ModelOutput     ae_result;
 
     DetectionResult final_result = DetectionResult::NORMAL;
     float           confidence   = 0.f;
@@ -31,31 +41,47 @@ struct MLResult {
 using MLAlertCallback = std::function<void(const MLResult&)>;
 
 // =============================================================================
-//  MLConfig — cấu hình runtime, có thể reload không cần restart
+//  MLConfig
 // =============================================================================
+
 struct MLConfig {
-    std::string xgb_model_path;     // path to xgboost.onnx
-    std::string ae_model_path;      // path to autoencoder.onnx
-    std::string scaler_path;        // path to scaler.bin
+    std::string xgb_model_path;
+    std::string ae_model_path;
+    std::string scaler_path;
 
-    float xgb_threshold  = 0.5f;   // XGBoost: score >= thr → anomaly
-    float ae_threshold   = 0.1f;   // Autoencoder: MSE >= thr → anomaly
-    float min_confidence = 0.6f;   // Ngưỡng tối thiểu để emit alert
+    float xgb_threshold  = 0.5f;
+    float ae_threshold   = 0.5f;
+    float min_confidence = 0.6f;
 
-    // Voting weights: final_score = xgb_w * xgb_score + ae_w * ae_score
-    // XGBoost có precision cao hơn (supervised) → weight cao hơn
     float xgb_weight = 0.65f;
     float ae_weight  = 0.35f;
 };
 
 // =============================================================================
+//  EngineOutput — kết quả voting nội bộ (dùng trong combineResults)
+// =============================================================================
+
+struct EngineOutput {
+    bool        is_anomaly = false;
+    float       score      = 0.f;
+    int         label      = 0;
+    std::string detail;
+};
+
+// =============================================================================
 //  MLEngine
 // =============================================================================
+
 class MLEngine {
 public:
     MLEngine(MLJobQueue& job_queue, MLAlertCallback on_ml_alert);
     ~MLEngine();
 
+    // Non-copyable
+    MLEngine(const MLEngine&)            = delete;
+    MLEngine& operator=(const MLEngine&) = delete;
+
+    // Khởi động với config đầy đủ
     void start(const MLConfig& cfg);
 
     // Backward compat
@@ -66,44 +92,49 @@ public:
 
     void stop();
 
+    // Reload models tại runtime (thread-safe)
+    bool reloadModels(const MLConfig& cfg);
+
+    // Getters
     bool     isRunning     () const { return running_;          }
     uint64_t jobsProcessed () const { return jobs_processed_;   }
     uint64_t anomaliesFound() const { return anomalies_found_;  }
 
-    // Reload models tại runtime — thread-safe (swap sau khi load xong)
-    bool reloadModels(const MLConfig& cfg);
+    std::string status() const;
 
 private:
     void     run();
     MLResult processJob(const MLJob& job);
 
-    // Voting: XGBoost (supervised) + Autoencoder (unsupervised)
+    // Voting logic
     //
     //  XGBoost  | AE       | Decision
     //  ---------|----------|-------------------------------------------------
-    //  Attack   | Anomaly  | XGBoost label, HIGH conf = xgb_w*xgb + ae_w*ae
-    //  Attack   | Normal   | XGBoost label, MEDIUM conf = xgb_score * 0.80
-    //  Normal   | Anomaly  | UNKNOWN_ANOMALY, LOW conf = ae_score * 0.60
-    //  Normal   | Normal   | NORMAL
+    //  Attack   | Attack   | XGBoost label, HIGH   conf = xgb_w*xgb + ae_w*ae
+    //  Attack   | Benign   | XGBoost label, MEDIUM conf = xgb_score * 0.80
+    //  Benign   | Attack   | UNKNOWN_ANOMALY, LOW  conf = ae_score  * 0.60
+    //  Benign   | Benign   | NORMAL
     //
-    DetectionResult combineResults(const ModelOutput& xgb_out,
-                                   const ModelOutput& ae_out,
-                                   float&             confidence) const;
+    EngineOutput combineVoting(const ModelOutput& xgb_out,
+                               const ModelOutput& ae_out) const;
 
-    // Map XGBoost label int → DetectionResult
-    // Dùng int (không parse string) → không bị lỗi khi đổi tên class
-    static DetectionResult xgbLabelToThreat(int label);
+    // Map label int → DetectionResult
+    static DetectionResult labelToThreat(int label);
 
+    // ── Members ──────────────────────────────────────────────────────────
     MLJobQueue&       job_queue_;
     MLAlertCallback   on_ml_alert_;
     FeatureExtractor  extractor_;
 
-    std::unique_ptr<IModel> xgb_model_;
-    std::unique_ptr<IModel> ae_model_;
+    // ✅ Dùng trực tiếp concrete types, KHÔNG dùng IModel
+    std::unique_ptr<OnnxXGBoost>     xgb_model_;
+    std::unique_ptr<OnnxAutoencoder> ae_model_;
 
     MLConfig              cfg_;
     std::thread           thread_;
-    std::atomic<bool>     running_        {false};
-    std::atomic<uint64_t> jobs_processed_ {0};
-    std::atomic<uint64_t> anomalies_found_{0};
+    std::atomic<bool>     running_         {false};
+    std::atomic<uint64_t> jobs_processed_  {0};
+    std::atomic<uint64_t> anomalies_found_ {0};
 };
+
+#endif // ML_ENGINE_HPP

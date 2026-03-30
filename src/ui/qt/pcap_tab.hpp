@@ -49,6 +49,7 @@ public:
 
     QString liveWriterPath() const { return live_writer_path_; }
     void    onOpenClicked  ();
+    void clearDisplay();
 
 
 signals:

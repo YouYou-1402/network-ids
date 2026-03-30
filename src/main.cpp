@@ -13,6 +13,8 @@
 
 #include "common/logger.hpp"
 #include "common/metrics.hpp"
+#include "common/config_loader.hpp"
+#include "common/engine_config.hpp"
 #include "core/threat_types.hpp"
 #include "capture/packet_capture.hpp"
 #include "detection/dispatcher.hpp"
@@ -30,23 +32,15 @@ PacketCapture*    g_capture_ptr    = nullptr;
 Dispatcher*       g_dispatcher_ptr = nullptr;
 MLEngine*         g_ml_engine_ptr  = nullptr;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Signal handler
-// ─────────────────────────────────────────────────────────────────────────────
 void signalHandler(int sig) {
     const char* msg = "\n[SIGNAL] Shutdown requested. Stopping...\n";
     write(STDOUT_FILENO, msg, strlen(msg));
     g_running = false;
-    if (g_capture_ptr)
-        g_capture_ptr->stopCapture();
+    if (g_capture_ptr) g_capture_ptr->stopCapture();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 static std::string ipToString(uint32_t ip) {
-    struct in_addr addr;
-    addr.s_addr = ip;
+    struct in_addr addr; addr.s_addr = ip;
     return std::string(inet_ntoa(addr));
 }
 
@@ -55,20 +49,16 @@ static const char* alertColor(DetectionResult r) {
         case DetectionResult::DDOS_VOLUMETRIC: return "\033[31m";
         case DetectionResult::SLOW_DDOS:       return "\033[33m";
         case DetectionResult::PORT_SCAN:       return "\033[38;5;208m";
-        case DetectionResult::MALFORMED:       return "\033[35m";
+        case DetectionResult::OTHER_ATTACK:       return "\033[35m";
         default:                               return "\033[32m";
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Alert callbacks
-// ─────────────────────────────────────────────────────────────────────────────
 void onL1Alert(const DetectionEvent& event, AlertManager& alert_manager) {
     alert_manager.addL1Alert(event);
     std::cout << alertColor(event.result)
-              << "[L1] "
-              << std::left << std::setw(18) << threatToString(event.result)
-              << " | " << std::setw(6)  << actionToString(event.action)
+              << "[L1] " << std::left << std::setw(18) << threatToString(event.result)
+              << " | " << std::setw(6) << actionToString(event.action)
               << " | Src: " << std::setw(15) << ipToString(event.src_ip)
               << ":" << std::setw(5) << event.src_port
               << " | " << event.detail
@@ -78,54 +68,37 @@ void onL1Alert(const DetectionEvent& event, AlertManager& alert_manager) {
 void onL2Alert(const MLResult& result, AlertManager& alert_manager) {
     alert_manager.addL2Alert(result);
     std::cout << alertColor(result.final_result)
-              << "[L2] "
-              << std::left << std::setw(18) << threatToString(result.final_result)
+              << "[L2] " << std::left << std::setw(18) << threatToString(result.final_result)
               << " | ALERT"
               << " | Src: " << std::setw(15) << ipToString(result.src_ip)
               << ":" << std::setw(5) << result.src_port
-              << " | Conf: " << std::fixed << std::setprecision(2)
-              << result.confidence
+              << " | Conf: " << std::fixed << std::setprecision(2) << result.confidence
               << " | " << result.detail
               << "\033[0m\n";
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Background threads
-// ─────────────────────────────────────────────────────────────────────────────
-void statsPrinterThread(Dispatcher&   dispatcher,
-                        MLEngine&     ml_engine,
+void statsPrinterThread(Dispatcher& dispatcher, MLEngine& ml_engine,
                         AlertManager& alert_manager) {
     while (g_running) {
         for (int i = 0; i < 10 && g_running; ++i)
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
         if (!g_running) break;
-
         std::cout << "\n\033[36m"
                   << "╔══════════════════════════════════════╗\n"
                   << "║         SYSTEM METRICS               ║\n"
                   << "╠══════════════════════════════════════╣\n"
-                  << "║ Captured  : " << std::setw(10)
-                  << METRICS.packets_captured.load()  << "              ║\n"
-                  << "║ Dropped   : " << std::setw(10)
-                  << METRICS.packets_dropped.load()   << "              ║\n"
-                  << "║ Passed    : " << std::setw(10)
-                  << METRICS.packets_passed.load()    << "              ║\n"
-                  << "║ Alerted   : " << std::setw(10)
-                  << METRICS.packets_alerted.load()   << "              ║\n"
+                  << "║ Captured  : " << std::setw(10) << METRICS.packets_captured.load() << "              ║\n"
+                  << "║ Dropped   : " << std::setw(10) << METRICS.packets_dropped.load()  << "              ║\n"
+                  << "║ Passed    : " << std::setw(10) << METRICS.packets_passed.load()   << "              ║\n"
+                  << "║ Alerted   : " << std::setw(10) << METRICS.packets_alerted.load()  << "              ║\n"
                   << "╠══════════════════════════════════════╣\n"
-                  << "║ DDoS      : " << std::setw(10)
-                  << alert_manager.ddosAlerts()       << "              ║\n"
-                  << "║ SlowDDoS  : " << std::setw(10)
-                  << alert_manager.slowDdosAlerts()   << "              ║\n"
-                  << "║ PortScan  : " << std::setw(10)
-                  << alert_manager.scanAlerts()       << "              ║\n"
+                  << "║ DDoS      : " << std::setw(10) << alert_manager.ddosAlerts()      << "              ║\n"
+                  << "║ SlowDDoS  : " << std::setw(10) << alert_manager.slowDdosAlerts()  << "              ║\n"
+                  << "║ PortScan  : " << std::setw(10) << alert_manager.scanAlerts()      << "              ║\n"
                   << "╠══════════════════════════════════════╣\n"
-                  << "║ ActiveFlow: " << std::setw(10)
-                  << dispatcher.activeFlows()         << "              ║\n"
-                  << "║ L2 Jobs   : " << std::setw(10)
-                  << ml_engine.jobsProcessed()        << "              ║\n"
-                  << "║ L2 Anomaly: " << std::setw(10)
-                  << ml_engine.anomaliesFound()       << "              ║\n"
+                  << "║ ActiveFlow: " << std::setw(10) << dispatcher.activeFlows()        << "              ║\n"
+                  << "║ L2 Jobs   : " << std::setw(10) << ml_engine.jobsProcessed()       << "              ║\n"
+                  << "║ L2 Anomaly: " << std::setw(10) << ml_engine.anomaliesFound()      << "              ║\n"
                   << "╚══════════════════════════════════════╝\n"
                   << "\033[0m\n";
     }
@@ -136,40 +109,31 @@ void flowCleanupThread(Dispatcher& dispatcher) {
         for (int i = 0; i < 60 && g_running; ++i)
             std::this_thread::sleep_for(std::chrono::seconds(1));
         if (!g_running) break;
-        dispatcher.cleanupFlows(300.0);
+        dispatcher.cleanupFlows(APP_CFG.system.flow_idle_timeout_sec);
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CLI
-// ─────────────────────────────────────────────────────────────────────────────
-struct Config {
-    std::string mode;
-    std::string target;
-    bool        use_mock      = true;
-    bool        enable_l2     = true;
-    int         num_workers   = 4;
-    std::string log_dir       = "./logs";
-    std::string if_model_path = "models/isolation_forest.onnx";
-    std::string ae_model_path = "models/autoencoder.onnx";
+// ─── CLI args ─────────────────────────────────────────────────────────────────
+struct CliArgs {
+    std::string mode;        // -i hoặc -f
+    std::string target;      // interface hoặc pcap file
+    std::string config_path; // --config
+    bool        use_mock  = false;
+    bool        no_l2     = false;
 };
 
-bool parseArgs(int argc, char* argv[], Config& cfg) {
+bool parseArgs(int argc, char* argv[], CliArgs& cli) {
     if (argc < 3) return false;
-    cfg.mode   = argv[1];
-    cfg.target = argv[2];
-    if (cfg.mode != "-i" && cfg.mode != "-f") return false;
+    cli.mode   = argv[1];
+    cli.target = argv[2];
+    if (cli.mode != "-i" && cli.mode != "-f") return false;
+
     for (int i = 3; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--mock")  { cfg.use_mock  = true;  continue; }
-        if (arg == "--no-l2") { cfg.enable_l2 = false; continue; }
-        if (arg == "--workers" && i + 1 < argc) {
-            cfg.num_workers = std::stoi(argv[++i]);
-            continue;
-        }
-        if (arg == "--log-dir" && i + 1 < argc) {
-            cfg.log_dir = argv[++i];
-            continue;
+        if (arg == "--mock")               { cli.use_mock = true;  continue; }
+        if (arg == "--no-l2")              { cli.no_l2    = true;  continue; }
+        if (arg == "--config" && i+1 < argc) {
+            cli.config_path = argv[++i];   continue;
         }
     }
     return true;
@@ -177,37 +141,35 @@ bool parseArgs(int argc, char* argv[], Config& cfg) {
 
 void printUsage(const char* prog) {
     std::cout
-        << "\n\033[1mNetwork IDS/IPS System — Lab Prototype\033[0m\n"
+        << "\n\033[1mNetwork IDS/IPS System\033[0m\n"
         << "─────────────────────────────────────────\n"
         << "Usage:\n"
-        << "  Live capture  : " << prog << " -i <interface> [options]\n"
-        << "  Offline pcap  : " << prog << " -f <pcap_file>  [options]\n"
+        << "  Live   : " << prog << " -i <interface> [options]\n"
+        << "  Offline: " << prog << " -f <pcap_file>  [options]\n"
         << "\nOptions:\n"
-        << "  --mock          Use mock ML models (no ONNX required)\n"
-        << "  --no-l2         Disable Layer 2 AI/ML engine\n"
-        << "  --workers N     Number of worker threads (default: 4)\n"
-        << "  --log-dir PATH  Directory for log files (default: ./logs)\n"
+        << "  --config PATH   Path to config.json (default: config/config.json)\n"
+        << "  --mock          Force mock ML models\n"
+        << "  --no-l2         Disable Layer 2 ML engine\n"
         << "\nExamples:\n"
-        << "  " << prog << " -i eth0 --mock\n"
-        << "  " << prog << " -f data/raw/cicids2017.pcap --mock\n"
-        << "  " << prog << " -i lo --workers 2 --no-l2\n"
-        << "  " << prog << " -i eth0 --log-dir /var/log/ids\n"
-        << "\nPress Ctrl+C to stop.\n\n";
+        << "  " << prog << " -i eth0\n"
+        << "  " << prog << " -i eth0 --config /etc/ids/config.json\n"
+        << "  " << prog << " -f capture.pcap --mock\n\n";
 }
 
-void printBanner(const Config& cfg) {
+void printBanner(const AppConfig& cfg, const CliArgs& cli) {
     std::cout << "\033[1;34m"
               << "╔══════════════════════════════════════════════╗\n"
               << "║     Network IDS/IPS — AI-Powered System      ║\n"
               << "║     Lab Prototype  |  HVKTQS 2025            ║\n"
               << "╚══════════════════════════════════════════════╝\n"
               << "\033[0m"
-              << "  Mode    : " << (cfg.mode == "-i" ? "LIVE" : "OFFLINE")
-              << "  →  " << cfg.target << "\n"
-              << "  Workers : " << cfg.num_workers << "\n"
-              << "  Layer 2 : " << (cfg.enable_l2 ? "ENABLED" : "DISABLED")
-              << (cfg.use_mock ? " (MOCK models)" : " (ONNX models)") << "\n"
-              << "  Log dir : " << cfg.log_dir << "\n"
+              << "  Mode    : " << (cli.mode == "-i" ? "LIVE" : "OFFLINE")
+              << "  →  " << cli.target << "\n"
+              << "  Workers : " << cfg.system.num_workers << "\n"
+              << "  Layer 2 : " << (cfg.ml_enabled && !cli.no_l2 ? "ENABLED" : "DISABLED")
+              << (cli.use_mock ? " (MOCK)" : "") << "\n"
+              << "  Log     : " << cfg.system.log_file << "\n"
+              << "  Iface   : " << cfg.capture.interface << "\n"
               << "  Press Ctrl+C to stop.\n"
               << "──────────────────────────────────────────────────\n\n";
 }
@@ -217,12 +179,30 @@ void printBanner(const Config& cfg) {
 // ─────────────────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
 
-    Config cfg;
-    if (!parseArgs(argc, argv, cfg)) {
+    CliArgs cli;
+    if (!parseArgs(argc, argv, cli)) {
         printUsage(argv[0]);
         return 1;
     }
 
+    // ── 1. Load config ────────────────────────────────────────────────────────
+    const std::string cfg_path = cli.config_path.empty()
+        ? "/media/linhlinh/learn/nckh/network-ids/config/config.json"
+        : cli.config_path;
+
+    try {
+        ConfigLoader::load(cfg_path);
+    } catch (const std::exception& e) {
+        std::cerr << "[FATAL] " << e.what() << "\n";
+        return 1;
+    }
+
+    const AppConfig& cfg = APP_CFG;
+
+    // ── 2. Sync EngineConfig ──────────────────────────────────────────────────
+    ENGINE_CFG.syncFromConfig();
+
+    // ── 3. Signal handlers ────────────────────────────────────────────────────
     struct sigaction sa{};
     sa.sa_handler = signalHandler;
     sigemptyset(&sa.sa_mask);
@@ -231,42 +211,37 @@ int main(int argc, char* argv[]) {
     sigaction(SIGTERM, &sa, nullptr);
     sigaction(SIGHUP,  &sa, nullptr);
 
-    // ── Setup logging ─────────────────────────────────────────────────────────
-    //
-    //  logs/
-    //  ├── system.log  ← LOG_INFO/WARN/ERROR toàn bộ engine (Logger)
-    //  └── alert.log   ← detection event (AlertManager)
-    // ─────────────────────────────────────────────────────────────────────────
-    std::filesystem::create_directories(cfg.log_dir);
+    // ── 4. Logging ────────────────────────────────────────────────────────────
+    std::filesystem::create_directories(
+        std::filesystem::path(cfg.system.log_file).parent_path());
 
     Logger::instance().setLevel(Logger::Level::INFO);
-    Logger::instance().setLogFile(cfg.log_dir + "/system.log");
+    Logger::instance().setLogFile(cfg.system.log_file);
 
-    printBanner(cfg);
+    printBanner(cfg, cli);
     LOG_INFO("=== Network IDS started ==="
-             " mode=" + cfg.mode +
-             " target=" + cfg.target +
-             " workers=" + std::to_string(cfg.num_workers));
+             " config=" + cfg_path +
+             " mode="   + cli.mode +
+             " target=" + cli.target +
+             " workers=" + std::to_string(cfg.system.num_workers));
 
-    // ── Shared components ─────────────────────────────────────────────────────
+    // ── 5. Shared components ──────────────────────────────────────────────────
     MLJobQueue   ml_queue;
     AlertManager alert_manager(1000);
-    alert_manager.setAlertLogFile(cfg.log_dir + "/alert.log");
+    alert_manager.setAlertLogFile(cfg.system.alert_log_file);
 
-    // ── Layer 1 ───────────────────────────────────────────────────────────────
-    Dispatcher dispatcher(cfg.num_workers);
+    // ── 6. Layer 1 Dispatcher ─────────────────────────────────────────────────
+    Dispatcher dispatcher(cfg.system.num_workers);
     g_dispatcher_ptr = &dispatcher;
 
     dispatcher.start([&](const DetectionEvent& event) {
         onL1Alert(event, alert_manager);
     });
+    LOG_INFO("Layer 1 started (" + std::to_string(cfg.system.num_workers) + " workers)");
 
-    LOG_INFO("Layer 1 IPS engine started ("
-             + std::to_string(cfg.num_workers) + " workers)");
-
-    // ── Layer 2 ───────────────────────────────────────────────────────────────
+    // ── 7. Layer 2 ML ─────────────────────────────────────────────────────────
     FeedbackLoop feedback_loop([](const RuleProposal& p) {
-        LOG_INFO("Rule update applied: " + p.detail);
+        LOG_INFO("[FeedbackLoop] Rule proposal: " + p.detail);
     });
 
     MLEngine ml_engine(ml_queue, [&](const MLResult& result) {
@@ -274,44 +249,69 @@ int main(int argc, char* argv[]) {
         feedback_loop.onMLResult(result);
     });
 
-    if (cfg.enable_l2) {
-        ml_engine.start(cfg.use_mock,
-                        cfg.if_model_path,
-                        cfg.ae_model_path);
-        LOG_INFO("Layer 2 ML engine started");
+    const bool run_l2 = cfg.ml_enabled && !cli.no_l2;
+
+    if (run_l2) {
+        if (cli.use_mock) {
+            // Mock mode: không load model, chỉ chạy loop
+            ml_engine.start(/*use_mock=*/true);
+            LOG_INFO("Layer 2 ML started in MOCK mode");
+        } else {
+            // Real mode: dùng MLConfig từ cfg.ml
+            MLConfig ml_runtime;
+            ml_runtime.xgb_model_path = cfg.ml.xgb_model_path;
+            ml_runtime.ae_model_path  = cfg.ml.ae_model_path;   // "" = disabled
+            ml_runtime.scaler_path    = cfg.ml.scaler_path;     // "" = identity
+            ml_runtime.xgb_threshold  = cfg.ml.xgb_threshold;
+            ml_runtime.ae_threshold   = cfg.ml.ae_threshold;
+            ml_runtime.min_confidence = cfg.ml.min_confidence;
+            ml_runtime.xgb_weight     = cfg.ml.xgb_weight;
+            ml_runtime.ae_weight      = cfg.ml.ae_weight;
+
+            ml_engine.start(ml_runtime);
+            LOG_INFO("Layer 2 ML started:"
+                     " xgb="  + cfg.ml.xgb_model_path
+                   + " ae="   + (cfg.ml.ae_model_path.empty()
+                                 ? "disabled" : cfg.ml.ae_model_path)
+                   + " scaler=" + (cfg.ml.scaler_path.empty()
+                                   ? "disabled" : cfg.ml.scaler_path));
+        }
     } else {
-        LOG_INFO("Layer 2 ML engine DISABLED");
+        LOG_INFO("Layer 2 ML DISABLED"
+                 " (ml_enabled=" + std::string(cfg.ml_enabled ? "true" : "false")
+               + " --no-l2="    + std::string(cli.no_l2 ? "true" : "false") + ")");
     }
     g_ml_engine_ptr = &ml_engine;
 
-    // ── PacketCapture ─────────────────────────────────────────────────────────
+    // ── 8. PacketCapture ──────────────────────────────────────────────────────
     PacketCapture capture;
     g_capture_ptr = &capture;
 
-    const bool opened = (cfg.mode == "-i")
-        ? capture.openLive   (cfg.target, "tcp or udp")
-        : capture.openOffline(cfg.target, "");
+    // Dùng interface/bpf_filter từ config, nhưng CLI target override interface
+    const std::string bpf = cfg.capture.bpf_filter;
+    const bool opened = (cli.mode == "-i")
+        ? capture.openLive   (cli.target, bpf)
+        : capture.openOffline(cli.target, "");
 
     if (!opened) {
-        LOG_ERROR("Failed to open capture source: " + cfg.target);
+        LOG_ERROR("Failed to open capture source: " + cli.target);
         dispatcher.stop();
-        if (cfg.enable_l2) ml_engine.stop();
+        if (run_l2) ml_engine.stop();
         return 1;
     }
 
-    // ── Background threads ────────────────────────────────────────────────────
+    // ── 9. Background threads ─────────────────────────────────────────────────
     std::thread stats_thread  (statsPrinterThread,
                                 std::ref(dispatcher),
                                 std::ref(ml_engine),
                                 std::ref(alert_manager));
 
-    std::thread cleanup_thread(flowCleanupThread,
-                                std::ref(dispatcher));
+    std::thread cleanup_thread(flowCleanupThread, std::ref(dispatcher));
 
-    // ── L2 feeder thread ──────────────────────────────────────────────────────
+    // ── 10. L2 feeder thread ──────────────────────────────────────────────────
     FeatureExtractor extractor;
     std::thread l2_feeder_thread([&]() {
-        if (!cfg.enable_l2) return;
+        if (!run_l2) return;
         while (g_running) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
             dispatcher.forEachFlow([&](FlowState& flow) {
@@ -334,75 +334,47 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    // ── Capture loop (blocking) ───────────────────────────────────────────────
-    LOG_INFO("Capture loop started. Press Ctrl+C to stop.");
+    // ── 11. Capture loop ──────────────────────────────────────────────────────
+    LOG_INFO("Capture loop started → " + cli.target);
 
-    capture.startCapture([&](PacketInfo        pkt,
-                              const uint8_t*    raw_bytes,
-                              uint32_t          raw_len)
-    {
+    capture.startCapture([&](PacketInfo pkt,
+                              const uint8_t* raw_bytes,
+                              uint32_t       raw_len) {
         if (!g_running) return;
         pkt.raw_data = std::make_shared<std::vector<uint8_t>>(
                            raw_bytes, raw_bytes + raw_len);
         dispatcher.dispatch(std::move(pkt));
     });
 
-    // ── Shutdown ──────────────────────────────────────────────────────────────
-    std::cout << "\n\033[1;33m[SHUTDOWN] Stopping all components...\033[0m\n";
+    // ── 12. Shutdown ──────────────────────────────────────────────────────────
+    std::cout << "\n\033[1;33m[SHUTDOWN] Stopping...\033[0m\n";
     LOG_INFO("Shutdown sequence started");
 
     g_running = false;
     capture.stopCapture();
-    LOG_INFO("PacketCapture stopped");
 
     if (l2_feeder_thread.joinable()) l2_feeder_thread.join();
-    LOG_INFO("L2 feeder thread stopped");
-
-    if (cfg.enable_l2) {
-        ml_engine.stop();
-        LOG_INFO("MLEngine stopped");
-    }
-
+    if (run_l2) ml_engine.stop();
     dispatcher.stop();
-    LOG_INFO("Dispatcher stopped");
-
     if (stats_thread.joinable())   stats_thread.join();
     if (cleanup_thread.joinable()) cleanup_thread.join();
 
-    // ── Final report ──────────────────────────────────────────────────────────
+    // ── 13. Final report ──────────────────────────────────────────────────────
     std::cout << "\n\033[1;32m"
               << "╔══════════════════════════════════════════════╗\n"
               << "║              FINAL REPORT                    ║\n"
               << "╠══════════════════════════════════════════════╣\n"
-              << "║ Total captured  : "
-              << std::setw(10) << METRICS.packets_captured.load()
-              << "                ║\n"
-              << "║ Total dropped   : "
-              << std::setw(10) << METRICS.packets_dropped.load()
-              << "                ║\n"
-              << "║ Total passed    : "
-              << std::setw(10) << METRICS.packets_passed.load()
-              << "                ║\n"
-              << "║ Total alerts    : "
-              << std::setw(10) << alert_manager.totalAlerts()
-              << "                ║\n"
+              << "║ Captured  : " << std::setw(10) << METRICS.packets_captured.load() << "                ║\n"
+              << "║ Dropped   : " << std::setw(10) << METRICS.packets_dropped.load()  << "                ║\n"
+              << "║ Passed    : " << std::setw(10) << METRICS.packets_passed.load()   << "                ║\n"
+              << "║ Alerts    : " << std::setw(10) << alert_manager.totalAlerts()     << "                ║\n"
               << "╠══════════════════════════════════════════════╣\n"
-              << "║ DDoS detected   : "
-              << std::setw(10) << alert_manager.ddosAlerts()
-              << "                ║\n"
-              << "║ SlowDDoS detect : "
-              << std::setw(10) << alert_manager.slowDdosAlerts()
-              << "                ║\n"
-              << "║ PortScan detect : "
-              << std::setw(10) << alert_manager.scanAlerts()
-              << "                ║\n"
+              << "║ DDoS      : " << std::setw(10) << alert_manager.ddosAlerts()      << "                ║\n"
+              << "║ SlowDDoS  : " << std::setw(10) << alert_manager.slowDdosAlerts()  << "                ║\n"
+              << "║ PortScan  : " << std::setw(10) << alert_manager.scanAlerts()      << "                ║\n"
               << "╠══════════════════════════════════════════════╣\n"
-              << "║ L2 jobs processed: "
-              << std::setw(9) << ml_engine.jobsProcessed()
-              << "                ║\n"
-              << "║ L2 anomalies    : "
-              << std::setw(10) << ml_engine.anomaliesFound()
-              << "                ║\n"
+              << "║ L2 Jobs   : " << std::setw(10) << ml_engine.jobsProcessed()       << "                ║\n"
+              << "║ L2 Anomaly: " << std::setw(10) << ml_engine.anomaliesFound()      << "                ║\n"
               << "╚══════════════════════════════════════════════╝\n"
               << "\033[0m\n";
 

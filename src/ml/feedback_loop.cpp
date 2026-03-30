@@ -1,3 +1,4 @@
+//src\ml\feedback_loop.cpp
 #include "feedback_loop.hpp"
 #include "../common/logger.hpp"
 #include <arpa/inet.h>
@@ -75,12 +76,26 @@ RuleProposal FeedbackLoop::buildProposal(const MLResult& result) const {
                      + " conf=" + std::to_string(result.confidence) + ")";
             break;
 
+        case DetectionResult::OTHER_ATTACK:
+            // Phân biệt HIGH/MED confidence
+            if (result.confidence >= 0.75f) {
+                p.type   = RuleProposal::Type::ADD_TO_BLACKLIST;
+                p.detail = "Blacklist " + ip + " (Other Attack HIGH conf="
+                        + std::to_string(result.confidence) + ")"
+                        + " | " + result.xgb_result.detail;
+            } else {
+                p.type   = RuleProposal::Type::ADD_SIGNATURE;
+                p.detail = "Signature for " + ip + " (Other Attack MED conf="
+                        + std::to_string(result.confidence) + ")"
+                        + " | " + result.detail;
+            }
+            break;
+
         case DetectionResult::UNKNOWN_ANOMALY:
-            // Không block ngay — cần điều tra thêm
             p.type   = RuleProposal::Type::ADD_SIGNATURE;
             p.detail = "Unknown anomaly from " + ip
-                     + " (AE-only conf=" + std::to_string(result.confidence) + ")"
-                     + " | " + result.ae_result.detail;
+                    + " (AE-only conf=" + std::to_string(result.confidence) + ")"
+                    + " | " + result.ae_result.detail;
             break;
 
         default:

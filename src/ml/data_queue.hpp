@@ -1,4 +1,4 @@
-//src/ml/data_queue.cpp
+//src/ml/data_queue.hpp
 #pragma once
 #include "feature_extractor.hpp"
 #include "../core/threat_types.hpp"

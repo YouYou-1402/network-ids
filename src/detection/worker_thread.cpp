@@ -343,7 +343,7 @@ void WorkerThread::handleDetection(DetectionResult    result,
     // ── Auto-block vào kernel firewall ────────────────────────────────────────
     if (firewall_manager_) {
         struct in_addr addr;
-        addr.s_addr = htonl(pkt.src_ip);
+        addr.s_addr = pkt.src_ip;
         const std::string src_ip_str = inet_ntoa(addr);
         const std::string reason     = threatToString(result) + " detected by L1";
         firewall_manager_->autoBlock(src_ip_str, pkt.protocol, 0, reason);
@@ -371,11 +371,32 @@ void WorkerThread::handleDetection(DetectionResult    result,
 // ─────────────────────────────────────────────────────────────────────────────
 bool WorkerThread::shouldSampleForML(const FlowState& flow) const {
     const uint64_t n = flow.total_packets;
-    if (n == 10)                   return true;   // snapshot đầu tiên
-    if (n < 200  && n % 50  == 0)  return true;   // mỗi 50 pkts (flow trẻ)
-    if (n >= 200 && n % 200 == 0)  return true;   // mỗi 200 pkts (flow già)
+
+    // [A] SYN-only flow: sample NGAY tại packet đầu tiên
+    // Bắt hping3 --rand-source: mỗi flow chỉ có 1 SYN packet
+    // Logic cũ: n==10 → KHÔNG BAO GIỜ đạt với rand-source flood
+    if (n == 1
+        && flow.syn_count  > 0
+        && flow.ack_count == 0
+        && flow.fin_count == 0)
+    {
+        return true;
+    }
+
+    // [C] SYN flood tích lũy: sample mỗi 5 packets khi có nhiều SYN no-ACK
+    // Bắt hping3 với IP cố định (1 flow nhiều packets)
+    if (flow.syn_no_ack > 5 && n % 5 == 0) {
+        return true;
+    }
+
+    // [B] Flow bình thường (giữ nguyên)
+    if (n == 10)                   return true;
+    if (n < 200  && n % 50  == 0)  return true;
+    if (n >= 200 && n % 200 == 0)  return true;
+
     return false;
 }
+
 
 // ─── pushMLJob ────────────────────────────────────────────────────────────────
 void WorkerThread::pushMLJob(const PacketInfo&  pkt,

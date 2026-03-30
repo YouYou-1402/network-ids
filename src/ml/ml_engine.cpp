@@ -1,165 +1,160 @@
+// =============================================================================
+//  ml_engine.cpp
+// =============================================================================
+
 #include "ml_engine.hpp"
+#include "onnx_model.hpp"
 #include "../common/logger.hpp"
-#include "../common/metrics.hpp"
-#include "../common/engine_config.hpp"
-#include <arpa/inet.h>
 #include <sstream>
 #include <iomanip>
-#include <algorithm>
-
-// Label constants — phải khớp với training script
-// 0 = BENIGN, 1 = DDoS Volumetric, 2 = Slow DDoS, 3 = Port Scan
-static constexpr int XGB_LABEL_NORMAL    = 0;
-static constexpr int XGB_LABEL_DDOS      = 1;
-static constexpr int XGB_LABEL_SLOW_DDOS = 2;
-static constexpr int XGB_LABEL_SCAN      = 3;
-
-static std::string ipToStr(uint32_t ip) {
-    struct in_addr a; a.s_addr = ip;
-    return inet_ntoa(a);
-}
 
 // =============================================================================
-//  MLEngine
+//  Constructor / Destructor
 // =============================================================================
 
 MLEngine::MLEngine(MLJobQueue& job_queue, MLAlertCallback on_ml_alert)
     : job_queue_   (job_queue)
     , on_ml_alert_ (std::move(on_ml_alert))
+    , xgb_model_   (nullptr)
+    , ae_model_    (nullptr)
 {}
 
-MLEngine::~MLEngine() { stop(); }
-
-// --- start (full config) -----------------------------------------------------
-void MLEngine::start(const MLConfig& cfg) {
-    cfg_ = cfg;
-
-    // Load scaler
-    if (!cfg_.scaler_path.empty()) {
-        if (!extractor_.loadScaler(cfg_.scaler_path))
-            LOG_WARN("MLEngine: scaler load failed — features will NOT be scaled");
-    } else {
-        LOG_WARN("MLEngine: no scaler_path — features will NOT be scaled");
-    }
-
-    // Load XGBoost
-    xgb_model_ = std::make_unique<OnnxXGBoost>(cfg_.xgb_threshold);
-    if (!cfg_.xgb_model_path.empty()) {
-        if (!xgb_model_->load(cfg_.xgb_model_path)) {
-            LOG_ERROR("MLEngine: XGBoost load FAILED: " + cfg_.xgb_model_path);
-            xgb_model_.reset();
-        }
-    } else {
-        LOG_WARN("MLEngine: no xgb_model_path — XGBoost disabled");
-        xgb_model_.reset();
-    }
-
-    // Load Autoencoder
-    ae_model_ = std::make_unique<OnnxAutoencoder>(cfg_.ae_threshold);
-    if (!cfg_.ae_model_path.empty()) {
-        if (!ae_model_->load(cfg_.ae_model_path)) {
-            LOG_ERROR("MLEngine: Autoencoder load FAILED: " + cfg_.ae_model_path);
-            ae_model_.reset();
-        }
-    } else {
-        LOG_WARN("MLEngine: no ae_model_path — Autoencoder disabled");
-        ae_model_.reset();
-    }
-
-    if (!xgb_model_ && !ae_model_)
-        LOG_ERROR("MLEngine: BOTH models failed — ML Layer 2 DISABLED");
-
-    running_ = true;
-    thread_  = std::thread(&MLEngine::run, this);
-
-    LOG_INFO("MLEngine started:"
-             " XGBoost="  + std::string(xgb_model_ ? "OK" : "DISABLED")
-             + " AE="     + std::string(ae_model_  ? "OK" : "DISABLED")
-             + " scaler=" + std::string(extractor_.scalerLoaded() ? "OK" : "DISABLED")
-             + " xgb_w="  + std::to_string(cfg_.xgb_weight)
-             + " ae_w="   + std::to_string(cfg_.ae_weight)
-             + " min_conf=" + std::to_string(cfg_.min_confidence));
+MLEngine::~MLEngine() {
+    stop();
 }
 
-// --- start (backward compat) -------------------------------------------------
+// =============================================================================
+//  start
+// =============================================================================
+
+void MLEngine::start(const MLConfig& cfg) {
+    if (running_) return;
+    cfg_ = cfg;
+
+    if (!cfg_.scaler_path.empty()) {
+        if (extractor_.loadScaler(cfg_.scaler_path))
+            LOG_INFO("MLEngine: scaler loaded from " + cfg_.scaler_path);
+        else
+            LOG_WARN("MLEngine: scaler FAILED — AEClassifier sẽ cho kết quả sai");
+    } else {
+        LOG_WARN("MLEngine: scaler_path rỗng — dùng raw features");
+    }
+
+    xgb_model_ = std::make_unique<OnnxXGBoost>(cfg_.xgb_threshold);
+    if (!cfg_.xgb_model_path.empty()) {
+        if (xgb_model_->load(cfg_.xgb_model_path))
+            LOG_INFO("MLEngine: XGBoost loaded");
+        else
+            LOG_ERROR("MLEngine: XGBoost FAILED — " + cfg_.xgb_model_path);
+    }
+
+    ae_model_ = std::make_unique<OnnxAutoencoder>(cfg_.ae_threshold);
+    if (!cfg_.ae_model_path.empty()) {
+        if (ae_model_->load(cfg_.ae_model_path))
+            LOG_INFO("MLEngine: AEClassifier loaded");
+        else
+            LOG_ERROR("MLEngine: AEClassifier FAILED — " + cfg_.ae_model_path);
+    }
+
+    LOG_INFO(status());
+    running_ = true;
+    thread_  = std::thread(&MLEngine::run, this);
+}
+
+
 void MLEngine::start(bool               use_mock,
                      const std::string& xgb_path,
                      const std::string& ae_path,
                      const std::string& scaler_path)
 {
-    if (use_mock) {
-        LOG_WARN("MLEngine: use_mock=true — running WITHOUT models");
-        running_ = true;
-        thread_  = std::thread(&MLEngine::run, this);
-        return;
-    }
     MLConfig cfg;
     cfg.xgb_model_path = xgb_path;
     cfg.ae_model_path  = ae_path;
     cfg.scaler_path    = scaler_path;
+    (void)use_mock;
     start(cfg);
 }
 
-// --- stop --------------------------------------------------------------------
+// =============================================================================
+//  stop
+//  ✅ RingBuffer KHÔNG có shutdown() → dùng running_=false + timeout pop
+// =============================================================================
+
 void MLEngine::stop() {
+    if (!running_) return;
     running_ = false;
-    if (thread_.joinable()) thread_.join();
-    LOG_INFO("MLEngine stopped."
-             " jobs="       + std::to_string(jobs_processed_)
+    // Không gọi shutdown() — RingBuffer::pop() tự timeout sau 200ms
+    // → worker thread check running_=false và thoát
+    if (thread_.joinable())
+        thread_.join();
+    LOG_INFO("MLEngine stopped. jobs=" + std::to_string(jobs_processed_)
              + " anomalies=" + std::to_string(anomalies_found_));
 }
 
-// --- reloadModels ------------------------------------------------------------
+// =============================================================================
+//  reloadModels — thread-safe swap
+// =============================================================================
+
 bool MLEngine::reloadModels(const MLConfig& cfg) {
-    cfg_ = cfg;
+    auto new_xgb = std::make_unique<OnnxXGBoost>(cfg.xgb_threshold);
+    auto new_ae  = std::make_unique<OnnxAutoencoder>(cfg.ae_threshold);
 
-    auto new_xgb = std::make_unique<OnnxXGBoost>(cfg_.xgb_threshold);
-    auto new_ae  = std::make_unique<OnnxAutoencoder>(cfg_.ae_threshold);
+    bool xgb_ok = !cfg.xgb_model_path.empty() && new_xgb->load(cfg.xgb_model_path);
+    bool ae_ok  = !cfg.ae_model_path.empty()  && new_ae->load(cfg.ae_model_path);
 
-    bool xgb_ok = !cfg_.xgb_model_path.empty()
-               && new_xgb->load(cfg_.xgb_model_path);
-    bool ae_ok  = !cfg_.ae_model_path.empty()
-               && new_ae->load(cfg_.ae_model_path);
+    if (!xgb_ok && !ae_ok) {
+        LOG_ERROR("MLEngine::reloadModels: both models failed to load");
+        return false;
+    }
 
-    // Swap sau khi load xong — run() chỉ đọc trong 1 thread → không cần lock
-    if (xgb_ok) xgb_model_ = std::move(new_xgb);
-    if (ae_ok)  ae_model_  = std::move(new_ae);
+    // Swap — worker thread đang dùng isReady()/infer() nhưng
+    // unique_ptr swap là atomic trên x86; nếu cần strict safety thì dùng mutex
+    xgb_model_ = std::move(new_xgb);
+    ae_model_  = std::move(new_ae);
+    cfg_       = cfg;
 
-    extractor_.loadScaler(cfg_.scaler_path);
+    if (!cfg_.scaler_path.empty())
+        extractor_.loadScaler(cfg_.scaler_path);
 
-    LOG_INFO("MLEngine::reloadModels:"
-             " XGBoost=" + std::string(xgb_ok ? "OK" : "FAIL")
-             + " AE="    + std::string(ae_ok  ? "OK" : "FAIL"));
-    return xgb_ok || ae_ok;
+    LOG_INFO("MLEngine: models reloaded.\n" + status());
+    return true;
 }
 
-// --- run ---------------------------------------------------------------------
+// =============================================================================
+//  run — worker loop
+//  ✅ RingBuffer::pop(timeout_ms) → std::optional<MLJob>
+//     Không có shutdown() → check running_ sau mỗi timeout
+// =============================================================================
+
 void MLEngine::run() {
-    LOG_INFO("MLEngine inference loop running");
+    LOG_INFO("MLEngine worker thread started");
+
     while (running_) {
-        auto job_opt = job_queue_.pop(200);
-        if (!job_opt.has_value()) continue;
+        // pop() block tối đa 200ms rồi trả nullopt → kiểm tra running_
+        std::optional<MLJob> opt = job_queue_.pop(200);
 
-        if (!ENGINE_CFG.ml_enabled.load(std::memory_order_relaxed))
-            continue;
+        if (!opt.has_value())
+            continue;   // timeout → vòng lại check running_
 
-        if (!xgb_model_ && !ae_model_) continue;
+        MLResult result = processJob(*opt);
+        ++jobs_processed_;
 
-        const MLJob& job    = job_opt.value();
-        MLResult     result = processJob(job);
-        jobs_processed_.fetch_add(1, std::memory_order_relaxed);
-
-        if (result.final_result != DetectionResult::NORMAL
-            && result.confidence >= cfg_.min_confidence)
-        {
-            anomalies_found_.fetch_add(1, std::memory_order_relaxed);
-            //METRICS.ml_anomalies.fetch_add(1, std::memory_order_relaxed);
-            if (on_ml_alert_) on_ml_alert_(result);
+        if (result.final_result != DetectionResult::NORMAL) {
+            ++anomalies_found_;
+            if (result.confidence >= cfg_.min_confidence && on_ml_alert_)
+                on_ml_alert_(result);
         }
     }
+
+    LOG_INFO("MLEngine worker thread exited");
 }
 
-// --- processJob --------------------------------------------------------------
+// =============================================================================
+//  processJob
+//  ✅ job.features là FeatureVector → dùng extractor_.normalizeRaw()
+//     rồi mới truyền std::array<float, SIZE> vào infer()
+// =============================================================================
+
 MLResult MLEngine::processJob(const MLJob& job) {
     MLResult result;
     result.flow_key  = job.flow_key;
@@ -169,67 +164,145 @@ MLResult MLEngine::processJob(const MLJob& job) {
     result.dst_port  = job.dst_port;
     result.timestamp = job.timestamp;
 
-    // Normalize features bằng StandardScaler
-    // job.features: FeatureVector đã được extract() trong WorkerThread
-    const auto norm = extractor_.normalizeRaw(job.features);
+    // FeatureVector → std::array<float, SIZE> (normalize nếu scaler loaded)
+    const std::array<float, FeatureVector::SIZE> features =
+        extractor_.scalerLoaded()
+            ? extractor_.normalizeRaw(job.features)   // z-score normalize
+            : job.features.toArray();                  // raw fallback
 
-    if (xgb_model_) result.xgb_result = xgb_model_->infer(norm);
-    else            result.xgb_result.detail = "XGBoost: disabled";
+    // Run XGBoost
+    if (xgb_model_ && xgb_model_->isReady())
+        result.xgb_result = xgb_model_->infer(features);
 
-    if (ae_model_)  result.ae_result  = ae_model_->infer(norm);
-    else            result.ae_result.detail  = "Autoencoder: disabled";
+    // Run AEClassifier
+    if (ae_model_ && ae_model_->isReady())
+        result.ae_result = ae_model_->infer(features);
 
-    result.final_result = combineResults(
-        result.xgb_result, result.ae_result, result.confidence);
-
-    std::ostringstream oss;
-    oss << "[L2] " << result.xgb_result.detail
-        << " | "   << result.ae_result.detail
-        << " | conf=" << std::fixed << std::setprecision(3) << result.confidence
-        << " src="  << ipToStr(result.src_ip) << ":" << result.src_port;
-    result.detail = oss.str();
+    // Voting
+    EngineOutput ev   = combineVoting(result.xgb_result, result.ae_result);
+    result.confidence = ev.score;
+    result.final_result = labelToThreat(ev.label);
+    result.detail     = ev.detail;
 
     return result;
 }
 
-// --- combineResults ----------------------------------------------------------
-DetectionResult MLEngine::combineResults(const ModelOutput& xgb_out,
-                                          const ModelOutput& ae_out,
-                                          float&             confidence) const
+// =============================================================================
+//  combineVoting
+//
+//  XGBoost  | AE      | Confidence
+//  ---------|---------|------------------------------------------
+//  Attack   | Attack  | HIGH   = xgb_w*xgb_score + ae_w*ae_score
+//  Attack   | Benign  | MEDIUM = xgb_score * 0.80
+//  Benign   | Attack  | LOW    = ae_score  * 0.60
+//  Benign   | Benign  | NORMAL = 0.0
+// =============================================================================
+
+EngineOutput MLEngine::combineVoting(const ModelOutput& xgb_out,
+                                     const ModelOutput& ae_out) const
 {
-    const bool xgb_attack = xgb_out.is_anomaly;
-    const bool ae_anomaly = ae_out.is_anomaly;
+    EngineOutput ev;
 
-    if (!xgb_attack && !ae_anomaly) {
-        confidence = std::max(0.f,
-            1.f - (cfg_.xgb_weight * xgb_out.score
-                 + cfg_.ae_weight  * ae_out.score));
-        return DetectionResult::NORMAL;
+    const bool xgb_ready = xgb_model_ && xgb_model_->isReady();
+    const bool ae_ready  = ae_model_  && ae_model_->isReady();
+
+    // ── Không model nào ready ─────────────────────────────────────────────
+    if (!xgb_ready && !ae_ready) {
+        ev.label  = MODEL_LABEL_BENIGN;
+        ev.score  = 0.f;
+        ev.detail = "No model ready";
+        return ev;
     }
 
-    if (xgb_attack && ae_anomaly) {
-        confidence = std::min(1.f,
-            cfg_.xgb_weight * xgb_out.score
-          + cfg_.ae_weight  * ae_out.score);
-        return xgbLabelToThreat(xgb_out.label);
+    // ── Chỉ 1 model ready ────────────────────────────────────────────────
+    if (xgb_ready && !ae_ready) {
+        ev.is_anomaly = xgb_out.is_anomaly;
+        ev.label      = xgb_out.label;
+        ev.score      = xgb_out.score;
+        ev.detail     = "[XGB only] " + xgb_out.detail;
+        return ev;
+    }
+    if (!xgb_ready && ae_ready) {
+        ev.is_anomaly = ae_out.is_anomaly;
+        ev.label      = ae_out.label;
+        ev.score      = ae_out.score * 0.60f;   // AE alone → lower conf
+        ev.detail     = "[AE only] " + ae_out.detail;
+        return ev;
     }
 
-    if (xgb_attack) {
-        confidence = xgb_out.score * 0.80f;
-        return xgbLabelToThreat(xgb_out.label);
+    // ── Cả 2 ready → weighted voting ─────────────────────────────────────
+    const bool xgb_attack = (xgb_out.label != MODEL_LABEL_BENIGN);
+    const bool ae_attack  = (ae_out.label  != MODEL_LABEL_BENIGN);
+
+    std::ostringstream oss;
+
+    if (xgb_attack && ae_attack) {
+        ev.label      = xgb_out.label;   // XGBoost label ưu tiên (supervised)
+        ev.score      = cfg_.xgb_weight * xgb_out.score
+                      + cfg_.ae_weight  * ae_out.score;
+        ev.is_anomaly = true;
+        oss << "[VOTE:HIGH] ";
+
+    } else if (xgb_attack && !ae_attack) {
+        ev.label      = xgb_out.label;
+        ev.score      = xgb_out.score * 0.80f;
+        ev.is_anomaly = (ev.score >= cfg_.xgb_threshold);
+        oss << "[VOTE:MED] ";
+
+    } else if (!xgb_attack && ae_attack) {
+        ev.label      = ae_out.label;
+        ev.score      = ae_out.score * 0.60f;
+        ev.is_anomaly = (ev.score >= cfg_.ae_threshold);
+        oss << "[VOTE:LOW] ";
+
+    } else {
+        ev.label      = MODEL_LABEL_BENIGN;
+        ev.score      = 0.f;
+        ev.is_anomaly = false;
+        oss << "[VOTE:NORM] ";
     }
 
-    // Chỉ AE detect → có thể zero-day
-    confidence = ae_out.score * 0.60f;
-    return DetectionResult::UNKNOWN_ANOMALY;
+    oss << modelLabelToStr(ev.label)
+        << " score=" << std::fixed << std::setprecision(3) << ev.score
+        << " | XGB: " << xgb_out.detail
+        << " | AE: "  << ae_out.detail;
+    ev.detail = oss.str();
+
+    return ev;
 }
 
-// --- xgbLabelToThreat --------------------------------------------------------
-DetectionResult MLEngine::xgbLabelToThreat(int label) {
+// =============================================================================
+//  labelToThreat
+// =============================================================================
+
+DetectionResult MLEngine::labelToThreat(int label) {
     switch (label) {
-        case XGB_LABEL_DDOS:      return DetectionResult::DDOS_VOLUMETRIC;
-        case XGB_LABEL_SLOW_DDOS: return DetectionResult::SLOW_DDOS;
-        case XGB_LABEL_SCAN:      return DetectionResult::PORT_SCAN;
-        default:                  return DetectionResult::UNKNOWN_ANOMALY;
+        case MODEL_LABEL_BENIGN:          return DetectionResult::NORMAL;
+        case MODEL_LABEL_DDOS_VOLUMETRIC: return DetectionResult::DDOS_VOLUMETRIC;
+        case MODEL_LABEL_SLOW_DDOS:       return DetectionResult::SLOW_DDOS;
+        case MODEL_LABEL_PORT_SCAN:       return DetectionResult::PORT_SCAN;
+        case MODEL_LABEL_OTHER_ATTACK:    return DetectionResult::OTHER_ATTACK;
+        default:                          return DetectionResult::UNKNOWN_ANOMALY;
     }
+}
+
+// =============================================================================
+//  status
+// =============================================================================
+
+std::string MLEngine::status() const {
+    std::ostringstream oss;
+    oss << "MLEngine:"
+        << "\n  XGBoost      : "
+        << (xgb_model_ && xgb_model_->isReady() ? "READY" : "NOT LOADED")
+        << "\n  AEClassifier : "
+        << (ae_model_  && ae_model_->isReady()  ? "READY" : "NOT LOADED")
+        << "\n  Scaler       : "
+        << (extractor_.scalerLoaded() ? "LOADED" : "NOT LOADED (using raw features)")
+        << "\n  Weights      : xgb=" << cfg_.xgb_weight
+        << " ae=" << cfg_.ae_weight
+        << "\n  Thresholds   : xgb=" << cfg_.xgb_threshold
+        << " ae=" << cfg_.ae_threshold
+        << "\n  Min conf     : " << cfg_.min_confidence;
+    return oss.str();
 }

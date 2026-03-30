@@ -26,7 +26,7 @@ std::string UnifiedAlert::colorCode() const {
         case DetectionResult::DDOS_VOLUMETRIC: return "\033[31m";        // Đỏ
         case DetectionResult::SLOW_DDOS:       return "\033[33m";        // Vàng
         case DetectionResult::PORT_SCAN:       return "\033[38;5;208m";  // Cam
-        case DetectionResult::MALFORMED:       return "\033[35m";        // Tím
+        case DetectionResult::OTHER_ATTACK:       return "\033[35m";        // Tím
         default:                               return "\033[32m";        // Xanh lá
     }
 }

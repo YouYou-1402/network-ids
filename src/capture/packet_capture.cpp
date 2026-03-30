@@ -1,6 +1,7 @@
 #include "packet_capture.hpp"
 #include "../common/logger.hpp"
 #include "../common/metrics.hpp"
+#include "bpf_filter.hpp"
 
 #include <netinet/ether.h>
 #include <netinet/ip.h>
@@ -24,6 +25,14 @@ PacketCapture::~PacketCapture() {
 
 bool PacketCapture::applyFilter(const std::string& bpf_filter) {
     if (bpf_filter.empty()) return true;
+
+    // Validate trước
+    const std::string err = BpfFilter::validate(bpf_filter);
+    if (!err.empty()) {
+        LOG_WARN("BPF filter invalid, skipping: " + err);
+        return false;
+    }
+
     struct bpf_program fp{};
     if (pcap_compile(handle_, &fp, bpf_filter.c_str(), 1,
                      PCAP_NETMASK_UNKNOWN) < 0) {
@@ -36,6 +45,7 @@ bool PacketCapture::applyFilter(const std::string& bpf_filter) {
         return false;
     }
     pcap_freecode(&fp);
+    LOG_INFO("BPF filter applied: " + bpf_filter);
     return true;
 }
 

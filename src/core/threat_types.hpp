@@ -8,8 +8,8 @@ enum class DetectionResult {
     DDOS_VOLUMETRIC,   // SYN flood, UDP flood, ICMP flood
     SLOW_DDOS,         // Slowloris, Slow POST, Slow Read
     PORT_SCAN,         // SYN scan, NULL scan, XMAS scan, connect scan
-    MALFORMED,          // Reserved — header bất hợp lệ
-    UNKNOWN_ANOMALY          
+    OTHER_ATTACK,          // Reserved — header bất hợp lệ
+    UNKNOWN_ANOMALY             
 };
 
 enum class PacketAction {
@@ -22,8 +22,9 @@ enum class DetectionSource {
     LAYER1_SIGNATURE,
     LAYER1_PROTOCOL_ANOMALY,
     LAYER1_BEHAVIORAL,
-    LAYER2_ISOLATION_FOREST,
-    LAYER2_AUTOENCODER
+    LAYER2_XGBOOST,        
+    LAYER2_AUTOENCODER,
+    LAYER2_COMBINED       
 };
 
 struct DetectionEvent {
@@ -40,15 +41,15 @@ struct DetectionEvent {
 
 inline std::string threatToString(DetectionResult r) {
     switch (r) {
-        case DetectionResult::NORMAL:          return "NORMAL";
-        case DetectionResult::DDOS_VOLUMETRIC: return "DDOS_VOLUMETRIC";
-        case DetectionResult::SLOW_DDOS:       return "SLOW_DDOS";
-        case DetectionResult::PORT_SCAN:       return "PORT_SCAN";
-        case DetectionResult::MALFORMED:       return "MALFORMED";
-        default:                               return "UNKNOWN";
+        case DetectionResult::NORMAL:           return "NORMAL";
+        case DetectionResult::DDOS_VOLUMETRIC:  return "DDOS_VOLUMETRIC";
+        case DetectionResult::SLOW_DDOS:        return "SLOW_DDOS";
+        case DetectionResult::PORT_SCAN:        return "PORT_SCAN";
+        case DetectionResult::OTHER_ATTACK:        return "MALFORMED";
+        case DetectionResult::UNKNOWN_ANOMALY:  return "UNKNOWN_ANOMALY"; 
+        default:                                return "UNKNOWN";
     }
 }
-
 inline std::string actionToString(PacketAction a) {
     switch (a) {
         case PacketAction::PASS:  return "PASS";

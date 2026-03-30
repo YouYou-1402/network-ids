@@ -287,9 +287,19 @@ QWidget* MainWindow::buildCaptureToolbar() {
     btn_start_cap_ = new QPushButton("▶  Start Capture", bar);
     btn_stop_cap_  = new QPushButton("■  Stop",          bar);
     btn_save_cap_  = new QPushButton("💾  Save",         bar);
+    btn_clear_packets_ = new QPushButton("🗑  Clear", bar);
 
     btn_stop_cap_->setEnabled(false);
     btn_save_cap_->setEnabled(false);
+    btn_clear_packets_->setToolTip("Clear packet list display");
+    btn_clear_packets_->setEnabled(true);
+    btn_clear_packets_->setStyleSheet(
+    "QPushButton { background: #2a3a6a; color: #ddeeff;"
+    "  border: 1px solid #4466aa; border-radius: 4px;"
+    "  padding: 5px 16px; font-size: 12px; font-weight: bold; }"
+    "QPushButton:hover   { background: #3a4a8a; }"
+    "QPushButton:disabled { background: #1a1a2a; color: #445566;"
+    "                       border-color: #2a2a3a; }");
     btn_stop_cap_->setStyleSheet(
         "QPushButton { background: #4a1a1a; color: #ffaaaa;"
         "  border: 1px solid #882222; border-radius: 4px;"
@@ -304,10 +314,13 @@ QWidget* MainWindow::buildCaptureToolbar() {
             this, &MainWindow::onStopCaptureClicked);
     connect(btn_save_cap_,  &QPushButton::clicked,
             this, &MainWindow::onSaveCaptureClicked);
+    connect(btn_clear_packets_, &QPushButton::clicked,
+            this, &MainWindow::onClearPacketsClicked);
 
     layout->addWidget(btn_start_cap_);
     layout->addWidget(btn_stop_cap_);
     layout->addWidget(btn_save_cap_);
+    layout->addWidget(btn_clear_packets_);
 
     auto* sep2 = new QFrame(bar);
     sep2->setFrameShape(QFrame::VLine);
@@ -587,6 +600,14 @@ void MainWindow::setupMenuBar() {
     file_menu->addAction(act_save_cap_);
 
     file_menu->addSeparator();
+
+    act_clear_packets_ = new QAction("🗑  Clear Packet Display", this);
+    act_clear_packets_->setShortcut(QKeySequence("Ctrl+L"));
+    connect(act_clear_packets_, &QAction::triggered,
+            this, &MainWindow::onClearPacketsClicked);
+    file_menu->addAction(act_clear_packets_);
+
+    file_menu->addSeparator();
     auto* quit_act = new QAction("&Quit", this);
     quit_act->setShortcut(QKeySequence::Quit);
     connect(quit_act, &QAction::triggered, qApp, &QApplication::quit);
@@ -752,7 +773,7 @@ void MainWindow::setupFirewallMenu() {
         if (!firewall_manager_) return;
         const QString path = QFileDialog::getSaveFileName(
             this, "Save Firewall Rules",
-            "/etc/ids/firewall_rules.json",
+            "/media/linhlinh/learn/nckh/network-ids/config/",
             "JSON Files (*.json);;All Files (*)");
         if (path.isEmpty()) return;
         statusBar()->showMessage(
@@ -768,7 +789,7 @@ void MainWindow::setupFirewallMenu() {
     connect(act_load, &QAction::triggered, this, [this]() {
         if (!firewall_manager_) return;
         const QString path = QFileDialog::getOpenFileName(
-            this, "Load Firewall Rules", "/etc/ids/",
+            this, "Load Firewall Rules", "/media/linhlinh/learn/nckh/network-ids/config",
             "JSON Files (*.json);;All Files (*)");
         if (path.isEmpty()) return;
         const bool ok = firewall_manager_->loadRules(path.toStdString());
@@ -1092,4 +1113,24 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     if (capture_thread_ && capture_thread_->joinable())
         capture_thread_->join();
     event->accept();
+}
+
+void MainWindow::onClearPacketsClicked() {
+    // Xác định tab đang active
+    const int current_tab = tab_widget_->currentIndex();
+
+    if (current_tab == 0) {
+        // Tab Live Capture → clear live_tab_
+        if (live_tab_)
+            live_tab_->clearDisplay();
+    } else if (current_tab == 1) {
+        // Tab File Analysis → clear tab pcap đang chọn
+        if (file_tab_widget_) {
+            auto* tab = qobject_cast<PcapTab*>(
+                file_tab_widget_->currentWidget());
+            if (tab) tab->clearDisplay();
+        }
+    }
+
+    statusBar()->showMessage("🗑  Packet display cleared", 2000);
 }

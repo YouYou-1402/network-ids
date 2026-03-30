@@ -1,3 +1,4 @@
+// src/common/engine_config.hpp
 #pragma once
 #include <atomic>
 
@@ -6,6 +7,10 @@
 struct EngineConfig {
     std::atomic<bool> detection_enabled { true };
     std::atomic<bool> ml_enabled        { true };
+
+    /// Sync từ AppConfig sau khi ConfigLoader::load() đã chạy
+    /// Gọi 1 lần trong main() ngay sau ConfigLoader::load()
+    void syncFromConfig();
 
     static EngineConfig& instance() {
         static EngineConfig cfg;

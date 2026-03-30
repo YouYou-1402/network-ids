@@ -48,6 +48,7 @@ private slots:
     void onStartCaptureClicked();
     void onStopCaptureClicked();
     void onSaveCaptureClicked();
+    void onClearPacketsClicked();
     void onDetectionToggled(bool enabled);
     void onMlToggled(bool enabled);
     void updateUptime();
@@ -110,6 +111,7 @@ private:
     QPushButton*      btn_start_cap_    = nullptr;
     QPushButton*      btn_stop_cap_     = nullptr;
     QPushButton*      btn_save_cap_     = nullptr;
+    QPushButton* btn_clear_packets_     = nullptr;
     QLabel*           lbl_iface_        = nullptr;
     QLabel*           lbl_ips_badge_    = nullptr;   // toolbar IPS badge
     QLabel*           lbl_fw_badge_     = nullptr;   // toolbar FW badge
@@ -130,6 +132,7 @@ private:
     QAction*          act_fw_block_     = nullptr;
     QAction*          act_fw_unblock_   = nullptr;
     QAction*          act_fw_save_      = nullptr;
+    QAction*         act_clear_packets_ = nullptr;
 
     // ── Capture state ─────────────────────────────────────────────────────────
     std::atomic<bool>              capture_running_ {false};

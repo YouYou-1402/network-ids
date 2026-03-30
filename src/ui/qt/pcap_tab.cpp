@@ -604,3 +604,17 @@ void PcapTab::onNewPacketInfos(std::vector<PacketInfo> records) {
     if (records.empty() || mode_ == Mode::LIVE) return;
     packet_model_->appendRecords(records);
 }
+
+void PcapTab::clearDisplay() {
+    // Clear model (danh sách gói tin)
+    if (packet_model_)
+        packet_model_->clear();
+
+    // Clear panel chi tiết
+    if (detail_tree_)
+        detail_tree_->clearDetail();
+
+    // Clear hex view
+    if (hex_view_)
+        hex_view_->clearData();
+}

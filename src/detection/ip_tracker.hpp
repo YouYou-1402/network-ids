@@ -1,4 +1,3 @@
-// src/detection/ip_tracker.hpp
 #pragma once
 #include <cstdint>
 #include <chrono>
@@ -45,7 +44,6 @@ struct IpStats {
     TokenBucket udp_bucket;
     TokenBucket icmp_bucket;
 
-    // ── Window counters (reset mỗi WINDOW_SEC) ────────────────────────────
     uint64_t  pkt_count       = 0;
     uint64_t  syn_count       = 0;
     uint64_t  syn_flood_count = 0;
@@ -53,14 +51,11 @@ struct IpStats {
     uint64_t  icmp_count      = 0;
     TimePoint window_start;
 
-    // ── flood_ports_seen: reset mỗi window ────────────────────────────────
     std::set<uint16_t> flood_ports_seen;
-
-    // ── scan_ports_seen: persistent, reset sau detect/idle ────────────────
     std::set<uint16_t> scan_ports_seen;
 
-    uint32_t syn_no_ack   = 0;
-    uint32_t rst_received = 0;
+    uint32_t syn_no_ack      = 0;
+    uint32_t rst_received    = 0;
     uint32_t concurrent_conn = 0;
 
     void resetWindow() {
@@ -86,12 +81,81 @@ struct IpStats {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  IpTracker
+//  DstStats — track per destination IP (detect distributed SYN flood)
 //
-//  THREAD SAFETY:
-//    - Mọi truy cập vào IpStats đều qua withStats(ip, callback)
-//    - Callback chạy TRONG lock → không có race condition
-//    - KHÔNG trả về raw pointer ra ngoài lock
+//  Key insight: distributed flood có random src nhưng dst cố định
+//  → đếm SYN/ACK ratio theo dst thay vì src
+// ═══════════════════════════════════════════════════════════════════════════
+struct DstStats {
+    uint64_t  syn_count  = 0;
+    uint64_t  ack_count  = 0;
+    TimePoint window_start;
+
+    void resetWindow() {
+        syn_count    = 0;
+        ack_count    = 0;
+        window_start = Clock::now();
+    }
+
+    double windowElapsed() const {
+        return std::chrono::duration<double>(
+            Clock::now() - window_start).count();
+    }
+
+    // SYN/ACK ratio — cao → nhiều SYN không được ACK lại → flood
+    double synAckRatio() const {
+        return static_cast<double>(syn_count) /
+               static_cast<double>(std::max((uint64_t)1, ack_count));
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  GlobalSynStats — đếm tổng SYN toàn hệ thống trong sliding window
+//
+//  Detect distributed flood mà per-IP và per-DST đều bỏ sót
+//  (vd: rate thấp mỗi dst nhưng tổng hệ thống rất cao)
+// ═══════════════════════════════════════════════════════════════════════════
+struct GlobalSynStats {
+    uint64_t  window_syns = 0;
+    uint64_t  total_syns  = 0;
+    TimePoint window_start;
+    std::mutex mu;
+
+    // Trả về true nếu window_syns vượt threshold
+    // Reset window tự động khi hết window_sec
+    bool record(uint64_t threshold, double window_sec) {
+        std::lock_guard<std::mutex> lk(mu);
+        const auto now = Clock::now();
+
+        if (window_start == TimePoint{})
+            window_start = now;
+
+        const double elapsed = std::chrono::duration<double>(
+            now - window_start).count();
+
+        if (elapsed > window_sec) {
+            window_syns  = 0;
+            window_start = now;
+        }
+
+        ++window_syns;
+        ++total_syns;
+        return (window_syns >= threshold);
+    }
+
+    uint64_t getWindowSyns() const {
+        return window_syns;   // đọc không lock — chỉ dùng cho logging
+    }
+
+    void reset() {
+        std::lock_guard<std::mutex> lk(mu);
+        window_syns  = 0;
+        window_start = Clock::now();
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  IpTracker
 // ═══════════════════════════════════════════════════════════════════════════
 class IpTracker {
 public:
@@ -99,16 +163,36 @@ public:
     static constexpr double SCAN_IDLE_RESET_SEC = 300.0;
     static constexpr size_t MAX_TRACKED_IP      = 65536;
 
-    // Thực thi callback(IpStats&) trong lock, tạo entry nếu chưa có
-    // Trả về false nếu bảng đầy và IP chưa tồn tại
-    bool withStats(uint32_t src_ip,
-                   const std::function<void(IpStats&)>& fn);
-
+    bool   withStats(uint32_t src_ip,
+                     const std::function<void(IpStats&)>& fn);
     size_t cleanup(double idle_sec = 60.0);
-    size_t size()  const;
+    size_t size() const;
+
+    // Singleton global SYN counter — dùng chung toàn bộ engine
+    static GlobalSynStats& globalSyn() {
+        static GlobalSynStats s;
+        return s;
+    }
+
+private:
+    mutable std::mutex                     mutex_;
+    std::unordered_map<uint32_t, IpStats>  table_;
+    std::unordered_map<uint32_t, TimePoint> last_seen_;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  DstTracker — giống IpTracker nhưng key = dst_ip
+//  Mỗi SignatureEngine instance có 1 DstTracker riêng (không cần singleton)
+// ═══════════════════════════════════════════════════════════════════════════
+class DstTracker {
+public:
+    bool   withStats(uint32_t dst_ip,
+                     const std::function<void(DstStats&)>& fn);
+    size_t cleanup(double idle_sec = 60.0);
+    size_t size() const;
 
 private:
     mutable std::mutex                      mutex_;
-    std::unordered_map<uint32_t, IpStats>   table_;
+    std::unordered_map<uint32_t, DstStats>  table_;
     std::unordered_map<uint32_t, TimePoint> last_seen_;
 };
