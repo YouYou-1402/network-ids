@@ -68,10 +68,12 @@
     "ae_model_path":  "/media/linhlinh/learn/nckh/network-ids/models/autoencoder_ids_model_v8.onnx",
     "scaler_path":    "/media/linhlinh/learn/nckh/network-ids/models/scaler.bin",
     "xgb_threshold":  0.50,
-    "ae_threshold":   0.30,
-    "min_confidence": 0.45,
-    "xgb_weight":     0.65,
-    "ae_weight":      0.35
+    "ae_threshold":   0.10,
+    "ae_high_threshold": 0.85,
+    "min_confidence": 0.60,
+    "xgb_weight":     1.00,
+    "ae_weight":      0.00,
+    "alert_cooldown_sec": 10.0
   },
 
   "media_ports": {

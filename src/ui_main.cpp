@@ -1,4 +1,11 @@
-// src/ui_main.cpp
+// =============================================================================
+//  src/ui_main.cpp
+//
+//  Thay đổi so với phiên bản cũ:
+//    [XÓA] 8 dòng convert MLCfg → MLConfig (duplicate)
+//    [ĐỔI] ml_engine.start(cfg.ml)  ← cfg.ml đã là MLConfig
+// =============================================================================
+
 #include "ui/qt/main_window.hpp"
 #include "analysis/alert_manager.hpp"
 #include "detection/dispatcher.hpp"
@@ -102,7 +109,6 @@ int main(int argc, char* argv[]) {
         LOG_INFO("FirewallManager: in-memory mode (no root)");
     }
 
-    // Load firewall rules từ path trong config
     const std::string fw_rules_path = cfg.firewall.rules_file;
     std::filesystem::create_directories(
         std::filesystem::path(fw_rules_path).parent_path());
@@ -153,17 +159,8 @@ int main(int argc, char* argv[]) {
         });
 
     if (cfg.ml_enabled) {
-        MLConfig ml_runtime;
-        ml_runtime.xgb_model_path = cfg.ml.xgb_model_path;
-        ml_runtime.ae_model_path  = cfg.ml.ae_model_path;   // "" = disabled
-        ml_runtime.scaler_path    = cfg.ml.scaler_path;     // "" = identity
-        ml_runtime.xgb_threshold  = cfg.ml.xgb_threshold;
-        ml_runtime.ae_threshold   = cfg.ml.ae_threshold;
-        ml_runtime.min_confidence = cfg.ml.min_confidence;
-        ml_runtime.xgb_weight     = cfg.ml.xgb_weight;
-        ml_runtime.ae_weight      = cfg.ml.ae_weight;
-
-        ml_engine.start(ml_runtime);
+        // ✅ cfg.ml đã là MLConfig — truyền thẳng, không cần convert
+        ml_engine.start(cfg.ml);
         LOG_INFO("MLEngine started:"
                  " xgb="    + cfg.ml.xgb_model_path
                + " ae="     + (cfg.ml.ae_model_path.empty()
@@ -174,7 +171,6 @@ int main(int argc, char* argv[]) {
         ml_engine.start(/*use_mock=*/true);
         LOG_INFO("MLEngine started in MOCK mode (ml_enabled=false in config)");
     }
-
 
     // ── 11. Dispatcher ────────────────────────────────────────────────────────
     Dispatcher dispatcher(cfg.system.num_workers, ring_buf, &ml_job_queue);
@@ -209,7 +205,6 @@ int main(int argc, char* argv[]) {
     dispatcher.stop();
     ml_engine.stop();
 
-    // Auto-save firewall rules
     if (firewall_manager->blacklistSize() + firewall_manager->whitelistSize() > 0) {
         if (firewall_manager->saveRules(fw_rules_path))
             LOG_INFO("Firewall rules auto-saved → " + fw_rules_path);

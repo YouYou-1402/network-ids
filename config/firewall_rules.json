@@ -1,6 +1,20 @@
 [
   {
     "action": 1,
+    "comment": "Manual whitelist",
+    "dst_ip": "",
+    "dst_port": 0,
+    "id": 3,
+    "permanent": true,
+    "protocol": 0,
+    "source": 1,
+    "src_ip": "192.168.99.79",
+    "src_port": 0,
+    "ttl_sec": 0,
+    "type": 1
+  },
+  {
+    "action": 1,
     "comment": "Cloudflare DNS - allow UDP",
     "dst_ip": "",
     "dst_port": 0,

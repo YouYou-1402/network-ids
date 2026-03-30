@@ -204,6 +204,7 @@ set(ML_SOURCES
 set(ML_HEADERS
     src/ml/feature_extractor.hpp
     src/ml/onnx_model.hpp
+    src/ml/ml_config.hpp
     src/ml/ml_engine.hpp
     src/ml/data_queue.hpp
     src/ml/feedback_loop.hpp

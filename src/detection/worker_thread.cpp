@@ -1,3 +1,4 @@
+// src/detection/worker_thread.cpp
 #include "worker_thread.hpp"
 #include "../common/logger.hpp"
 #include "../common/metrics.hpp"
@@ -97,7 +98,44 @@ bool WorkerThread::enqueue(PacketInfo pkt) {
     return false;
 }
 
-// ─── run ──────────────────────────────────────────────────────────────────────
+// =============================================================================
+//  isPrivateIP
+//
+//  Kiểm tra IP có thuộc RFC1918 / loopback không.
+//  Tham số ip_be: network byte order (big-endian) — giống pkt.src_ip/dst_ip.
+//
+//  RFC1918 ranges:
+//    10.0.0.0/8        (0x0A000000)
+//    172.16.0.0/12     (0xAC100000 – 0xAC1FFFFF)
+//    192.168.0.0/16    (0xC0A80000)
+//    127.0.0.0/8       (loopback — phòng trường hợp test local)
+//
+//  Dùng trong shouldSampleForML() để phân biệt:
+//    Port scan vào nội bộ : dst_ip là RFC1918  → sample tại n=1
+//    Client ra CDN/Internet: dst_ip là public  → KHÔNG sample tại n=1
+//
+//  Lý do cần hàm này (không dùng is_initiator hay src_port):
+//    hping3 --rand-source -p 443 : is_initiator=TRUE, src_port>=1024, dst=RFC1918
+//    Client → CDN:443            : is_initiator=TRUE, src_port>=1024, dst=PUBLIC
+//    → Chỉ dst_ip phân biệt được hai trường hợp.
+//
+//  Inline vì:
+//    - Chỉ dùng trong file này
+//    - Gọi mỗi packet trong hot path
+//    - Compiler có thể optimize thành 4 branch-free comparisons
+// =============================================================================
+static inline bool isPrivateIP(uint32_t ip_be) {
+    const uint32_t ip = ntohl(ip_be);
+    if ((ip & 0xFF000000u) == 0x0A000000u) return true;   // 10.0.0.0/8
+    if ((ip & 0xFFF00000u) == 0xAC100000u) return true;   // 172.16.0.0/12
+    if ((ip & 0xFFFF0000u) == 0xC0A80000u) return true;   // 192.168.0.0/16
+    if ((ip & 0xFF000000u) == 0x7F000000u) return true;   // 127.0.0.0/8
+    return false;
+}
+
+// =============================================================================
+//  run
+// =============================================================================
 void WorkerThread::run() {
     LOG_INFO("WorkerThread " + std::to_string(id_) + " running");
 
@@ -127,7 +165,9 @@ void WorkerThread::run() {
     }
 }
 
-// ─── processPacket ────────────────────────────────────────────────────────────
+// =============================================================================
+//  processPacket
+// =============================================================================
 void WorkerThread::processPacket(PacketInfo& pkt) {
 
     // ── 1. Parse nếu chưa parse ───────────────────────────────────────────────
@@ -316,7 +356,9 @@ void WorkerThread::processPacket(PacketInfo& pkt) {
     }
 }
 
-// ─── handleDetection ──────────────────────────────────────────────────────────
+// =============================================================================
+//  handleDetection
+// =============================================================================
 void WorkerThread::handleDetection(DetectionResult    result,
                                     DetectionSource    source,
                                     const PacketInfo&  pkt,
@@ -358,47 +400,138 @@ void WorkerThread::handleDetection(DetectionResult    result,
     if (on_alert_) on_alert_(ev);
 }
 
-// ─── shouldSampleForML ────────────────────────────────────────────────────────
+// =============================================================================
+//  shouldSampleForML
 //
-//  Chiến lược sampling:
-//    - Packet thứ 10       : snapshot đầu tiên (flow có đủ data cơ bản)
-//    - Mỗi 50 packets      : cập nhật định kỳ cho flow trẻ (< 200 pkts)
-//    - Mỗi 200 packets     : sample thưa hơn cho flow già (tránh spam queue)
+//  Quyết định có push flow snapshot vào MLJobQueue hay không.
 //
-//  Lý do KHÔNG push mỗi packet:
-//    - MLEngine inference ~1ms/job → 10K pps × 1ms = 10s backlog
-//    - Flow features thay đổi chậm → sampling đủ để detect
-// ─────────────────────────────────────────────────────────────────────────────
+//  ── Vấn đề với code cũ ────────────────────────────────────────────────────
+//
+//  Case [A] cũ:
+//    if (n==1 && syn>0 && ack==0 && fin==0) return true;
+//
+//  Trigger với CẢ HAI trường hợp:
+//    (a) hping3 --rand-source -p 443
+//        flow: RAND_IP:PORT → 192.168.100.95:443
+//        dst_ip = 192.168.100.95  ← RFC1918 (internal victim)
+//
+//    (b) Client mở HTTPS đến CDN (YouTube, Microsoft, ...)
+//        flow: 192.168.100.95:PORT → 142.250.197.130:443
+//        dst_ip = 142.250.197.130  ← public IP (external CDN)
+//
+//  Tại n=1, FeatureVector gần như rỗng:
+//    flow_duration ≈ 0  →  pkt_rate = normalize(∞) = max
+//    fwd_bytes = 0 (SYN không có payload)
+//    bwd_bytes = 0
+//    syn=1, ack=0
+//  → XGBoost: {syn=1, ack=0, pkt_rate=max, bytes=0} = PORT_SCAN (score=0.703)
+//    Đây là decision boundary cứng của tree — không phải coincidence.
+//
+//  ── Tại sao không dùng is_initiator hay src_port ──────────────────────────
+//
+//  Cả hai trường hợp đều có:
+//    is_initiator = TRUE  (cả 2 đều gửi SYN → createFlow() set TRUE)
+//    src_port >= 1024     (ephemeral port)
+//    scan_ports_seen.size() = 1  (hping3 --rand-source: mỗi src_ip random
+//                                 chỉ gửi 1 SYN → size=1, giống CDN client)
+//  → Không phân biệt được qua các field này.
+//
+//  ── Fix: isPrivateIP(dst_ip) ──────────────────────────────────────────────
+//
+//  Port scan vào nội bộ : dst_ip là RFC1918 → sample tại n=1 ✓
+//  Client ra CDN        : dst_ip là public  → KHÔNG sample tại n=1
+//                         → Chờ n=10 (case [B]) khi flow đã có đủ features
+//
+//  Tại n=10 với CDN flow:
+//    flow đã hoàn thành ít nhất 1 RTT (SYN→SYN-ACK→ACK→DATA)
+//    flow_duration > 0, fwd_bytes > 0, bwd_bytes > 0, ack_count > 0
+//    → Features có nghĩa → XGBoost classify đúng (BENIGN)
+//
+//  ── Edge cases ────────────────────────────────────────────────────────────
+//
+//  [E1] Attacker trong mạng nội bộ scan ra ngoài:
+//    src_ip = 192.168.x.x (compromised host), dst_ip = 1.2.3.4 (external)
+//    → dst_ip không phải RFC1918 → case [A] không trigger
+//    → NHƯNG: SignatureEngine::checkPortScan() vẫn chạy độc lập (L1)
+//    → Case [B] tại n=10 vẫn sample cho ML
+//    → Chấp nhận được: L1 đã cover, ML là layer bổ sung
+//
+//  [E2] Scan nội bộ đến nội bộ (lateral movement):
+//    src_ip = 192.168.x.x, dst_ip = 192.168.y.y
+//    → dst_ip là RFC1918 → case [A] trigger → sample tại n=1 ✓
+//
+//  [E3] hping3 --rand-source probe port lạ (không phải 443):
+//    dst_ip = 192.168.100.95 (internal) → case [A] trigger ✓
+//
+//  [E4] CDN dùng IP private (không thực tế nhưng phòng ngừa):
+//    Không tồn tại trong thực tế — CDN luôn dùng public IP.
+//
+//  ── Case [C]: SYN flood tích lũy ─────────────────────────────────────────
+//
+//  Guard isPrivateIP(dst_ip) tương tự case [A]:
+//    CDN server có thể có syn_no_ack tạm thời cao trong TLS session resumption
+//    → Nếu không guard, case [C] trigger với CDN flow → false positive
+//    → Guard: chỉ sample khi dst là internal host
+//
+// =============================================================================
 bool WorkerThread::shouldSampleForML(const FlowState& flow) const {
     const uint64_t n = flow.total_packets;
 
-    // [A] SYN-only flow: sample NGAY tại packet đầu tiên
-    // Bắt hping3 --rand-source: mỗi flow chỉ có 1 SYN packet
-    // Logic cũ: n==10 → KHÔNG BAO GIỜ đạt với rand-source flood
-    if (n == 1
-        && flow.syn_count  > 0
-        && flow.ack_count == 0
-        && flow.fin_count == 0)
+    // ── Case [A]: SYN-only flow ───────────────────────────────────────────────
+    //
+    // Bắt hping3 --rand-source: mỗi flow chỉ có đúng 1 SYN packet.
+    // Nếu không sample tại n=1, flow sẽ expire trước khi đạt n=10
+    // → bỏ sót hoàn toàn.
+    //
+    // Guard isPrivateIP(dst_ip):
+    //   dst_ip là RFC1918 → scan vào internal host → sample ✓
+    //   dst_ip là public  → outbound connection (CDN, API, ...) → skip
+    //
+    if (n == 1) {
+        // Chỉ cho phép sample n=1 nếu là quét cổng nội bộ (dst là Private IP)
+        if (isPrivateIP(flow.dst_ip)) {
+            return (flow.syn_count > 0 && flow.ack_count == 0);
+        }
+        // Nếu là YouTube/Facebook (Public IP), tuyệt đối đợi đến n=10 
+        // để các đặc trưng duration, byte_rate ổn định.
+        return false; 
+    }
+    // ── Case [C]: SYN flood tích lũy ─────────────────────────────────────────
+    //
+    // Bắt hping3 với IP cố định: 1 flow tích lũy nhiều SYN liên tục.
+    // syn_no_ack > 5: nhiều SYN gửi đi không nhận được ACK phản hồi.
+    //
+    // Guard isPrivateIP(dst_ip):
+    //   CDN có thể có syn_no_ack tạm thời > 5 trong quá trình
+    //   TLS session resumption / HTTP/2 multiplexing → false positive
+    //   → Chỉ sample khi dst là internal host.
+    //
+    if (flow.syn_no_ack   >  5
+        && n              %  5 == 0
+        && isPrivateIP(flow.dst_ip))
     {
         return true;
     }
 
-    // [C] SYN flood tích lũy: sample mỗi 5 packets khi có nhiều SYN no-ACK
-    // Bắt hping3 với IP cố định (1 flow nhiều packets)
-    if (flow.syn_no_ack > 5 && n % 5 == 0) {
-        return true;
-    }
-
-    // [B] Flow bình thường (giữ nguyên)
-    if (n == 10)                   return true;
-    if (n < 200  && n % 50  == 0)  return true;
-    if (n >= 200 && n % 200 == 0)  return true;
+    // ── Case [B]: Sampling định kỳ ───────────────────────────────────────────
+    //
+    // Không cần guard isPrivateIP ở đây:
+    //   - Tại n=10, flow đã có ít nhất 1 RTT hoàn chỉnh
+    //   - flow_duration > 0, fwd_bytes > 0, bwd_bytes > 0, ack_count > 0
+    //   - Features có nghĩa → XGBoost classify đúng cho cả internal và external
+    //   - CDN flow tại n=10: ack_count > 0, bwd_bytes > 0
+    //     → XGBoost không classify là PORT_SCAN
+    //
+    if (n == 10)                   return true;   // snapshot đầu tiên
+    if (n <  200 && n % 50  == 0)  return true;   // mỗi 50 pkts (flow trẻ)
+    if (n >= 200 && n % 200 == 0)  return true;   // mỗi 200 pkts (flow già)
 
     return false;
 }
 
-
-// ─── pushMLJob ────────────────────────────────────────────────────────────────
+// =============================================================================
+//  pushMLJob
+// =============================================================================
 void WorkerThread::pushMLJob(const PacketInfo&  pkt,
                               const FlowState&   flow,
                               const std::string& flow_key) {

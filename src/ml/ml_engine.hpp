@@ -1,13 +1,16 @@
 #pragma once
 // =============================================================================
-//  ml_engine.hpp
-//  MLEngine — worker thread: đọc MLJob từ queue, chạy XGBoost + AEClassifier,
-//             voting, emit MLResult qua callback.
+//  src/ml/ml_engine.hpp
+//
+//  Thay đổi so với phiên bản cũ:
+//    [XÓA] struct MLConfig định nghĩa ở đây
+//    [THÊM] #include "ml_config.hpp"  ← single source of truth
 // =============================================================================
 
 #ifndef ML_ENGINE_HPP
 #define ML_ENGINE_HPP
 
+#include "ml_config.hpp"            // MLConfig — định nghĩa duy nhất
 #include "data_queue.hpp"
 #include "onnx_model.hpp"           // OnnxXGBoost, OnnxAutoencoder, ModelOutput
 #include "feature_extractor.hpp"
@@ -19,9 +22,8 @@
 #include <string>
 
 // =============================================================================
-//  MLResult — kết quả tổng hợp từ XGBoost + AEClassifier
+//  MLResult — kết quả tổng hợp từ XGBoost + Autoencoder
 // =============================================================================
-
 struct MLResult {
     std::string     flow_key;
     uint32_t        src_ip    = 0;
@@ -41,26 +43,8 @@ struct MLResult {
 using MLAlertCallback = std::function<void(const MLResult&)>;
 
 // =============================================================================
-//  MLConfig
+//  EngineOutput — kết quả voting nội bộ
 // =============================================================================
-
-struct MLConfig {
-    std::string xgb_model_path;
-    std::string ae_model_path;
-    std::string scaler_path;
-
-    float xgb_threshold  = 0.5f;
-    float ae_threshold   = 0.5f;
-    float min_confidence = 0.6f;
-
-    float xgb_weight = 0.65f;
-    float ae_weight  = 0.35f;
-};
-
-// =============================================================================
-//  EngineOutput — kết quả voting nội bộ (dùng trong combineResults)
-// =============================================================================
-
 struct EngineOutput {
     bool        is_anomaly = false;
     float       score      = 0.f;
@@ -71,20 +55,18 @@ struct EngineOutput {
 // =============================================================================
 //  MLEngine
 // =============================================================================
-
 class MLEngine {
 public:
     MLEngine(MLJobQueue& job_queue, MLAlertCallback on_ml_alert);
     ~MLEngine();
 
-    // Non-copyable
     MLEngine(const MLEngine&)            = delete;
     MLEngine& operator=(const MLEngine&) = delete;
 
-    // Khởi động với config đầy đủ
+    /// Khởi động với config đầy đủ — dùng trong main.cpp và ui_main.cpp
     void start(const MLConfig& cfg);
 
-    // Backward compat
+    /// Backward compat — mock mode hoặc path trực tiếp
     void start(bool               use_mock    = true,
                const std::string& xgb_path    = "",
                const std::string& ae_path     = "",
@@ -92,41 +74,34 @@ public:
 
     void stop();
 
-    // Reload models tại runtime (thread-safe)
+    /// Reload models tại runtime (thread-safe)
     bool reloadModels(const MLConfig& cfg);
 
-    // Getters
-    bool     isRunning     () const { return running_;          }
-    uint64_t jobsProcessed () const { return jobs_processed_;   }
-    uint64_t anomaliesFound() const { return anomalies_found_;  }
-
+    bool     isRunning     () const { return running_;         }
+    uint64_t jobsProcessed () const { return jobs_processed_;  }
+    uint64_t anomaliesFound() const { return anomalies_found_; }
     std::string status() const;
 
 private:
     void     run();
     MLResult processJob(const MLJob& job);
 
-    // Voting logic
-    //
-    //  XGBoost  | AE       | Decision
-    //  ---------|----------|-------------------------------------------------
-    //  Attack   | Attack   | XGBoost label, HIGH   conf = xgb_w*xgb + ae_w*ae
-    //  Attack   | Benign   | XGBoost label, MEDIUM conf = xgb_score * 0.80
-    //  Benign   | Attack   | UNKNOWN_ANOMALY, LOW  conf = ae_score  * 0.60
-    //  Benign   | Benign   | NORMAL
-    //
+    // Voting logic:
+    //  XGBoost  | AE      | Decision
+    //  ---------|---------|---------------------------------------------------
+    //  Attack   | Attack  | XGBoost label, HIGH   conf = xgb_w*xgb + ae_w*ae
+    //  Attack   | Benign  | XGBoost label, MEDIUM conf = xgb_score * 0.80
+    //  Benign   | Attack  | UNKNOWN_ANOMALY, LOW  conf = ae_score  * 0.60
+    //  Benign   | Benign  | NORMAL
     EngineOutput combineVoting(const ModelOutput& xgb_out,
                                const ModelOutput& ae_out) const;
 
-    // Map label int → DetectionResult
     static DetectionResult labelToThreat(int label);
 
-    // ── Members ──────────────────────────────────────────────────────────
     MLJobQueue&       job_queue_;
     MLAlertCallback   on_ml_alert_;
     FeatureExtractor  extractor_;
 
-    // ✅ Dùng trực tiếp concrete types, KHÔNG dùng IModel
     std::unique_ptr<OnnxXGBoost>     xgb_model_;
     std::unique_ptr<OnnxAutoencoder> ae_model_;
 

@@ -1,3 +1,11 @@
+// =============================================================================
+//  src/common/config_loader.cpp
+//
+//  Thay đổi so với phiên bản cũ:
+//    [XÓA] Block parse "layer2"  — dead code
+//    [ĐỔI] Section "ml" parse vào AppConfig::ml (type MLConfig)
+// =============================================================================
+
 #include "config_loader.hpp"
 #include "logger.hpp"
 #include <fstream>
@@ -58,9 +66,9 @@ AppConfig ConfigLoader::load(const std::string& path) {
                                         std::string("eth0"));
         c.capture.bpf_filter     = jget(cap, "bpf_filter",
                                         std::string("tcp or udp"));
-        c.capture.snaplen        = jget(cap, "snaplen",        65535u);
+        c.capture.snaplen        = jget(cap, "snaplen",        (uint32_t)65535);
         c.capture.promiscuous    = jget(cap, "promiscuous",    true);
-        c.capture.ring_buffer_mb = jget(cap, "ring_buffer_mb", 64u);
+        c.capture.ring_buffer_mb = jget(cap, "ring_buffer_mb", (uint32_t)64);
     }
 
     // ── token_bucket ──────────────────────────────────────────────────────
@@ -86,28 +94,20 @@ AppConfig ConfigLoader::load(const std::string& path) {
     if (root.contains("thresholds")) {
         const auto& t = root["thresholds"];
         auto& th = c.thresholds;
-
         th.flood_ratio               = jget(t, "flood_ratio",               0.5);
-        th.min_pkt_before_flood      = jget(t, "min_pkt_before_flood",
-                                            (uint64_t)20);
-        th.syn_no_complete           = jget(t, "syn_no_complete",           50u);
-        th.http_flood_req_per_window = jget(t, "http_flood_req_per_window",
-                                            (uint64_t)200);
+        th.min_pkt_before_flood      = jget(t, "min_pkt_before_flood",      (uint64_t)20);
+        th.syn_no_complete           = jget(t, "syn_no_complete",           (uint32_t)50);
+        th.http_flood_req_per_window = jget(t, "http_flood_req_per_window", (uint64_t)200);
         th.behavior_window_sec       = jget(t, "behavior_window_sec",       10.0);
-        th.port_scan_ports           = jget(t, "port_scan_ports",           20u);
-        th.port_scan_syn_no_ack_min  = jget(t, "port_scan_syn_no_ack_min",  25u);
-        th.dist_scan_src_threshold   = jget(t, "dist_scan_src_threshold",   10u);
+        th.port_scan_ports           = jget(t, "port_scan_ports",           (uint32_t)20);
+        th.port_scan_syn_no_ack_min  = jget(t, "port_scan_syn_no_ack_min",  (uint32_t)25);
+        th.dist_scan_src_threshold   = jget(t, "dist_scan_src_threshold",   (uint32_t)10);
         th.ip_tracker_window_sec     = jget(t, "ip_tracker_window_sec",     30.0);
         th.ip_tracker_idle_cleanup   = jget(t, "ip_tracker_idle_cleanup",   60.0);
         th.scan_idle_reset_sec       = jget(t, "scan_idle_reset_sec",       300.0);
-        th.max_tracked_ip            = jget(t, "max_tracked_ip",
-                                            (size_t)65536);
-
-        // ── Distributed SYN flood (mới) ───────────────────────────────────
-        th.global_syn_threshold      = jget(t, "global_syn_threshold",
-                                            (uint64_t)2000);
-        th.dst_syn_ratio_min_pkt     = jget(t, "dst_syn_ratio_min_pkt",
-                                            (uint64_t)100);
+        th.max_tracked_ip            = jget(t, "max_tracked_ip",            (size_t)65536);
+        th.global_syn_threshold      = jget(t, "global_syn_threshold",      (uint64_t)2000);
+        th.dst_syn_ratio_min_pkt     = jget(t, "dst_syn_ratio_min_pkt",     (uint64_t)100);
         th.dst_syn_ack_ratio         = jget(t, "dst_syn_ack_ratio",         10.0);
     }
 
@@ -116,32 +116,22 @@ AppConfig ConfigLoader::load(const std::string& path) {
         const auto& src = root.contains("signatures")
                           ? root["signatures"]
                           : root.value("thresholds", json{});
-        c.signatures.flood_ratio              = jget(src, "flood_ratio",
-                                                     0.5);
-        c.signatures.port_scan_ports          = jget(src, "port_scan_ports",
-                                                     20u);
-        c.signatures.port_scan_syn_no_ack_min = jget(src,
-                                                     "port_scan_syn_no_ack_min",
-                                                     25u);
-        c.signatures.min_pkt_before_flood     = jget(src,
-                                                     "min_pkt_before_flood",
-                                                     (uint64_t)20);
+        c.signatures.flood_ratio              = jget(src, "flood_ratio",              0.5);
+        c.signatures.port_scan_ports          = jget(src, "port_scan_ports",          (uint32_t)20);
+        c.signatures.port_scan_syn_no_ack_min = jget(src, "port_scan_syn_no_ack_min", (uint32_t)25);
+        c.signatures.min_pkt_before_flood     = jget(src, "min_pkt_before_flood",     (uint64_t)20);
     }
 
     // ── protocol_anomaly ──────────────────────────────────────────────────
     if (root.contains("protocol_anomaly")) {
-        const auto& pa = root["protocol_anomaly"];
-        auto& out = c.protocol_anomaly;
-        out.http_header_timeout_sec    = jget(pa, "http_header_timeout_sec",
-                                              30.0);
-        out.min_bytes_per_sec          = jget(pa, "min_bytes_per_sec",  50.0);
-        out.max_concurrent_conn        = jget(pa, "max_concurrent_conn", 50u);
-        out.slowloris_conn_min         = jget(pa, "slowloris_conn_min",  30u);
-        out.slow_post_duration_min_sec = jget(pa,
-                                              "slow_post_duration_min_sec",
-                                              60.0);
-        out.win_zero_count_threshold   = jget(pa, "win_zero_count_threshold",
-                                              5u);
+        const auto& pa  = root["protocol_anomaly"];
+        auto&       out = c.protocol_anomaly;
+        out.http_header_timeout_sec    = jget(pa, "http_header_timeout_sec",    30.0);
+        out.min_bytes_per_sec          = jget(pa, "min_bytes_per_sec",          50.0);
+        out.max_concurrent_conn        = jget(pa, "max_concurrent_conn",        (uint32_t)50);
+        out.slowloris_conn_min         = jget(pa, "slowloris_conn_min",         (uint32_t)30);
+        out.slow_post_duration_min_sec = jget(pa, "slow_post_duration_min_sec", 60.0);
+        out.win_zero_count_threshold   = jget(pa, "win_zero_count_threshold",   (uint32_t)5);
         if (pa.contains("http_ports") && pa["http_ports"].is_array())
             for (auto& p : pa["http_ports"])
                 out.http_ports.push_back(p.get<uint16_t>());
@@ -152,8 +142,7 @@ AppConfig ConfigLoader::load(const std::string& path) {
     // ── media_ports ───────────────────────────────────────────────────────
     if (root.contains("media_ports")) {
         const auto& mp = root["media_ports"];
-        auto parsePortList = [&](const std::string& key)
-                             -> std::vector<uint16_t> {
+        auto parsePortList = [&](const std::string& key) -> std::vector<uint16_t> {
             std::vector<uint16_t> ports;
             if (mp.contains(key) && mp[key].is_array())
                 for (auto& p : mp[key])
@@ -164,48 +153,46 @@ AppConfig ConfigLoader::load(const std::string& path) {
         c.media_ports.stun = parsePortList("stun");
         if (mp.contains("rtp_heuristic")) {
             const auto& rtp = mp["rtp_heuristic"];
-            c.media_ports.rtp_heuristic.enabled =
-                jget(rtp, "enabled", true);
-            c.media_ports.rtp_heuristic.min_pkt_size =
-                jget(rtp, "min_pkt_size", 28u);
-            c.media_ports.rtp_heuristic.max_pkt_size =
-                jget(rtp, "max_pkt_size", 1400u);
+            c.media_ports.rtp_heuristic.enabled      = jget(rtp, "enabled",      true);
+            c.media_ports.rtp_heuristic.min_pkt_size = jget(rtp, "min_pkt_size", (uint32_t)28);
+            c.media_ports.rtp_heuristic.max_pkt_size = jget(rtp, "max_pkt_size", (uint32_t)1400);
         }
+    }
+
+    // ── ml ────────────────────────────────────────────────────────────────
+    //  NOTE: AppConfig::ml là MLConfig (không phải MLCfg cũ).
+    //  KHÔNG còn block "layer2" — đã xóa (dead code).
+    if (root.contains("ml")) {
+        const auto& m = root["ml"];
+        c.ml.xgb_model_path = jget(m, "xgb_model_path", std::string(""));
+        c.ml.ae_model_path  = jget(m, "ae_model_path",  std::string(""));
+        c.ml.scaler_path    = jget(m, "scaler_path",    std::string(""));
+        c.ml.xgb_threshold  = jget(m, "xgb_threshold",  0.50f);
+        c.ml.ae_threshold   = jget(m, "ae_threshold",   0.10f);
+        c.ml.min_confidence = jget(m, "min_confidence", 0.60f);
+        c.ml.xgb_weight     = jget(m, "xgb_weight",     1.00f);
+        c.ml.ae_weight      = jget(m, "ae_weight",      0.00f);
+        c.ml.ae_high_threshold  = jget(m, "ae_high_threshold",  0.85f);
+        c.ml.alert_cooldown_sec = jget(m, "alert_cooldown_sec", 10.0f);
     }
 
     // ── firewall ──────────────────────────────────────────────────────────
     if (root.contains("firewall")) {
         const auto& fw = root["firewall"];
-        c.firewall.rules_file =
-            jget(fw, "rules_file",
-                 std::string("/media/linhlinh/learn/nckh/network-ids/config/firewall_rules.json"));
+        c.firewall.rules_file         = jget(fw, "rules_file",
+                                             std::string("config/firewall_rules.json"));
         c.firewall.use_nftables       = jget(fw, "use_nftables",       false);
         c.firewall.auto_block_enabled = jget(fw, "auto_block_enabled", true);
-        c.firewall.block_duration_sec = jget(fw, "block_duration_sec", 300u);
+        c.firewall.block_duration_sec = jget(fw, "block_duration_sec", (uint32_t)300);
     }
 
     // ── logging ───────────────────────────────────────────────────────────
     if (root.contains("logging")) {
         const auto& lg = root["logging"];
         c.logging.level  = jget(lg, "level",  std::string("INFO"));
-        c.logging.max_mb = jget(lg, "max_mb", 100u);
-        c.logging.rotate = jget(lg, "rotate", 5u);
+        c.logging.max_mb = jget(lg, "max_mb", (uint32_t)100);
+        c.logging.rotate = jget(lg, "rotate", (uint32_t)5);
     }
-
-        // ── ml ────────────────────────────────────────────────────────────────
-    if (root.contains("ml")) {
-        const auto& m = root["ml"];
-        c.ml.xgb_model_path = jget(m, "xgb_model_path",
-                                   std::string("models/xgboost_ids_model.onnx"));
-        c.ml.ae_model_path  = jget(m, "ae_model_path",  std::string(""));
-        c.ml.scaler_path    = jget(m, "scaler_path",    std::string(""));
-        c.ml.xgb_threshold  = jget(m, "xgb_threshold",  0.5f);
-        c.ml.ae_threshold   = jget(m, "ae_threshold",   0.1f);
-        c.ml.min_confidence = jget(m, "min_confidence", 0.6f);
-        c.ml.xgb_weight     = jget(m, "xgb_weight",     1.0f);
-        c.ml.ae_weight      = jget(m, "ae_weight",       0.0f);
-    }
-
 
     // ── whitelist ─────────────────────────────────────────────────────────
     if (root.contains("whitelist") && root["whitelist"].contains("ips"))
@@ -227,7 +214,6 @@ AppConfig ConfigLoader::load(const std::string& path) {
 
 const AppConfig& ConfigLoader::get() {
     if (!loaded_)
-        throw std::runtime_error(
-            "ConfigLoader::get() called before load()");
+        throw std::runtime_error("ConfigLoader::get() called before load()");
     return cfg_;
 }

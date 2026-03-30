@@ -1,5 +1,14 @@
 // =============================================================================
-//  ml_engine.cpp
+//  src/ml/ml_engine.cpp
+//
+//  Fix so với phiên bản cũ:
+//    [FIX-1] run(): VOTE:LOW chỉ alert khi score >= min_confidence
+//            (không dùng ae_threshold=0.10 làm ngưỡng alert nữa)
+//    [FIX-2] combineVoting(): khi XGB=BENIGN + AE=Attack,
+//            yêu cầu ae_score >= ae_high_threshold (0.85) mới là anomaly
+//    [FIX-3] processJob(): TLS suppression — dst_port 443 + XGB=BENIGN
+//            → reset AE result về BENIGN (AE không reliable với encrypted)
+//    [FIX-4] run(): alert_cooldown_map — dedup per flow_key / 10 giây
 // =============================================================================
 
 #include "ml_engine.hpp"
@@ -7,6 +16,8 @@
 #include "../common/logger.hpp"
 #include <sstream>
 #include <iomanip>
+#include <unordered_map>
+#include <chrono>
 
 // =============================================================================
 //  Constructor / Destructor
@@ -61,7 +72,6 @@ void MLEngine::start(const MLConfig& cfg) {
     thread_  = std::thread(&MLEngine::run, this);
 }
 
-
 void MLEngine::start(bool               use_mock,
                      const std::string& xgb_path,
                      const std::string& ae_path,
@@ -77,14 +87,11 @@ void MLEngine::start(bool               use_mock,
 
 // =============================================================================
 //  stop
-//  ✅ RingBuffer KHÔNG có shutdown() → dùng running_=false + timeout pop
 // =============================================================================
 
 void MLEngine::stop() {
     if (!running_) return;
     running_ = false;
-    // Không gọi shutdown() — RingBuffer::pop() tự timeout sau 200ms
-    // → worker thread check running_=false và thoát
     if (thread_.joinable())
         thread_.join();
     LOG_INFO("MLEngine stopped. jobs=" + std::to_string(jobs_processed_)
@@ -92,7 +99,7 @@ void MLEngine::stop() {
 }
 
 // =============================================================================
-//  reloadModels — thread-safe swap
+//  reloadModels
 // =============================================================================
 
 bool MLEngine::reloadModels(const MLConfig& cfg) {
@@ -107,8 +114,6 @@ bool MLEngine::reloadModels(const MLConfig& cfg) {
         return false;
     }
 
-    // Swap — worker thread đang dùng isReady()/infer() nhưng
-    // unique_ptr swap là atomic trên x86; nếu cần strict safety thì dùng mutex
     xgb_model_ = std::move(new_xgb);
     ae_model_  = std::move(new_ae);
     cfg_       = cfg;
@@ -122,27 +127,69 @@ bool MLEngine::reloadModels(const MLConfig& cfg) {
 
 // =============================================================================
 //  run — worker loop
-//  ✅ RingBuffer::pop(timeout_ms) → std::optional<MLJob>
-//     Không có shutdown() → check running_ sau mỗi timeout
+//
+//  [FIX-1] Dùng min_confidence làm ngưỡng alert thống nhất.
+//          Trước đây VOTE:LOW dùng ae_threshold=0.10 → 0.577 > 0.10 → alert.
+//          Nay: 0.577 < min_confidence=0.60 → KHÔNG alert.
+//
+//  [FIX-4] alert_cooldown_map: per flow_key cooldown alert_cooldown_sec giây.
+//          Cùng flow_key chỉ trigger on_ml_alert_ tối đa 1 lần / 10 giây.
+//          → Triệt tiêu hoàn toàn duplicate alert trong log.
 // =============================================================================
 
 void MLEngine::run() {
     LOG_INFO("MLEngine worker thread started");
 
-    while (running_) {
-        // pop() block tối đa 200ms rồi trả nullopt → kiểm tra running_
-        std::optional<MLJob> opt = job_queue_.pop(200);
+    using Clock     = std::chrono::steady_clock;
+    using TimePoint = std::chrono::time_point<Clock>;
 
-        if (!opt.has_value())
-            continue;   // timeout → vòng lại check running_
+    // flow_key → thời điểm alert gần nhất
+    std::unordered_map<std::string, TimePoint> alert_cooldown_map;
+    auto last_cleanup = Clock::now();
+
+    while (running_) {
+        std::optional<MLJob> opt = job_queue_.pop(200);
+        if (!opt.has_value()) continue;
 
         MLResult result = processJob(*opt);
         ++jobs_processed_;
 
-        if (result.final_result != DetectionResult::NORMAL) {
-            ++anomalies_found_;
-            if (result.confidence >= cfg_.min_confidence && on_ml_alert_)
-                on_ml_alert_(result);
+        if (result.final_result == DetectionResult::NORMAL) continue;
+
+        // [FIX-1] Ngưỡng alert thống nhất = min_confidence
+        // VOTE:LOW: score = ae_score * 0.60 = 0.961 * 0.60 = 0.577
+        // 0.577 < 0.60 → skip → KHÔNG alert (fix false positive YouTube)
+        if (result.confidence < cfg_.min_confidence) continue;
+
+        ++anomalies_found_;
+        if (!on_ml_alert_) continue;
+
+        // [FIX-4] Cooldown check per flow_key
+        const auto now = Clock::now();
+        auto it = alert_cooldown_map.find(result.flow_key);
+        if (it != alert_cooldown_map.end()) {
+            const double elapsed =
+                std::chrono::duration<double>(now - it->second).count();
+            if (elapsed < static_cast<double>(cfg_.alert_cooldown_sec))
+                continue;   // Còn trong cooldown → bỏ qua
+            it->second = now;
+        } else {
+            alert_cooldown_map[result.flow_key] = now;
+        }
+
+        on_ml_alert_(result);
+
+        // Dọn cooldown map mỗi 60s để tránh memory leak
+        if (std::chrono::duration<double>(now - last_cleanup).count() > 60.0) {
+            for (auto it2 = alert_cooldown_map.begin();
+                 it2 != alert_cooldown_map.end(); ) {
+                const double age =
+                    std::chrono::duration<double>(now - it2->second).count();
+                it2 = (age > cfg_.alert_cooldown_sec * 2.0f)
+                    ? alert_cooldown_map.erase(it2)
+                    : std::next(it2);
+            }
+            last_cleanup = now;
         }
     }
 
@@ -151,9 +198,24 @@ void MLEngine::run() {
 
 // =============================================================================
 //  processJob
-//  ✅ job.features là FeatureVector → dùng extractor_.normalizeRaw()
-//     rồi mới truyền std::array<float, SIZE> vào infer()
+//
+//  [FIX-3] TLS/HTTPS suppression:
+//    Điều kiện: (dst_port hoặc src_port là TLS port) VÀ XGB=BENIGN
+//    Hành động: reset ae_result về default BENIGN (score=0)
+//    Lý do: AE được train trên plaintext traffic.
+//           TLS payload = encrypted bytes → entropy cao → reconstruction
+//           error cao → AE nhầm thành PORT_SCAN (pattern ngắn, varied bytes).
+//           Khi XGB (supervised, train trên labeled data) đã nói BENIGN,
+//           ta tin XGB hơn AE trong trường hợp TLS.
 // =============================================================================
+
+static constexpr std::array<uint16_t, 6> TLS_PORTS = {
+    443, 8443, 9443, 465, 993, 995
+};
+static bool isTlsPort(uint16_t port) {
+    for (auto p : TLS_PORTS) if (p == port) return true;
+    return false;
+}
 
 MLResult MLEngine::processJob(const MLJob& job) {
     MLResult result;
@@ -164,25 +226,42 @@ MLResult MLEngine::processJob(const MLJob& job) {
     result.dst_port  = job.dst_port;
     result.timestamp = job.timestamp;
 
-    // FeatureVector → std::array<float, SIZE> (normalize nếu scaler loaded)
     const std::array<float, FeatureVector::SIZE> features =
         extractor_.scalerLoaded()
-            ? extractor_.normalizeRaw(job.features)   // z-score normalize
-            : job.features.toArray();                  // raw fallback
+            ? extractor_.normalizeRaw(job.features)
+            : job.features.toArray();
 
-    // Run XGBoost
     if (xgb_model_ && xgb_model_->isReady())
         result.xgb_result = xgb_model_->infer(features);
 
-    // Run AEClassifier
     if (ae_model_ && ae_model_->isReady())
         result.ae_result = ae_model_->infer(features);
 
-    // Voting
-    EngineOutput ev   = combineVoting(result.xgb_result, result.ae_result);
-    result.confidence = ev.score;
+    // [FIX-3] TLS suppression
+    const bool is_tls = isTlsPort(job.dst_port) || isTlsPort(job.src_port);
+    if (is_tls && result.xgb_result.label == MODEL_LABEL_BENIGN) {
+        result.ae_result = ModelOutput{};   // reset về BENIGN, score=0
+        LOG_DEBUG("MLEngine: TLS port " + std::to_string(job.dst_port)
+                  + " + XGB=BENIGN → AE suppressed [" + job.flow_key + "]");
+    }
+
+    // TLS Suppression mở rộng:
+    bool is_tls_port = (job.dst_port == 443 || job.src_port == 443);
+    
+    // Nếu là cổng TLS và XGBoost báo Port Scan với độ tin cậy không tuyệt đối (< 0.9)
+    if (is_tls_port && 
+        result.xgb_result.label == MODEL_LABEL_PORT_SCAN && 
+        result.xgb_result.score < 0.9f) 
+    {
+        result.final_result = DetectionResult::NORMAL;
+        result.confidence = 0.0f;
+        result.detail += " [Suppressed: Probable False Positive on TLS]";
+    }
+
+    EngineOutput ev     = combineVoting(result.xgb_result, result.ae_result);
+    result.confidence   = ev.score;
     result.final_result = labelToThreat(ev.label);
-    result.detail     = ev.detail;
+    result.detail       = ev.detail;
 
     return result;
 }
@@ -190,12 +269,25 @@ MLResult MLEngine::processJob(const MLJob& job) {
 // =============================================================================
 //  combineVoting
 //
-//  XGBoost  | AE      | Confidence
-//  ---------|---------|------------------------------------------
-//  Attack   | Attack  | HIGH   = xgb_w*xgb_score + ae_w*ae_score
-//  Attack   | Benign  | MEDIUM = xgb_score * 0.80
-//  Benign   | Attack  | LOW    = ae_score  * 0.60
-//  Benign   | Benign  | NORMAL = 0.0
+//  [FIX-2] VOTE:LOW case (XGB=BENIGN, AE=Attack):
+//    Trước: is_anomaly = (ae_score * 0.60 >= ae_threshold=0.10) → luôn TRUE
+//    Sau:   is_anomaly = (ae_score >= ae_high_threshold=0.85)
+//           score = ae_confident ? ae_score * 0.60 : 0.0
+//
+//  Ví dụ từ log:
+//    AE score=0.961 → 0.961 >= 0.85 → ae_confident=true
+//    score = 0.961 * 0.60 = 0.577
+//    Nhưng 0.577 < min_confidence=0.60 → bị chặn ở run() [FIX-1]
+//    → KHÔNG alert ✅
+//
+//  Bảng voting đầy đủ:
+//    XGBoost  | AE           | Result
+//    ---------|--------------|------------------------------------------
+//    Attack   | Attack       | HIGH   = xgb_w*xgb + ae_w*ae
+//    Attack   | Benign       | MEDIUM = xgb_score * 0.80
+//    Benign   | Attack≥0.85  | LOW    = ae_score  * 0.60
+//    Benign   | Attack<0.85  | NORMAL = 0.0  (suppress weak AE signal)
+//    Benign   | Benign       | NORMAL = 0.0
 // =============================================================================
 
 EngineOutput MLEngine::combineVoting(const ModelOutput& xgb_out,
@@ -206,7 +298,6 @@ EngineOutput MLEngine::combineVoting(const ModelOutput& xgb_out,
     const bool xgb_ready = xgb_model_ && xgb_model_->isReady();
     const bool ae_ready  = ae_model_  && ae_model_->isReady();
 
-    // ── Không model nào ready ─────────────────────────────────────────────
     if (!xgb_ready && !ae_ready) {
         ev.label  = MODEL_LABEL_BENIGN;
         ev.score  = 0.f;
@@ -214,7 +305,6 @@ EngineOutput MLEngine::combineVoting(const ModelOutput& xgb_out,
         return ev;
     }
 
-    // ── Chỉ 1 model ready ────────────────────────────────────────────────
     if (xgb_ready && !ae_ready) {
         ev.is_anomaly = xgb_out.is_anomaly;
         ev.label      = xgb_out.label;
@@ -223,39 +313,46 @@ EngineOutput MLEngine::combineVoting(const ModelOutput& xgb_out,
         return ev;
     }
     if (!xgb_ready && ae_ready) {
-        ev.is_anomaly = ae_out.is_anomaly;
-        ev.label      = ae_out.label;
-        ev.score      = ae_out.score * 0.60f;   // AE alone → lower conf
+        // [FIX-2] AE alone: yêu cầu score >= ae_high_threshold
+        const bool ae_confident = (ae_out.score >= cfg_.ae_high_threshold);
+        ev.is_anomaly = ae_out.is_anomaly && ae_confident;
+        ev.label      = ae_confident ? ae_out.label : MODEL_LABEL_BENIGN;
+        ev.score      = ae_confident ? ae_out.score * 0.60f : 0.f;
         ev.detail     = "[AE only] " + ae_out.detail;
         return ev;
     }
 
-    // ── Cả 2 ready → weighted voting ─────────────────────────────────────
+    // Cả 2 ready
     const bool xgb_attack = (xgb_out.label != MODEL_LABEL_BENIGN);
     const bool ae_attack  = (ae_out.label  != MODEL_LABEL_BENIGN);
 
     std::ostringstream oss;
 
     if (xgb_attack && ae_attack) {
-        ev.label      = xgb_out.label;   // XGBoost label ưu tiên (supervised)
+        // Cả 2 đồng thuận → HIGH
+        ev.label      = xgb_out.label;
         ev.score      = cfg_.xgb_weight * xgb_out.score
                       + cfg_.ae_weight  * ae_out.score;
         ev.is_anomaly = true;
         oss << "[VOTE:HIGH] ";
 
     } else if (xgb_attack && !ae_attack) {
+        // Chỉ XGB → MEDIUM
         ev.label      = xgb_out.label;
         ev.score      = xgb_out.score * 0.80f;
         ev.is_anomaly = (ev.score >= cfg_.xgb_threshold);
         oss << "[VOTE:MED] ";
 
     } else if (!xgb_attack && ae_attack) {
-        ev.label      = ae_out.label;
-        ev.score      = ae_out.score * 0.60f;
-        ev.is_anomaly = (ev.score >= cfg_.ae_threshold);
-        oss << "[VOTE:LOW] ";
+        // [FIX-2] Chỉ AE → LOW, nhưng chỉ khi AE đủ chắc (>= ae_high_threshold)
+        const bool ae_confident = (ae_out.score >= cfg_.ae_high_threshold);
+        ev.label      = ae_confident ? ae_out.label : MODEL_LABEL_BENIGN;
+        ev.score      = ae_confident ? ae_out.score * 0.60f : 0.f;
+        ev.is_anomaly = ae_confident;
+        oss << (ae_confident ? "[VOTE:LOW] " : "[VOTE:NORM] ");
 
     } else {
+        // Cả 2 BENIGN → NORMAL
         ev.label      = MODEL_LABEL_BENIGN;
         ev.score      = 0.f;
         ev.is_anomaly = false;
@@ -293,16 +390,18 @@ DetectionResult MLEngine::labelToThreat(int label) {
 std::string MLEngine::status() const {
     std::ostringstream oss;
     oss << "MLEngine:"
-        << "\n  XGBoost      : "
+        << "\n  XGBoost        : "
         << (xgb_model_ && xgb_model_->isReady() ? "READY" : "NOT LOADED")
-        << "\n  AEClassifier : "
+        << "\n  AEClassifier   : "
         << (ae_model_  && ae_model_->isReady()  ? "READY" : "NOT LOADED")
-        << "\n  Scaler       : "
-        << (extractor_.scalerLoaded() ? "LOADED" : "NOT LOADED (using raw features)")
-        << "\n  Weights      : xgb=" << cfg_.xgb_weight
+        << "\n  Scaler         : "
+        << (extractor_.scalerLoaded() ? "LOADED" : "NOT LOADED (raw features)")
+        << "\n  Weights        : xgb=" << cfg_.xgb_weight
         << " ae=" << cfg_.ae_weight
-        << "\n  Thresholds   : xgb=" << cfg_.xgb_threshold
+        << "\n  Thresholds     : xgb=" << cfg_.xgb_threshold
         << " ae=" << cfg_.ae_threshold
-        << "\n  Min conf     : " << cfg_.min_confidence;
+        << " ae_high=" << cfg_.ae_high_threshold
+        << "\n  Min confidence : " << cfg_.min_confidence
+        << "\n  Alert cooldown : " << cfg_.alert_cooldown_sec << "s";
     return oss.str();
 }

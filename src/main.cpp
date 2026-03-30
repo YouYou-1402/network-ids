@@ -1,4 +1,11 @@
-// src/main.cpp
+// =============================================================================
+//  src/main.cpp
+//
+//  Thay đổi so với phiên bản cũ:
+//    [XÓA] 8 dòng convert MLCfg → MLConfig (duplicate)
+//    [ĐỔI] ml_engine.start(cfg.ml)  ← cfg.ml đã là MLConfig
+// =============================================================================
+
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -49,7 +56,7 @@ static const char* alertColor(DetectionResult r) {
         case DetectionResult::DDOS_VOLUMETRIC: return "\033[31m";
         case DetectionResult::SLOW_DDOS:       return "\033[33m";
         case DetectionResult::PORT_SCAN:       return "\033[38;5;208m";
-        case DetectionResult::OTHER_ATTACK:       return "\033[35m";
+        case DetectionResult::OTHER_ATTACK:    return "\033[35m";
         default:                               return "\033[32m";
     }
 }
@@ -115,11 +122,11 @@ void flowCleanupThread(Dispatcher& dispatcher) {
 
 // ─── CLI args ─────────────────────────────────────────────────────────────────
 struct CliArgs {
-    std::string mode;        // -i hoặc -f
-    std::string target;      // interface hoặc pcap file
-    std::string config_path; // --config
-    bool        use_mock  = false;
-    bool        no_l2     = false;
+    std::string mode;
+    std::string target;
+    std::string config_path;
+    bool        use_mock = false;
+    bool        no_l2    = false;
 };
 
 bool parseArgs(int argc, char* argv[], CliArgs& cli) {
@@ -130,11 +137,9 @@ bool parseArgs(int argc, char* argv[], CliArgs& cli) {
 
     for (int i = 3; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--mock")               { cli.use_mock = true;  continue; }
-        if (arg == "--no-l2")              { cli.no_l2    = true;  continue; }
-        if (arg == "--config" && i+1 < argc) {
-            cli.config_path = argv[++i];   continue;
-        }
+        if (arg == "--mock")                 { cli.use_mock = true; continue; }
+        if (arg == "--no-l2")                { cli.no_l2    = true; continue; }
+        if (arg == "--config" && i+1 < argc) { cli.config_path = argv[++i]; continue; }
     }
     return true;
 }
@@ -253,26 +258,15 @@ int main(int argc, char* argv[]) {
 
     if (run_l2) {
         if (cli.use_mock) {
-            // Mock mode: không load model, chỉ chạy loop
             ml_engine.start(/*use_mock=*/true);
             LOG_INFO("Layer 2 ML started in MOCK mode");
         } else {
-            // Real mode: dùng MLConfig từ cfg.ml
-            MLConfig ml_runtime;
-            ml_runtime.xgb_model_path = cfg.ml.xgb_model_path;
-            ml_runtime.ae_model_path  = cfg.ml.ae_model_path;   // "" = disabled
-            ml_runtime.scaler_path    = cfg.ml.scaler_path;     // "" = identity
-            ml_runtime.xgb_threshold  = cfg.ml.xgb_threshold;
-            ml_runtime.ae_threshold   = cfg.ml.ae_threshold;
-            ml_runtime.min_confidence = cfg.ml.min_confidence;
-            ml_runtime.xgb_weight     = cfg.ml.xgb_weight;
-            ml_runtime.ae_weight      = cfg.ml.ae_weight;
-
-            ml_engine.start(ml_runtime);
+            // ✅ cfg.ml đã là MLConfig — truyền thẳng, không cần convert
+            ml_engine.start(cfg.ml);
             LOG_INFO("Layer 2 ML started:"
-                     " xgb="  + cfg.ml.xgb_model_path
-                   + " ae="   + (cfg.ml.ae_model_path.empty()
-                                 ? "disabled" : cfg.ml.ae_model_path)
+                     " xgb="    + cfg.ml.xgb_model_path
+                   + " ae="     + (cfg.ml.ae_model_path.empty()
+                                   ? "disabled" : cfg.ml.ae_model_path)
                    + " scaler=" + (cfg.ml.scaler_path.empty()
                                    ? "disabled" : cfg.ml.scaler_path));
         }
@@ -287,9 +281,8 @@ int main(int argc, char* argv[]) {
     PacketCapture capture;
     g_capture_ptr = &capture;
 
-    // Dùng interface/bpf_filter từ config, nhưng CLI target override interface
-    const std::string bpf = cfg.capture.bpf_filter;
-    const bool opened = (cli.mode == "-i")
+    const std::string bpf    = cfg.capture.bpf_filter;
+    const bool        opened = (cli.mode == "-i")
         ? capture.openLive   (cli.target, bpf)
         : capture.openOffline(cli.target, "");
 
