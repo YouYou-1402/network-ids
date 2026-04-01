@@ -609,7 +609,7 @@ void FirewallWidget::onLoadRules() {
               .arg(path)
               .arg(fw_->blacklistSize())
               .arg(fw_->whitelistSize())
-        : QString("❌  Load failed ← %1").arg(path));
+        : QString("Load failed ← %1").arg(path));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -626,9 +626,9 @@ void FirewallWidget::onRemoveBlacklistRow(int row) {
     const QString  ip = ip_item->text();
 
     if (fw_->removeRule(id))
-        emit statusMessage(QString("✅  Removed blacklist: %1").arg(ip));
+        emit statusMessage(QString("Removed blacklist: %1").arg(ip));
     else
-        emit statusMessage(QString("⚠️  Cannot remove rule #%1").arg(id));
+        emit statusMessage(QString("Cannot remove rule #%1").arg(id));
 
     refresh();
 }
@@ -642,9 +642,9 @@ void FirewallWidget::onRemoveWhitelistRow(int row) {
     const QString ip = ip_item->text();
 
     if (fw_->removeWhitelist(ip.toStdString()))
-        emit statusMessage(QString("✅  Removed whitelist: %1").arg(ip));
+        emit statusMessage(QString("Removed whitelist: %1").arg(ip));
     else
-        emit statusMessage(QString("⚠️  Cannot remove whitelist: %1").arg(ip));
+        emit statusMessage(QString("Cannot remove whitelist: %1").arg(ip));
 
     refresh();
 }
@@ -889,7 +889,7 @@ QString FirewallWidget::formatTtl(uint32_t ttl_sec, uint64_t created_at) {
     if (ttl_sec == 0) return "∞";
     const uint64_t now     = static_cast<uint64_t>(std::time(nullptr));
     const uint64_t expires = created_at + ttl_sec;
-    if (expires <= now) return "⌛ Expired";
+    if (expires <= now) return "Expired";
     const uint64_t rem = expires - now;
     if (rem >= 3600)
         return QString("%1h %2m").arg(rem / 3600).arg((rem % 3600) / 60);

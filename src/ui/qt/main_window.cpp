@@ -243,11 +243,11 @@ void MainWindow::setupUI() {
         "QTabBar::tab:hover:!selected { background: #dde0f8; color: #222244; }");
 
     // ── 5 tabs (bỏ Alerts) ────────────────────────────────────────────────────
-    tab_widget_->addTab(buildTab_LiveCapture(),  "📡  Live Capture");   // 0
-    tab_widget_->addTab(buildTab_FileAnalysis(), "📂  File Analysis");  // 1
-    tab_widget_->addTab(buildTab_IPS(),          "🛡️  IPS / Detection");// 2
-    tab_widget_->addTab(buildTab_Firewall(),     "🔥  Firewall");       // 3
-    tab_widget_->addTab(buildTab_Statistics(),   "📊  Statistics");     // 4
+    tab_widget_->addTab(buildTab_LiveCapture(),  "Live Capture");   // 0
+    tab_widget_->addTab(buildTab_FileAnalysis(), "File Analysis");  // 1
+    tab_widget_->addTab(buildTab_IPS(),          "IPS / Detection");// 2
+    tab_widget_->addTab(buildTab_Firewall(),     "Firewall");       // 3
+    tab_widget_->addTab(buildTab_Statistics(),   "Statistics");     // 4
 
     root->addWidget(tab_widget_, 1);
 }
@@ -286,8 +286,8 @@ QWidget* MainWindow::buildCaptureToolbar() {
 
     btn_start_cap_ = new QPushButton("▶  Start Capture", bar);
     btn_stop_cap_  = new QPushButton("■  Stop",          bar);
-    btn_save_cap_  = new QPushButton("💾  Save",         bar);
-    btn_clear_packets_ = new QPushButton("🗑  Clear", bar);
+    btn_save_cap_  = new QPushButton("Save",         bar);
+    btn_clear_packets_ = new QPushButton("Clear", bar);
 
     btn_stop_cap_->setEnabled(false);
     btn_save_cap_->setEnabled(false);
@@ -497,7 +497,7 @@ QWidget* MainWindow::buildTab_IPS() {
     right_lay->setSpacing(6);
     right_lay->setContentsMargins(0, 0, 0, 0);
 
-    auto* feed_label = new QLabel("🚨  Live Alert Feed", right);
+    auto* feed_label = new QLabel("Live Alert Feed", right);
     feed_label->setStyleSheet(
         "font-size: 13px; font-weight: bold; color: #3355cc;"
         "background: transparent; padding: 2px 0;");
@@ -538,7 +538,7 @@ QWidget* MainWindow::buildTab_Firewall() {
 //    ┌──────────────────────────────────────────┐
 //    │  [MetricsWidget — cards hàng ngang]      │  ← fixed height 120px
 //    ├──────────────────────────────────────────┤
-//    │  📈 Traffic Monitor                      │
+//    │  Traffic Monitor                         │
 //    │  [TrafficChart — chiếm phần còn lại]     │
 //    └──────────────────────────────────────────┘
 // ─────────────────────────────────────────────────────────────────────────────
@@ -550,7 +550,7 @@ QWidget* MainWindow::buildTab_Statistics() {
     layout->setContentsMargins(10, 10, 10, 10);
 
     // ── Chart label ───────────────────────────────────────────────────────────
-    auto* chart_label = new QLabel("📈  Traffic Monitor", container);
+    auto* chart_label = new QLabel("Traffic Monitor", container);
     chart_label->setStyleSheet(
         "font-size: 13px; font-weight: bold; color: #3355cc;"
         "background: transparent; padding: 2px 0;");
@@ -592,7 +592,7 @@ void MainWindow::setupMenuBar() {
             this, &MainWindow::onStopCaptureClicked);
     file_menu->addAction(act_stop_cap_);
 
-    act_save_cap_ = new QAction("💾  Save Capture As…", this);
+    act_save_cap_ = new QAction("Save Capture As…", this);
     act_save_cap_->setShortcut(QKeySequence("Ctrl+Shift+W"));
     act_save_cap_->setEnabled(false);
     connect(act_save_cap_, &QAction::triggered,
@@ -601,7 +601,7 @@ void MainWindow::setupMenuBar() {
 
     file_menu->addSeparator();
 
-    act_clear_packets_ = new QAction("🗑  Clear Packet Display", this);
+    act_clear_packets_ = new QAction("Clear Packet Display", this);
     act_clear_packets_->setShortcut(QKeySequence("Ctrl+L"));
     connect(act_clear_packets_, &QAction::triggered,
             this, &MainWindow::onClearPacketsClicked);
@@ -614,9 +614,9 @@ void MainWindow::setupMenuBar() {
     file_menu->addAction(quit_act);
 
     // ── IPS ───────────────────────────────────────────────────────────────────
-    auto* ips_menu = menuBar()->addMenu("🛡️  &IPS");
+    auto* ips_menu = menuBar()->addMenu("&IPS");
 
-    act_toggle_det_ = new QAction("🔍  Detection Engine: ENABLED", this);
+    act_toggle_det_ = new QAction("Detection Engine: ENABLED", this);
     act_toggle_det_->setShortcut(QKeySequence("Ctrl+D"));
     act_toggle_det_->setCheckable(true);
     act_toggle_det_->setChecked(true);
@@ -626,7 +626,7 @@ void MainWindow::setupMenuBar() {
             });
     ips_menu->addAction(act_toggle_det_);
 
-    act_toggle_ml_ = new QAction("🤖  ML Engine: ENABLED", this);
+    act_toggle_ml_ = new QAction("ML Engine: ENABLED", this);
     act_toggle_ml_->setShortcut(QKeySequence("Ctrl+M"));
     act_toggle_ml_->setCheckable(true);
     act_toggle_ml_->setChecked(true);
@@ -638,7 +638,7 @@ void MainWindow::setupMenuBar() {
 
     ips_menu->addSeparator();
 
-    auto* enable_all = new QAction("✅  Enable All Engines", this);
+    auto* enable_all = new QAction("Enable All Engines", this);
     connect(enable_all, &QAction::triggered, this, [this]() {
         if (ui_bridge_) {
             ui_bridge_->setDetectionEnabled(true);
@@ -647,7 +647,7 @@ void MainWindow::setupMenuBar() {
     });
     ips_menu->addAction(enable_all);
 
-    auto* disable_all = new QAction("⛔  Disable All Engines", this);
+    auto* disable_all = new QAction("Disable All Engines", this);
     connect(disable_all, &QAction::triggered, this, [this]() {
         if (ui_bridge_) {
             ui_bridge_->setDetectionEnabled(false);
@@ -672,11 +672,11 @@ void MainWindow::setupMenuBar() {
     // ── 5 tabs (bỏ Alerts) ────────────────────────────────────────────────────
     struct TabEntry { QString name; int idx; QString sc; };
     const TabEntry tabs[] = {
-        { "📡  Live Capture",    0, "Ctrl+1" },
-        { "📂  File Analysis",   1, "Ctrl+2" },
-        { "🛡️  IPS / Detection", 2, "Ctrl+3" },
-        { "🔥  Firewall",        3, "Ctrl+4" },
-        { "📊  Statistics",      4, "Ctrl+5" },
+        { "Live Capture",    0, "Ctrl+1" },
+        { "File Analysis",   1, "Ctrl+2" },
+        { "IPS / Detection", 2, "Ctrl+3" },
+        { "Firewall",        3, "Ctrl+4" },
+        { "Statistics",      4, "Ctrl+5" },
     };
     for (const auto& t : tabs) {
         auto* act = new QAction(t.name, this);
@@ -711,9 +711,9 @@ void MainWindow::setupMenuBar() {
 // ─── setupFirewallMenu ────────────────────────────────────────────────────────
 
 void MainWindow::setupFirewallMenu() {
-    auto* fw_menu = menuBar()->addMenu("🔥  &Firewall");
+    auto* fw_menu = menuBar()->addMenu("&Firewall");
 
-    act_fw_block_ = new QAction("⛔  Block IP…", this);
+    act_fw_block_ = new QAction("Block IP…", this);
     act_fw_block_->setShortcut(QKeySequence("Ctrl+B"));
     act_fw_block_->setEnabled(firewall_manager_ != nullptr);
     connect(act_fw_block_, &QAction::triggered, this, [this]() {
@@ -725,11 +725,11 @@ void MainWindow::setupFirewallMenu() {
         if (!ok || ip.trimmed().isEmpty()) return;
         ui_bridge_->blockIp(ip.trimmed(), "Manual block via menu");
         statusBar()->showMessage(
-            QString("⛔  Blocked: %1").arg(ip.trimmed()), 4000);
+            QString("Blocked: %1").arg(ip.trimmed()), 4000);
     });
     fw_menu->addAction(act_fw_block_);
 
-    act_fw_unblock_ = new QAction("✅  Unblock IP…", this);
+    act_fw_unblock_ = new QAction("Unblock IP…", this);
     act_fw_unblock_->setShortcut(QKeySequence("Ctrl+U"));
     act_fw_unblock_->setEnabled(firewall_manager_ != nullptr);
     connect(act_fw_unblock_, &QAction::triggered, this, [this]() {
@@ -741,13 +741,13 @@ void MainWindow::setupFirewallMenu() {
         if (!ok || ip.trimmed().isEmpty()) return;
         ui_bridge_->unblockIp(ip.trimmed());
         statusBar()->showMessage(
-            QString("✅  Unblocked: %1").arg(ip.trimmed()), 4000);
+            QString("Unblocked: %1").arg(ip.trimmed()), 4000);
     });
     fw_menu->addAction(act_fw_unblock_);
 
     fw_menu->addSeparator();
 
-    auto* act_flush = new QAction("🗑  Flush Blacklist", this);
+    auto* act_flush = new QAction("Flush Blacklist", this);
     act_flush->setEnabled(firewall_manager_ != nullptr);
     connect(act_flush, &QAction::triggered, this, [this]() {
         if (!firewall_manager_) return;
@@ -759,14 +759,14 @@ void MainWindow::setupFirewallMenu() {
         const auto rules = firewall_manager_->listBlacklist();
         for (const auto& r : rules) firewall_manager_->removeRule(r.id);
         statusBar()->showMessage(
-            QString("🗑  Flushed %1 blacklist rule(s)").arg(rules.size()),
+            QString("Flushed %1 blacklist rule(s)").arg(rules.size()),
             4000);
     });
     fw_menu->addAction(act_flush);
 
     fw_menu->addSeparator();
 
-    act_fw_save_ = new QAction("💾  Save Firewall Rules", this);
+    act_fw_save_ = new QAction("Save Firewall Rules", this);
     act_fw_save_->setShortcut(QKeySequence("Ctrl+Shift+F"));
     act_fw_save_->setEnabled(firewall_manager_ != nullptr);
     connect(act_fw_save_, &QAction::triggered, this, [this]() {
@@ -778,13 +778,13 @@ void MainWindow::setupFirewallMenu() {
         if (path.isEmpty()) return;
         statusBar()->showMessage(
             firewall_manager_->saveRules(path.toStdString())
-                ? QString("💾  Rules saved → %1").arg(path)
-                : QString("❌  Failed to save → %1").arg(path),
+                ? QString("Rules saved → %1").arg(path)
+                : QString("Failed to save → %1").arg(path),
             4000);
     });
     fw_menu->addAction(act_fw_save_);
 
-    auto* act_load = new QAction("📂  Load Firewall Rules…", this);
+    auto* act_load = new QAction("Load Firewall Rules…", this);
     act_load->setEnabled(firewall_manager_ != nullptr);
     connect(act_load, &QAction::triggered, this, [this]() {
         if (!firewall_manager_) return;
@@ -795,14 +795,14 @@ void MainWindow::setupFirewallMenu() {
         const bool ok = firewall_manager_->loadRules(path.toStdString());
         if (ok && firewall_tab_) firewall_tab_->refresh();
         statusBar()->showMessage(
-            ok ? QString("📂  Rules loaded ← %1").arg(path)
-               : QString("❌  Failed to load ← %1").arg(path),
+            ok ? QString("Rules loaded ← %1").arg(path)
+               : QString("Failed to load ← %1").arg(path),
             4000);
     });
     fw_menu->addAction(act_load);
 
     fw_menu->addSeparator();
-    auto* show_fw = new QAction("🔥  Show Firewall Tab", this);
+    auto* show_fw = new QAction("Show Firewall Tab", this);
     show_fw->setShortcut(QKeySequence("Ctrl+4"));
     connect(show_fw, &QAction::triggered, this,
             [this]() { tab_widget_->setCurrentIndex(3); });
@@ -836,13 +836,13 @@ void MainWindow::setupStatusBar() {
         "color: #3355cc; font-size: 11px; font-weight: bold;" + base_s);
     status_iface_->hide();
 
-    status_ips_mode_ = mkLabel("  🛡️ IPS  ",
+    status_ips_mode_ = mkLabel("IPS",
         "color: #116611; font-size: 11px; font-weight: bold;"
         "background: #e8f8e8; border: 1px solid #88cc88;"
         "border-radius: 3px; padding: 1px 6px;");
 
     status_fw_badge_ = mkLabel(
-        firewall_manager_ ? "  🔴 BL:0  🟢 WL:0  " : "  🔥 FW:OFF  ",
+        firewall_manager_ ? "  🔴 BL:0  🟢 WL:0  " : "FW:OFF  ",
         firewall_manager_
             ? "color: #884400; font-size: 11px; font-weight: bold;"
               "background: #fff4e0; border: 1px solid #ddaa44;"
@@ -870,16 +870,16 @@ void MainWindow::setupStatusBar() {
 void MainWindow::onDetectionToggled(bool enabled) {
     act_toggle_det_->setChecked(enabled);
     act_toggle_det_->setText(enabled
-        ? "🔍  Detection Engine: ENABLED"
-        : "🔍  Detection Engine: DISABLED");
+        ? "Detection Engine: ENABLED"
+        : "Detection Engine: DISABLED");
     updateIpsModeBadge();
 }
 
 void MainWindow::onMlToggled(bool enabled) {
     act_toggle_ml_->setChecked(enabled);
     act_toggle_ml_->setText(enabled
-        ? "🤖  ML Engine: ENABLED"
-        : "🤖  ML Engine: DISABLED");
+        ? "ML Engine: ENABLED"
+        : "ML Engine: DISABLED");
     updateIpsModeBadge();
 }
 
@@ -891,19 +891,19 @@ void MainWindow::updateIpsModeBadge() {
     Badge b;
 
     if (det && ml) {
-        b = { "🛡️ IPS",
+        b = { "IPS",
               "color:#116611;background:#e8f8e8;border:1px solid #88cc88;",
               "color:#00ff88;background:#0a2a0a;border:1px solid #226622;" };
     } else if (det) {
-        b = { "🔍 IDS",
+        b = { "IDS",
               "color:#114488;background:#e8eeff;border:1px solid #88aadd;",
               "color:#44aaff;background:#0a1a2a;border:1px solid #224466;" };
     } else if (ml) {
-        b = { "🤖 ML",
+        b = { "ML",
               "color:#551188;background:#f0e8ff;border:1px solid #aa88dd;",
               "color:#aa66ff;background:#1a0a2a;border:1px solid #663388;" };
     } else {
-        b = { "⛔ OFF",
+        b = { "OFF",
               "color:#884444;background:#fff0f0;border:1px solid #dd8888;",
               "color:#ff6666;background:#2a0a0a;border:1px solid #882222;" };
     }
@@ -1090,17 +1090,17 @@ void MainWindow::onAbout() {
         "Phân tích Mạng Dựa trên Công nghệ AI</i>"
         "<br><br>"
         "<b>Tabs:</b><br>"
-        "&nbsp;&nbsp;📡 <b>Live Capture</b> — bắt gói tin realtime<br>"
-        "&nbsp;&nbsp;📂 <b>File Analysis</b> — phân tích PCAP offline<br>"
-        "&nbsp;&nbsp;🛡️ <b>IPS/Detection</b> — quản lý engine + live alerts<br>"
-        "&nbsp;&nbsp;🔥 <b>Firewall</b> — blacklist / whitelist<br>"
-        "&nbsp;&nbsp;📊 <b>Statistics</b> — metrics cards & traffic chart<br>"
+        "&nbsp;&nbsp;<b>Live Capture</b> — bắt gói tin realtime<br>"
+        "&nbsp;&nbsp;<b>File Analysis</b> — phân tích PCAP offline<br>"
+        "&nbsp;&nbsp;<b>IPS/Detection</b> — quản lý engine + live alerts<br>"
+        "&nbsp;&nbsp;<b>Firewall</b> — blacklist / whitelist<br>"
+        "&nbsp;&nbsp;<b>Statistics</b> — metrics cards & traffic chart<br>"
         "<br>"
         "<b>IPS Modes:</b><br>"
-        "&nbsp;&nbsp;🛡️ <b>IPS</b> — Detection + ML enabled<br>"
-        "&nbsp;&nbsp;🔍 <b>IDS</b> — Detection only<br>"
-        "&nbsp;&nbsp;🤖 <b>ML</b>  — ML only<br>"
-        "&nbsp;&nbsp;⛔ <b>OFF</b> — Monitor only<br>"
+        "&nbsp;&nbsp;<b>IPS</b> — Detection + ML enabled<br>"
+        "&nbsp;&nbsp;<b>IDS</b> — Detection only<br>"
+        "&nbsp;&nbsp;<b>ML</b>  — ML only<br>"
+        "&nbsp;&nbsp;<b>OFF</b> — Monitor only<br>"
         "<br>"
         "<b>Firewall:</b><br>"
         "&nbsp;&nbsp;🔴 Blacklist — auto-block từ detection engine<br>"

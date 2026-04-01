@@ -1,7 +1,7 @@
 {
   "system": {
     "num_workers": 4,
-    "max_flows": 10000,
+    "max_flows": 100000,
     "flow_idle_timeout_sec": 300,
     "log_level": "INFO",
     "log_file": "logs/system.log",
@@ -71,8 +71,8 @@
     "ae_threshold":   0.10,
     "ae_high_threshold": 0.85,
     "min_confidence": 0.60,
-    "xgb_weight":     1.00,
-    "ae_weight":      0.00,
+    "xgb_weight":     0.65,
+    "ae_weight":      0.35,
     "alert_cooldown_sec": 10.0
   },
 

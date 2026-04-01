@@ -35,7 +35,7 @@ void MetricsWidget::setupUI() {
     root_layout->setContentsMargins(8, 8, 8, 8);
 
     // ── Header ────────────────────────────────────────────────────────────────
-    auto* header = new QLabel("📊  Stats", this);
+    auto* header = new QLabel("Stats", this);
     header->setStyleSheet(
         "QLabel { background: transparent;"
         "  color: #1a1a3e; font-weight: bold; font-size: 12px;"

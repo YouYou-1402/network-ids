@@ -266,7 +266,7 @@ void PacketDetailTree::showTCP(const uint8_t* data, uint32_t len) {
     const uint16_t dport = ntohs(tcp->th_dport);
     const QString  flags = flagsToString(tcp->th_flags);
 
-    auto* sec = addSection("🔗 Transmission Control Protocol",
+    auto* sec = addSection("Transmission Control Protocol",
         QString("%1 → %2  [%3]").arg(sport).arg(dport).arg(flags));
 
     addField(sec, "Source Port",      QString::number(sport),
@@ -305,7 +305,7 @@ void PacketDetailTree::showUDP(const uint8_t* data, uint32_t len) {
     const uint16_t sport = ntohs(udp->uh_sport);
     const uint16_t dport = ntohs(udp->uh_dport);
 
-    auto* sec = addSection("📡 User Datagram Protocol",
+    auto* sec = addSection("User Datagram Protocol",
         QString("%1 → %2").arg(sport).arg(dport));
 
     addField(sec, "Source Port",      QString::number(sport),
@@ -341,7 +341,7 @@ void PacketDetailTree::showICMP(const uint8_t* data, uint32_t len) {
         }
     };
 
-    auto* sec = addSection("🏓 Internet Control Message Protocol",
+    auto* sec = addSection("Internet Control Message Protocol",
                             typeStr(icmp->type));
 
     addField(sec, "Type",     typeStr(icmp->type));
@@ -368,7 +368,7 @@ void PacketDetailTree::showARP(const uint8_t* data, uint32_t len) {
                             (opcode == 2) ? "Reply (2)"   :
                             QString::number(opcode);
 
-    auto* sec = addSection("📋 Address Resolution Protocol", op_str);
+    auto* sec = addSection("Address Resolution Protocol", op_str);
 
     addField(sec, "Hardware Type",
              QString("0x%1").arg(
@@ -397,7 +397,7 @@ void PacketDetailTree::showARP(const uint8_t* data, uint32_t len) {
 void PacketDetailTree::showIPv6Stub(const uint8_t* data, uint32_t len) {
     if (len < 40) return;
 
-    auto* sec = addSection("🌐 Internet Protocol v6", "(IPv6)");
+    auto* sec = addSection("Internet Protocol v6", "(IPv6)");
     addField(sec, "Version",       "6");
     addField(sec, "Payload Length",
              QString::number(ntohs(
@@ -421,7 +421,7 @@ void PacketDetailTree::showIPv6Stub(const uint8_t* data, uint32_t len) {
 // ─── showFromFields ───────────────────────────────────────────────────────────
 void PacketDetailTree::showFromFields(const PacketInfo& pkt) {
     if (pkt.eth_type == 0x0806) {
-        auto* sec = addSection("📋 Address Resolution Protocol",
+        auto* sec = addSection("Address Resolution Protocol",
                                 "(from fields)");
         addField(sec, "EtherType", "ARP (0x0806)");
         return;
@@ -444,7 +444,7 @@ void PacketDetailTree::showFromFields(const PacketInfo& pkt) {
         addField(ip_sec, "Protocol", proto_str);
 
         if (pkt.protocol == IPPROTO_TCP) {
-            auto* tcp_sec = addSection("🔗 Transmission Control Protocol",
+            auto* tcp_sec = addSection("Transmission Control Protocol",
                 QString("%1 → %2  [%3]")
                     .arg(pkt.src_port)
                     .arg(pkt.dst_port)
@@ -460,7 +460,7 @@ void PacketDetailTree::showFromFields(const PacketInfo& pkt) {
                      QString::number(pkt.payload_len) + " bytes");
 
         } else if (pkt.protocol == IPPROTO_UDP) {
-            auto* udp_sec = addSection("📡 User Datagram Protocol",
+            auto* udp_sec = addSection("User Datagram Protocol",
                 QString("%1 → %2")
                     .arg(pkt.src_port).arg(pkt.dst_port));
 
@@ -473,7 +473,7 @@ void PacketDetailTree::showFromFields(const PacketInfo& pkt) {
 
         } else if (pkt.protocol == IPPROTO_ICMP) {
             auto* icmp_sec = addSection(
-                "🏓 Internet Control Message Protocol", "");
+                "Internet Control Message Protocol", "");
             addField(icmp_sec, "Type (src_port field)",
                      QString::number(pkt.src_port));
             addField(icmp_sec, "Code (dst_port field)",
@@ -496,7 +496,7 @@ void PacketDetailTree::showHTTP(QTreeWidgetItem* parent,
     if (!is_http) return;
 
     auto* sec = new QTreeWidgetItem(parent);
-    sec->setText(0, "🌍 Hypertext Transfer Protocol");
+    sec->setText(0, "Hypertext Transfer Protocol");
     sec->setForeground(0, QColor("#3355cc"));
     sec->setBackground(0, QColor("#f0f4ff"));
     QFont f = sec->font(0);
@@ -533,7 +533,7 @@ void PacketDetailTree::showDNS(QTreeWidgetItem* parent,
     const bool is_resp   = (flags & 0x8000) != 0;
 
     auto* sec = new QTreeWidgetItem(parent);
-    sec->setText(0, QString("🔍 Domain Name System (%1)")
+    sec->setText(0, QString("Domain Name System (%1)")
         .arg(is_resp ? "Response" : "Query"));
     sec->setForeground(0, QColor("#3355cc"));
     sec->setBackground(0, QColor("#f0f4ff"));
@@ -568,7 +568,7 @@ void PacketDetailTree::showDNS(QTreeWidgetItem* parent,
 
 // ─── showThreat ───────────────────────────────────────────────────────────────
 void PacketDetailTree::showThreat(const PacketInfo& record) {
-    auto* sec = addSection("🚨 IDS/IPS Detection",
+    auto* sec = addSection("IDS/IPS Detection",
         QString::fromStdString(record.threat_type));
     sec->setForeground(0, QColor("#cc2222"));
     sec->setBackground(0, QColor("#fff0f0"));

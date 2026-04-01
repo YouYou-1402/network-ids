@@ -264,7 +264,7 @@ void PcapTab::setupLiveLayout() {
     bot_split->addWidget(dh_split);
 
     // Traffic chart — wrap trong QGroupBox để có title
-    auto* chart_box = new QGroupBox("📈 Traffic Monitor", bot_split);
+    auto* chart_box = new QGroupBox("Traffic Monitor", bot_split);
     chart_box->setStyleSheet(
         "QGroupBox {"
         "  background: #ffffff;"
@@ -504,13 +504,13 @@ void PcapTab::loadFile(const QString& path) {
         path.toStdString(), dummy_ring_buf_,
         [](uint64_t, uint64_t, double) {}, nullptr);
 
-    if (!ok) { emit statusMessage("❌ Cannot open: " + path); return; }
+    if (!ok) { emit statusMessage("Cannot open: " + path); return; }
 
     uint64_t last_seq = 0;
     packet_model_->appendRecords(dummy_ring_buf_.pollNew(last_seq));
 
     emit titleChanged ("📂 " + QFileInfo(path).fileName());
-    emit statusMessage("✅ Loaded: " + path
+    emit statusMessage("Loaded: " + path
         + "  (" + QString::number(packet_model_->rowCount()) + " packets)");
 }
 
@@ -526,13 +526,13 @@ void PcapTab::saveToFile(const QString& path) {
                 .arg(QFileInfo(path).fileName())
                 .arg(packet_model_->rowCount()));
         else
-            emit statusMessage("❌ Copy failed: " + path);
+            emit statusMessage("Copy failed: " + path);
         return;
     }
 
     PcapWriter writer;
     if (!writer.open(path.toStdString())) {
-        emit statusMessage("❌ Cannot save: " + path); return;
+        emit statusMessage("Cannot save: " + path); return;
     }
     const int n = packet_model_->rowCount();
     for (int i = 0; i < n; ++i) {

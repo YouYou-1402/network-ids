@@ -113,26 +113,26 @@ void IpsControlWidget::setupUI() {
 
     // ── Detection Engine ──────────────────────────────────────────────────────
     auto* det_box = makeEngineRow(
-        "🔍 Detection (L1)",
+        "Detection (L1)",
         "Signature · Protocol Anomaly · Behavioral",
         lbl_det_status_, btn_det_toggle_, lbl_det_desc_);
     root->addWidget(det_box);
 
     // ── ML Engine ─────────────────────────────────────────────────────────────
     auto* ml_box = makeEngineRow(
-        "🤖 ML Engine (L2)",
-        "Isolation Forest · Autoencoder",
+        "ML Engine (L2)",
+        "XGBoost · Autoencoder",
         lbl_ml_status_, btn_ml_toggle_, lbl_ml_desc_);
     root->addWidget(ml_box);
 
     // ── Quick Actions ─────────────────────────────────────────────────────────
-    auto* qa_group  = new QGroupBox("⚡ Quick Actions", this);
+    auto* qa_group  = new QGroupBox("Quick Actions", this);
     qa_group->setStyleSheet(group_style);
     auto* qa_layout = new QHBoxLayout(qa_group);
     qa_layout->setSpacing(8);
     qa_layout->setContentsMargins(10, 12, 10, 10);
 
-    auto* btn_enable_all = new QPushButton("✅  Enable All", qa_group);
+    auto* btn_enable_all = new QPushButton("Enable All", qa_group);
     btn_enable_all->setFixedHeight(26);
     btn_enable_all->setStyleSheet(
         "QPushButton {"
@@ -142,7 +142,7 @@ void IpsControlWidget::setupUI() {
         "QPushButton:hover   { background: #c8e6c9; border-color: #388e3c; }"
         "QPushButton:pressed { background: #b2dfdb; }");
 
-    auto* btn_disable_all = new QPushButton("⛔  Disable All", qa_group);
+    auto* btn_disable_all = new QPushButton("Disable All", qa_group);
     btn_disable_all->setFixedHeight(26);
     btn_disable_all->setStyleSheet(
         "QPushButton {"
@@ -278,7 +278,7 @@ void IpsControlWidget::updateModeBadge() {
             "  border: 1px solid #a5d6a7; border-radius: 6px;"
             "  padding: 4px 8px; }");
     } else if (det_enabled_ && !ml_enabled_) {
-        lbl_mode_badge_->setText("🔍  IDS MODE  —  L1 Detection Only");
+        lbl_mode_badge_->setText("IDS MODE  —  L1 Detection Only");
         lbl_mode_badge_->setStyleSheet(
             "QLabel {"
             "  background: #eef0ff; color: #3355cc;"
@@ -286,7 +286,7 @@ void IpsControlWidget::updateModeBadge() {
             "  border: 1px solid #b0b8e8; border-radius: 6px;"
             "  padding: 4px 8px; }");
     } else if (!det_enabled_ && ml_enabled_) {
-        lbl_mode_badge_->setText("🤖  ML ONLY  —  L2 Detection Only");
+        lbl_mode_badge_->setText("ML ONLY  —  L2 Detection Only");
         lbl_mode_badge_->setStyleSheet(
             "QLabel {"
             "  background: #f5f0ff; color: #6633cc;"
@@ -294,7 +294,7 @@ void IpsControlWidget::updateModeBadge() {
             "  border: 1px solid #c8b0e8; border-radius: 6px;"
             "  padding: 4px 8px; }");
     } else {
-        lbl_mode_badge_->setText("⛔  MONITOR ONLY  —  No Detection");
+        lbl_mode_badge_->setText("MONITOR ONLY  —  No Detection");
         lbl_mode_badge_->setStyleSheet(
             "QLabel {"
             "  background: #f0f0f8; color: #888899;"

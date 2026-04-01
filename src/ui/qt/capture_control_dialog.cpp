@@ -13,7 +13,7 @@
 CaptureControlDialog::CaptureControlDialog(QWidget* parent)
     : QDialog(parent)
 {
-    setWindowTitle("🎛  Start Capture");
+    setWindowTitle("Start Capture");
     setMinimumWidth(480);
     setModal(true);
     setupUI();
@@ -269,11 +269,11 @@ void CaptureControlDialog::onInterfaceSelected(int index) {
 
     QString detail;
     if (!iface.is_up)
-        detail += "⚠️  Interface is DOWN  ";
+        detail += "Interface is DOWN  ";
     if (iface.is_loopback)
-        detail += "🔄 Loopback  ";
+        detail += "Loopback  ";
     if (detail.isEmpty())
-        detail = "✅ Ready to capture";
+        detail = "Ready to capture";
 
     // Màu detail theo trạng thái
     const QString color = iface.is_up ? "#227744" : "#cc4400";

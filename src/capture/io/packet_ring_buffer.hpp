@@ -18,7 +18,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 class PacketRingBuffer {
 public:
-    explicit PacketRingBuffer(size_t max_packets = 1000'000);
+    explicit PacketRingBuffer(size_t max_packets = 10'000'000);
 
     // ── Writer (capture thread) ───────────────────────────────────────────────
     uint64_t push(PacketInfo pkt);
