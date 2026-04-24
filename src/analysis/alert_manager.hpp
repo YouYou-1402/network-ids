@@ -55,6 +55,8 @@ public:
     uint64_t ddosAlerts()     const { return ddos_alerts_     .load(std::memory_order_relaxed); }
     uint64_t slowDdosAlerts() const { return slow_ddos_alerts_.load(std::memory_order_relaxed); }
     uint64_t scanAlerts()     const { return scan_alerts_     .load(std::memory_order_relaxed); }
+    uint64_t otherAlerts()    const { return other_alerts_    .load(std::memory_order_relaxed); }
+    void clear();
 
 private:
     void addAlert(UnifiedAlert alert);
@@ -80,4 +82,5 @@ private:
     std::atomic<uint64_t> ddos_alerts_      {0};
     std::atomic<uint64_t> slow_ddos_alerts_ {0};
     std::atomic<uint64_t> scan_alerts_      {0};
+    std::atomic<uint64_t> other_alerts_     {0}; 
 };

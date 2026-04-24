@@ -79,6 +79,8 @@ public:
         return ENGINE_CFG.ml_enabled.load(std::memory_order_relaxed);
     }
 
+    void clearAll();
+
 signals:
     void metricsUpdated        (MetricsSnapshot snapshot);
     void newAlerts             (std::vector<UnifiedAlert> alerts);
@@ -92,6 +94,7 @@ signals:
     // ── Firewall signals ──────────────────────────────────────────────────────
     void firewallStatsUpdated  (size_t blacklist_count,
                                 size_t whitelist_count);   // ← THÊM
+    void clearRequested();
 
 public slots:
     void setDetectionEnabled(bool enabled);

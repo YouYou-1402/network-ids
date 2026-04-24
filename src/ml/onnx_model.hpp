@@ -1,39 +1,66 @@
 #pragma once
 // =============================================================================
 //  onnx_model.hpp
-//  OnnxXGBoost      — XGBoost multiclass (5 class)
-//  OnnxAutoencoder  — Encoder-Classifier multiclass (5 class)
 //
-//  label: 0=BENIGN  1=DDOS_VOLUMETRIC  2=SLOW_DDOS  3=PORT_SCAN  4=OTHER_ATTACK
+//  OnnxXGBoost     — XGBoost multiclass 5-class, input float[1][39]
+//  OnnxAutoencoder — Deep AE NSL-KDD,      input float[1][39]
 //
-//  ONNX I/O (khớp với Python export):
-//    XGBoost:
-//      input[0]  "X"             float[1][21]
-//      output[0] "label"         int64[1]
-//      output[1] "probabilities" float[1][5]
-//    Autoencoder (EncoderClassifier):
-//      input[0]  "X"             float[1][21]
-//      output[0] "label"         int64[1]
-//      output[1] "probabilities" float[1][5]
+//  Cả 2 model đều nhận vector<float>(39) từ NslKddExtractor::extractAndScale()
+//  FeatureVector::SIZE=21 chỉ dùng cho L1 detection, KHÔNG liên quan ở đây.
+//
+//  ── XGBoost I/O ──────────────────────────────────────────────────────────────
+//    input[0]  "input"         float[1][39]
+//    output[0] "label"         int64[1]
+//    output[1] "probabilities" float[1][5]
+//    label: 0=BENIGN 1=DDOS_VOLUMETRIC 2=SLOW_DDOS 3=PORT_SCAN 4=OTHER_ATTACK
+//
+//  ── Autoencoder I/O ──────────────────────────────────────────────────────────
+//    input[0]  "input"         float[1][39]
+//    output[0] "output"        float[1][39]   ← reconstruction tensor
+//
+//    Scoring:
+//      mse        = mean((input[i] - output[i])^2)
+//      is_anomaly = mse > threshold
+//      score      = mse
+//      label      = MODEL_LABEL_OTHER_ATTACK(4) nếu anomaly
+//                   MODEL_LABEL_BENIGN(0)       nếu normal
 // =============================================================================
 
 #ifndef ONNX_MODEL_HPP
 #define ONNX_MODEL_HPP
 
-#include <array>
+#include <vector>
 #include <memory>
 #include <string>
-#include "feature_extractor.hpp"   // FeatureVector::SIZE = 21
 
-// ─── ModelOutput ──────────────────────────────────────────────────────────────
+// =============================================================================
+//  Hằng số input dim — đọc từ metadata.json, định nghĩa 1 chỗ duy nhất
+// =============================================================================
+static constexpr int NSLKDD_INPUT_DIM = 39;
+
+// =============================================================================
+//  ModelOutput — kết quả chung cho cả XGBoost và Autoencoder
+//
+//  XGBoost:
+//    score      = 1 - P(BENIGN)      ∈ [0.0, 1.0]
+//    label      = class id           ∈ {0, 1, 2, 3, 4}
+//    is_anomaly = (label != BENIGN) && (score >= threshold)
+//
+//  Autoencoder:
+//    score      = MSE(input, recon)  ∈ [0.0, ∞)
+//    label      = 4 (OTHER_ATTACK) nếu anomaly, 0 (BENIGN) nếu normal
+//    is_anomaly = (mse > threshold)
+// =============================================================================
 struct ModelOutput {
     bool        is_anomaly = false;
-    float       score      = 0.f;    // 1 - P(BENIGN)
-    int         label      = 0;      // predicted class id
+    float       score      = 0.f;
+    int         label      = 0;
     std::string detail;
 };
 
-// ─── Label constants ──────────────────────────────────────────────────────────
+// =============================================================================
+//  Label constants
+// =============================================================================
 static constexpr int MODEL_LABEL_BENIGN          = 0;
 static constexpr int MODEL_LABEL_DDOS_VOLUMETRIC = 1;
 static constexpr int MODEL_LABEL_SLOW_DDOS       = 2;
@@ -54,9 +81,13 @@ inline const char* modelLabelToStr(int label) {
 
 // =============================================================================
 //  OnnxXGBoost
-//  Input:   float[1][21]  → "X"
-//  Output0: int64[1]      → "label"
-//  Output1: float[1][5]   → "probabilities"
+//
+//  Input : vector<float>(NSLKDD_INPUT_DIM=39)
+//  Output: label(int64) + probabilities(float[5])
+//
+//  Tự động detect output format tại load():
+//    Case A: n_outputs=2 → output[0]=label(int64), output[1]=probs(float[5])
+//    Case B: n_outputs=1 → output[0]=probs(float[5]), label=argmax(probs)
 // =============================================================================
 class OnnxXGBoost {
 public:
@@ -69,33 +100,31 @@ public:
     OnnxXGBoost& operator=(OnnxXGBoost&&)      = default;
 
     bool        load (const std::string& path);
-    ModelOutput infer(const std::array<float, FeatureVector::SIZE>& input);
+
+    // input: vector<float>(39) từ NslKddExtractor::extractAndScale()
+    ModelOutput infer(const std::vector<float>& input);
 
     bool  isReady()             const { return ready_;     }
     float threshold()           const { return threshold_; }
+    int   inputDim()            const { return input_dim_; }
     void  setThreshold(float t)       { threshold_ = t;    }
 
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
     float threshold_ = 0.5f;
+    int   input_dim_ = NSLKDD_INPUT_DIM;  // validate tại infer()
     bool  ready_     = false;
 };
 
 // =============================================================================
-//  OnnxAutoencoder  (Encoder-Classifier)
+//  OnnxAutoencoder — Deep AE NSL-KDD
 //
-//  Python export (train_autoencoder.py):
-//    input_names  = ["X"]
-//    output_names = ["label", "probabilities"]
+//  Input : vector<float>(NSLKDD_INPUT_DIM=39)
+//  Output: float[39] reconstruction → MSE → binary decision
 //
-//  C++ tự động đọc tên từ ONNX metadata tại runtime (không hardcode)
-//  → tương thích cả onnxmltools lẫn torch.onnx.export
-//
-//  Tính toán:
-//    label      = output[0] (int64) hoặc argmax(output[1])
-//    score      = 1 - probabilities[BENIGN]
-//    is_anomaly = (label != BENIGN) && (score >= threshold)
+//  input_dim validate tại infer():
+//    input.size() != input_dim_ → LOG_WARN, trả về is_anomaly=false
 // =============================================================================
 class OnnxAutoencoder {
 public:
@@ -108,16 +137,20 @@ public:
     OnnxAutoencoder& operator=(OnnxAutoencoder&&)      = default;
 
     bool        load (const std::string& path);
-    ModelOutput infer(const std::array<float, FeatureVector::SIZE>& input);
+
+    // input: vector<float>(39) từ NslKddExtractor::extractAndScale()
+    ModelOutput infer(const std::vector<float>& input);
 
     bool  isReady()             const { return ready_;     }
     float threshold()           const { return threshold_; }
+    int   inputDim()            const { return input_dim_; }
     void  setThreshold(float t)       { threshold_ = t;    }
 
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
     float threshold_ = 0.5f;
+    int   input_dim_ = NSLKDD_INPUT_DIM;  // đọc lại từ ONNX graph tại load()
     bool  ready_     = false;
 };
 

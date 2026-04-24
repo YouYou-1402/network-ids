@@ -18,10 +18,11 @@ public:
 
 public slots:
     void onNewAlerts(std::vector<UnifiedAlert> alerts);
+    void onClearClicked();
 
 private slots:
     void onFilterChanged(int index);
-    void onClearClicked();
+
     void onRowClicked(int row, int col);
 
 private:

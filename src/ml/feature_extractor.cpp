@@ -1,16 +1,4 @@
-// =============================================================================
-//  src/ml/feature_extractor.cpp
-//
-//  Fix so với phiên bản cũ:
-//    [FIX-5] unique_dst_ports: không dùng dst_ports_seen.size() nữa
-//            vì trong 1 flow (5-tuple), dst_port đã cố định trong flow key
-//            → dst_ports_seen.size() luôn = 1 → feature vô nghĩa
-//            Thay bằng src_ports_seen.size() (nếu FlowState có field này)
-//    [FIX-6] TLS suppression: nếu dst_port là TLS port
-//            → set unique_dst_ports = 0.f
-//            Lý do: encrypted traffic, feature không có ý nghĩa,
-//            tránh AE nhầm TLS entropy cao = port scan pattern
-// =============================================================================
+// src/ml/feature_extractor.cpp
 
 #include "feature_extractor.hpp"
 #include "../common/logger.hpp"
@@ -97,16 +85,45 @@ static bool isTlsPortFE(uint16_t port) {
 FeatureVector FeatureExtractor::extract(const FlowState& flow) const {
     FeatureVector fv;
 
-    // ── Group 1: Flow-based ───────────────────────────────────────────────
-    const double dur = std::max(flow.durationSeconds(), 1e-6);
+    // [FIX-C] Guard: flow chưa có packet nào → trả về zero vector
+    // Tránh chia 0 và NaN trong tất cả các tính toán bên dưới
+    if (flow.total_packets == 0)
+        return fv;
 
-    fv.flow_duration  = static_cast<float>(flow.durationSeconds());
-    fv.total_pkt_fwd  = static_cast<float>(flow.fwd_packets);
-    fv.total_pkt_bwd  = static_cast<float>(flow.bwd_packets);
+    // ── Group 1: Flow-based ───────────────────────────────────────────────────
+    //
+    // [FIX-A] rate_valid guard:
+    //   Không tính rate khi flow quá mới (total_packets <= 2 hoặc dur <= 1ms)
+    //
+    //   Tại sao threshold total_packets > 2?
+    //     n=1: chỉ có SYN, raw_dur ≈ 0 → rate = 1/ε = ∞ → sau scaler = +5
+    //     n=2: SYN + SYN-ACK, raw_dur = 1 RTT ≈ vài ms
+    //          rate = 2/0.002 = 1000 pps → sau scaler vẫn rất cao
+    //     n>=3: flow đã có ít nhất 1 data exchange → rate có nghĩa
+    //
+    //   Tại sao threshold raw_dur > 0.001s (1ms)?
+    //     Dưới 1ms: flow quá mới, clock resolution artifact
+    //     → rate không đáng tin cậy
+    //
+    //   Tác động với Slowloris (n=1-3 per flow):
+    //     rate_valid = false → pkt_rate = 0, byte_rate = 0
+    //     Pattern: {syn=1, ack=0, pkt_rate=0, bytes=0, conn_duration≈0}
+    //     → Khác với port scan {pkt_rate=high} → model phân biệt được
+    //
+    const double raw_dur   = flow.durationSeconds();
+    const bool   rate_valid = (flow.total_packets > 2 && raw_dur > 0.001);
+    const double dur        = rate_valid ? raw_dur : 1.0;  // tránh chia 0
+
+    fv.flow_duration  = static_cast<float>(raw_dur);
+    fv.total_pkt_fwd  = static_cast<float>(flow.fwd_packets);  // [FIX-B]
+    fv.total_pkt_bwd  = static_cast<float>(flow.bwd_packets);  // [FIX-B]
     fv.total_byte_fwd = static_cast<float>(flow.fwd_bytes);
     fv.total_byte_bwd = static_cast<float>(flow.bwd_bytes);
 
-    // ── Group 2: TCP Flags ────────────────────────────────────────────────
+    // ── Group 2: TCP Flags ────────────────────────────────────────────────────
+    //
+    // Các field này giờ được update đúng trong worker_thread.cpp step 2b
+    // [FIX-2 trong worker_thread.cpp]
     fv.syn_count = static_cast<float>(flow.syn_count);
     fv.ack_count = static_cast<float>(flow.ack_count);
     fv.rst_count = static_cast<float>(flow.rst_count);
@@ -116,14 +133,23 @@ FeatureVector FeatureExtractor::extract(const FlowState& flow) const {
           static_cast<float>(flow.syn_count)
         : 0.f;
 
-    // ── Group 3: Rate-based ───────────────────────────────────────────────
-    fv.pkt_rate     = static_cast<float>(flow.total_packets / dur);
-    fv.byte_rate    = static_cast<float>(flow.total_bytes   / dur);
+    // ── Group 3: Rate-based ───────────────────────────────────────────────────
+    //
+    // [FIX-A] Chỉ tính rate khi rate_valid = true
+    // Khi false: set = 0.f thay vì ∞ → tránh false positive PORT_SCAN
+    fv.pkt_rate     = rate_valid
+                    ? static_cast<float>(flow.total_packets / dur)
+                    : 0.f;
+    fv.byte_rate    = rate_valid
+                    ? static_cast<float>(flow.total_bytes / dur)
+                    : 0.f;
     fv.pkt_per_flow = static_cast<float>(flow.total_packets);
 
-    // ── Group 4: Slow DDoS ────────────────────────────────────────────────
+    // ── Group 4: Slow DDoS ────────────────────────────────────────────────────
     fv.conn_duration    = fv.flow_duration;
-    fv.bytes_per_second = static_cast<float>(flow.bytesPerSecond());
+    fv.bytes_per_second = rate_valid
+                        ? static_cast<float>(flow.bytesPerSecond())
+                        : 0.f;
 
     fv.inter_arrival_mean = static_cast<float>(flow.iat_mean_ms);
     fv.inter_arrival_std  = static_cast<float>(
@@ -134,34 +160,29 @@ FeatureVector FeatureExtractor::extract(const FlowState& flow) const {
     fv.header_complete = flow.http_header_complete ? 1.f : 0.f;
     fv.concurrent_conn = static_cast<float>(flow.concurrent_conn);
 
-    // ── Group 5: Port Scan ────────────────────────────────────────────────
+    // ── Group 5: Port Scan ────────────────────────────────────────────────────
     //
-    // [FIX-5] unique_dst_ports cũ = dst_ports_seen.size()
+    // [FIX-D] dst_ports_seen.size() giờ có giá trị thực:
+    //   worker_thread.cpp [FIX-4] insert mọi SYN (no-ACK) probe
+    //   → size() = số dst_port khác nhau đã probe
     //
-    // Bug: trong 1 flow (5-tuple = src_ip, dst_ip, src_port, dst_port, proto),
-    //      dst_port đã cố định trong flow key → dst_ports_seen.size() = 1
-    //      → feature luôn = 1 → vô nghĩa với model.
+    //   Port scan thực: nhiều dst_port khác nhau → size() lớn
+    //   Slowloris: dst_port=80 luôn cố định → size() = 1
+    //   Normal flow: dst_port cố định trong 5-tuple → size() = 1
     //
-    // Fix: dùng src_ports_seen.size() — số src_port khác nhau trong flow.
-    //   - Port scan thực: attacker mở nhiều conn từ nhiều src_port → lớn
-    //   - YouTube CDN: cùng src_ip:443, mỗi flow có 1 src_port → = 1
-    //
-    // [FIX-6] TLS suppression:
-    //   Nếu dst_port hoặc src_port là TLS port → set = 0.f
-    //   Encrypted traffic: feature không có ý nghĩa, tránh AE false positive.
-    //
+    // TLS suppression vẫn giữ:
+    //   Encrypted traffic → feature không có ý nghĩa
+    //   → tránh AE nhầm TLS entropy cao = port scan pattern
     const bool is_tls = isTlsPortFE(flow.dst_port)
                      || isTlsPortFE(flow.src_port);
 
     if (is_tls) {
-        // [FIX-6] TLS port → suppress port-scan feature
         fv.unique_dst_ports = 0.f;
     } else {
 #ifdef FLOW_HAS_SRC_PORTS_SEEN
-        // [FIX-5] Dùng src_ports_seen nếu FlowState đã được update
         fv.unique_dst_ports = static_cast<float>(flow.src_ports_seen.size());
 #else
-        // Fallback: giữ backward compat nếu FlowState chưa có src_ports_seen
+        // [FIX-D] dst_ports_seen giờ có giá trị thực
         fv.unique_dst_ports = static_cast<float>(flow.dst_ports_seen.size());
 #endif
     }

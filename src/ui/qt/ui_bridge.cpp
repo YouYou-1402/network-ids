@@ -203,3 +203,46 @@ void UiBridge::notifyCaptureStopped() {
     LOG_INFO("UiBridge: capture stopped");
     emit captureStopped();
 }
+void UiBridge::clearAll() {
+    // ── 1. Dừng timer tạm — tránh race với onTimer() ─────────────────────────
+    const bool was_active = timer_.isActive();
+    timer_.stop();
+
+    // ── 2. Xóa PacketRingBuffer ───────────────────────────────────────────────
+    // Sau lệnh này: totalPushed() = 0, oldest_seq_ = 0
+    ring_buf_.clear();
+
+    // ── 3. Reset read cursors ─────────────────────────────────────────────────
+    // last_sent_seq_ = 0 → onTimer() block 4: total_now(=0) > last_sent_seq_(=0)
+    //                      = FALSE → KHÔNG emit newPacketInfos → màn hình không fill lại
+    // last_alert_seq_ = 0 → đồng bộ với alert_manager_.seq_ (cũng reset về 0)
+    last_sent_seq_  = 0;
+    last_alert_seq_ = 0;
+
+    // ── 4. Xóa pps_window_ ───────────────────────────────────────────────────
+    // Nếu không clear: buildTrafficPoint() tính delta từ snapshot cũ
+    // → pps spike ảo ngay sau khi clear
+    pps_window_.clear();
+
+    // ── 5. Force expire toàn bộ flow + IP tracker ────────────────────────────
+    // idle_timeout = 0.0 → mọi flow đều "idle quá lâu" → bị xóa ngay
+    dispatcher_.cleanupFlows(0.0);
+    dispatcher_.cleanupIps  (0.0);
+
+    // ── 6. Xóa alert history ─────────────────────────────────────────────────
+    // Bên trong: alerts_.clear(), suppress_map_.clear(), seq_=0, counters=0
+    alert_manager_.clear();
+
+    // ── 7. Reset metrics ──────────────────────────────────────────────────────
+    METRICS.reset();
+
+    // ── 8. Broadcast cho UI widgets ──────────────────────────────────────────
+    // AlertPanel::onClearClicked() — xóa table + all_alerts_ + count_lbl_
+    // TrafficChart::reset()        — xóa history_ + series + reset axis
+    emit clearRequested();
+
+    // ── 9. Restart timer ─────────────────────────────────────────────────────
+    if (was_active) timer_.start();
+
+    LOG_INFO("UiBridge::clearAll — ring_buf, flows, alerts, metrics reset");
+}

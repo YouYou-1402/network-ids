@@ -1,3 +1,4 @@
+//src/detection/worker_thread.hpp
 #pragma once
 #include "../core/packet_info.hpp"
 #include "../core/threat_types.hpp"
@@ -115,10 +116,13 @@ private:
     ActionHandler         action_handler_;
     FeatureExtractor      feature_extractor_;
 
+    
+
     FirewallManager* firewall_manager_ = nullptr;
     MLJobQueue*      ml_job_queue_     = nullptr;
 
     std::thread           thread_;
     std::atomic<bool>     running_      {false};
     std::atomic<size_t>   queue_dropped_{0};
+    FlowWindowCounter window_counter_;
 };

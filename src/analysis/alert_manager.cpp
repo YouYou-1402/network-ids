@@ -27,6 +27,7 @@ std::string UnifiedAlert::colorCode() const {
         case DetectionResult::SLOW_DDOS:       return "\033[33m";        // Vàng
         case DetectionResult::PORT_SCAN:       return "\033[38;5;208m";  // Cam
         case DetectionResult::OTHER_ATTACK:       return "\033[35m";        // Tím
+        case DetectionResult::UNKNOWN_ANOMALY:  return "\033[36m"; 
         default:                               return "\033[32m";        // Xanh lá
     }
 }
@@ -162,6 +163,10 @@ void AlertManager::addAlert(UnifiedAlert alert) {
         case DetectionResult::PORT_SCAN:
             scan_alerts_.fetch_add(1, std::memory_order_relaxed);
             break;
+        case DetectionResult::OTHER_ATTACK:       // ← THÊM
+        case DetectionResult::UNKNOWN_ANOMALY:
+            other_alerts_.fetch_add(1, std::memory_order_relaxed);
+            break;
         default:
             break;
     }
@@ -244,4 +249,36 @@ std::vector<UnifiedAlert> AlertManager::getRecentFrom(uint64_t from_seq,
         }
     }
     return result;
+}
+
+
+void AlertManager::clear() {
+    // ── 1. Xóa in-memory ring + suppress map + reset seq ─────────────────────
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        alerts_.clear();
+        suppress_map_.clear();
+        seq_ = 0;
+    }
+
+    // ── 2. Reset atomic counters ──────────────────────────────────────────────
+    // NGOÀI mutex_ vì atomic không cần lock
+    total_alerts_    .store(0, std::memory_order_relaxed);
+    ddos_alerts_     .store(0, std::memory_order_relaxed);
+    slow_ddos_alerts_.store(0, std::memory_order_relaxed);
+    scan_alerts_     .store(0, std::memory_order_relaxed);
+    other_alerts_    .store(0, std::memory_order_relaxed);
+
+    // ── 3. KHÔNG đóng/xóa alert_log_file_ ────────────────────────────────────
+    // Giữ nguyên file log để audit trail — chỉ ghi separator
+    {
+        std::lock_guard<std::mutex> lock(alert_log_mutex_);
+        if (alert_log_file_.is_open()) {
+            alert_log_file_
+                << "--- SESSION CLEARED ---\n";
+            alert_log_file_.flush();
+        }
+    }
+
+    LOG_INFO("AlertManager cleared: alerts, suppress_map, counters reset");
 }

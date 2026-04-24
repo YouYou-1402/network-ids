@@ -118,6 +118,12 @@ MainWindow::MainWindow(AlertManager&     alert_manager,
 
     ui_bridge_->startPolling(200);
 
+    connect(ui_bridge_.get(), &UiBridge::clearRequested,
+        alert_panel_ips_,  &AlertPanel::onClearClicked);
+
+    connect(ui_bridge_.get(), &UiBridge::clearRequested,
+            traffic_chart_,    &TrafficChart::reset);
+
     connect(&uptime_timer_, &QTimer::timeout,
             this, &MainWindow::updateUptime);
     uptime_timer_.start(1000);
@@ -1116,21 +1122,24 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::onClearPacketsClicked() {
-    // Xác định tab đang active
-    const int current_tab = tab_widget_->currentIndex();
+    // ── Backend + broadcast ───────────────────────────────────────────────────
+    // clearAll() sẽ: stop timer → clear ring_buf → reset cursors →
+    //   cleanupFlows/Ips → clear alerts → reset metrics →
+    //   emit clearRequested() → restart timer
+    if (ui_bridge_) ui_bridge_->clearAll();
 
-    if (current_tab == 0) {
-        // Tab Live Capture → clear live_tab_
-        if (live_tab_)
-            live_tab_->clearDisplay();
-    } else if (current_tab == 1) {
-        // Tab File Analysis → clear tab pcap đang chọn
-        if (file_tab_widget_) {
-            auto* tab = qobject_cast<PcapTab*>(
-                file_tab_widget_->currentWidget());
-            if (tab) tab->clearDisplay();
-        }
+    // ── UI: xóa packet list ───────────────────────────────────────────────────
+    // Live tab — luôn clear (ring_buf đã rỗng, không bị fill lại)
+    if (live_tab_) live_tab_->clearDisplay();
+
+    // File tab — clear tab đang active nếu có
+    // (file analysis độc lập với backend, chỉ clear display)
+    if (file_tab_widget_) {
+        auto* tab = qobject_cast<PcapTab*>(
+            file_tab_widget_->currentWidget());
+        if (tab) tab->clearDisplay();
     }
 
-    statusBar()->showMessage("🗑  Packet display cleared", 2000);
+    statusBar()->showMessage(
+        "Session cleared — packets · alerts · flows · metrics", 3000);
 }

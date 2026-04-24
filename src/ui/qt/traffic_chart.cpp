@@ -165,3 +165,14 @@ void TrafficChart::onTrafficUpdated(TrafficPoint point) {
     const uint64_t y_max    = (y_top / 100 + 1) * 100;
     axis_y_->setRange(0, static_cast<double>(y_max));
 }
+
+void TrafficChart::reset() {
+    history_.clear();
+
+    series_total_->clear();
+    series_drop_ ->clear();
+    series_alert_->clear();
+
+    // Reset Y axis về default
+    axis_y_->setRange(0, 100);
+}

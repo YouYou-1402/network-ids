@@ -1,153 +1,226 @@
+// =============================================================================
+//  src/detection/signature_engine.cpp
+// =============================================================================
 #include "signature_engine.hpp"
 #include "../common/logger.hpp"
 #include "../common/config_loader.hpp"
-#include <queue>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <queue>
+#include <algorithm>
+#include <cstring>
 
-// ─── Constructor ──────────────────────────────────────────────────────────────
+// =============================================================================
+//  Constructor — đọc pattern từ rules.json thay vì hardcode
+// =============================================================================
 SignatureEngine::SignatureEngine(IpTracker& ip_tracker)
     : ip_tracker_(ip_tracker)
 {
     const auto& sig = APP_CFG.signatures;
     const auto& th  = APP_CFG.thresholds;
 
-    // ── Per-IP thresholds ─────────────────────────────────────────────────
     flood_ratio_threshold_      = sig.flood_ratio;
     port_scan_threshold_        = sig.port_scan_ports;
     port_scan_syn_no_ack_min_   = sig.port_scan_syn_no_ack_min;
     min_pkt_before_flood_check_ = sig.min_pkt_before_flood;
-
-    // ── Distributed SYN flood thresholds (mới) ────────────────────────────
     global_syn_threshold_       = th.global_syn_threshold;
     dst_syn_ratio_min_pkt_      = th.dst_syn_ratio_min_pkt;
     dst_syn_ack_ratio_          = th.dst_syn_ack_ratio;
     behavior_window_sec_        = th.behavior_window_sec;
 
     // ── Build Aho-Corasick ────────────────────────────────────────────────
-    ac_nodes_.emplace_back();
-    addPattern("X-a: b\r\n",      SIG_SLOWLORIS);
-    addPattern("X-c: d\r\n",      SIG_SLOWLORIS);
-    addPattern("X-b: c\r\n",      SIG_SLOWLORIS);
-    addPattern("Content-Length:", SIG_SLOW_POST);
+    ac_nodes_.emplace_back();   // root node
+
+    if (!sig.sig_rules.empty()) {
+        // ── Load từ rules.json ────────────────────────────────────────────
+        for (const auto& rule : sig.sig_rules) {
+            // Map threat string → sig_id
+            // Quy ước: SIG_SLOWLORIS=0, SIG_SLOW_POST=1
+            // Mở rộng thêm sig_id mới ở đây nếu cần
+            int sig_id = SIG_SLOWLORIS;
+            if (rule.threat == "SLOW_DDOS") {
+                const bool is_post =
+                    rule.name.find("POST") != std::string::npos ||
+                    rule.name.find("post") != std::string::npos ||
+                    rule.id.find("POST")   != std::string::npos;
+                sig_id = is_post ? SIG_SLOW_POST : SIG_SLOWLORIS;
+            }
+
+            rule_map_[sig_id] = rule;
+            addPattern(rule.pattern, sig_id);
+
+            LOG_INFO("SignatureEngine: loaded rule ["
+                     + rule.id + "] " + rule.name
+                     + " pattern='" + rule.pattern + "'"
+                     + " threat="   + rule.threat
+                     + " action="   + rule.action);
+        }
+    } else {
+        // ── Fallback hardcode nếu rules.json không có "signatures" ────────
+        LOG_WARN("SignatureEngine: no sig_rules from config"
+                 " — using hardcoded fallback");
+
+        addPattern("X-a: b\r\n",      SIG_SLOWLORIS);
+        addPattern("X-c: d\r\n",      SIG_SLOWLORIS);
+        addPattern("X-b: c\r\n",      SIG_SLOWLORIS);
+        addPattern("Content-Length:", SIG_SLOW_POST);
+
+        // Tạo rule_map_ giả để handleDetection vẫn hoạt động
+        SignatureRule fallback_sl;
+        fallback_sl.id     = "FALLBACK_SL";
+        fallback_sl.threat = "SLOW_DDOS";
+        fallback_sl.action = "ALERT";
+        rule_map_[SIG_SLOWLORIS] = fallback_sl;
+
+        SignatureRule fallback_sp;
+        fallback_sp.id     = "FALLBACK_SP";
+        fallback_sp.threat = "SLOW_DDOS";
+        fallback_sp.action = "ALERT";
+        rule_map_[SIG_SLOW_POST] = fallback_sp;
+    }
+
     buildFailLinks();
 
-    LOG_INFO("SignatureEngine: built"
-             " flood_ratio="     + std::to_string(flood_ratio_threshold_)
+    LOG_INFO("SignatureEngine: initialized"
+             " patterns="        + std::to_string(sig.sig_rules.size())
+           + " flood_ratio="     + std::to_string(flood_ratio_threshold_)
            + " port_scan_ports=" + std::to_string(port_scan_threshold_)
-           + " syn_no_ack_min="  + std::to_string(port_scan_syn_no_ack_min_)
-           + " min_pkt_flood="   + std::to_string(min_pkt_before_flood_check_)
            + " global_syn_thr="  + std::to_string(global_syn_threshold_)
-           + " dst_ratio_thr="   + std::to_string(dst_syn_ack_ratio_));
+           + " dst_ratio="       + std::to_string(dst_syn_ack_ratio_));
 }
 
-// ─── Aho-Corasick ─────────────────────────────────────────────────────────────
+// =============================================================================
+//  Aho-Corasick — addPattern
+// =============================================================================
 void SignatureEngine::addPattern(const std::string& pattern, int sig_id) {
     int cur = 0;
     for (unsigned char c : pattern) {
-        auto it = ac_nodes_[cur].children.find(c);
-        if (it == ac_nodes_[cur].children.end()) {
-            ac_nodes_[cur].children[c] =
-                static_cast<int>(ac_nodes_.size());
+        if (ac_nodes_[cur].children[c] == -1) {
+            ac_nodes_[cur].children[c] = static_cast<int>(ac_nodes_.size());
             ac_nodes_.emplace_back();
         }
         cur = ac_nodes_[cur].children[c];
     }
-    ac_nodes_[cur].outputs.push_back(sig_id);
+    ac_nodes_[cur].is_end  = true;
+    ac_nodes_[cur].output  = sig_id;
 }
 
+// =============================================================================
+//  Aho-Corasick — buildFailLinks  (BFS)
+// =============================================================================
 void SignatureEngine::buildFailLinks() {
     std::queue<int> q;
-    for (auto& [c, child] : ac_nodes_[0].children) {
-        ac_nodes_[child].fail_link = 0;
-        q.push(child);
+
+    // Root children: fail → root
+    for (int c = 0; c < 256; ++c) {
+        int ch = ac_nodes_[0].children[c];
+        if (ch == -1) {
+            ac_nodes_[0].children[c] = 0;
+        } else {
+            ac_nodes_[ch].fail = 0;
+            q.push(ch);
+        }
     }
+
     while (!q.empty()) {
         int u = q.front(); q.pop();
-        for (auto& [c, v] : ac_nodes_[u].children) {
-            int f = ac_nodes_[u].fail_link;
-            while (f != 0 && !ac_nodes_[f].children.count(c))
-                f = ac_nodes_[f].fail_link;
-            int candidate = 0;
-            auto fit = ac_nodes_[f].children.find(c);
-            if (fit != ac_nodes_[f].children.end() && fit->second != v)
-                candidate = fit->second;
-            ac_nodes_[v].fail_link = candidate;
-            const auto& fo = ac_nodes_[candidate].outputs;
-            ac_nodes_[v].outputs.insert(ac_nodes_[v].outputs.end(),
-                                         fo.begin(), fo.end());
-            q.push(v);
+        // Propagate output along fail chain
+        if (ac_nodes_[u].output == -1)
+            ac_nodes_[u].output = ac_nodes_[ac_nodes_[u].fail].output;
+
+        for (int c = 0; c < 256; ++c) {
+            int ch = ac_nodes_[u].children[c];
+            if (ch == -1) {
+                ac_nodes_[u].children[c] =
+                    ac_nodes_[ac_nodes_[u].fail].children[c];
+            } else {
+                ac_nodes_[ch].fail =
+                    ac_nodes_[ac_nodes_[u].fail].children[c];
+                q.push(ch);
+            }
         }
     }
 }
 
-std::vector<int> SignatureEngine::search(const uint8_t* data,
-                                          size_t         len) const {
-    std::vector<int> results;
+// =============================================================================
+//  Aho-Corasick — acSearch
+//  Trả về sig_id đầu tiên match, hoặc SIG_NONE nếu không match
+// =============================================================================
+int SignatureEngine::acSearch(const uint8_t* data, size_t len) const {
     int cur = 0;
     for (size_t i = 0; i < len; ++i) {
-        const uint8_t c = data[i];
-        while (cur != 0 && !ac_nodes_[cur].children.count(c))
-            cur = ac_nodes_[cur].fail_link;
-        auto it = ac_nodes_[cur].children.find(c);
-        if (it != ac_nodes_[cur].children.end()) cur = it->second;
-        for (int sid : ac_nodes_[cur].outputs) results.push_back(sid);
+        cur = ac_nodes_[cur].children[static_cast<unsigned char>(data[i])];
+        if (ac_nodes_[cur].output != -1)
+            return ac_nodes_[cur].output;
     }
-    return results;
+    return SIG_NONE;
 }
 
-// ─── updateFlowState ──────────────────────────────────────────────────────────
-void SignatureEngine::updateFlowState(const PacketInfo& pkt,
-                                       FlowState&        flow) {
-    const auto now = Clock::now();
-    flow.total_packets++;
-    flow.total_bytes += pkt.orig_len;
-    flow.last_seen    = now;
-    if (pkt.hasSYN()) flow.syn_count++;
-    if (pkt.hasACK()) flow.ack_count++;
-    if (pkt.hasRST()) flow.rst_count++;
-    if (pkt.hasFIN()) flow.fin_count++;
+// =============================================================================
+//  analyze — main entry point
+// =============================================================================
+DetectionResult SignatureEngine::analyze(const PacketInfo& pkt,
+                                          FlowState&        flow) {
+    // ── Global SYN flood (distributed, bất kể src) ────────────────────────
+    if (pkt.hasSYN() && !pkt.hasACK()) {
+        auto r = checkGlobalSyn(pkt);
+        if (r != DetectionResult::NORMAL) return r;
 
-    const double elapsed = std::chrono::duration<double>(
-        now - flow.window_start).count();
-    if (elapsed > APP_CFG.thresholds.ip_tracker_window_sec) {
-        flow.pkt_rate_window = 0;
-        flow.window_start    = now;
+        r = checkDstSynRatio(pkt);
+        if (r != DetectionResult::NORMAL) return r;
     }
-    flow.pkt_rate_window++;
+
+    // ── Per-source checks ─────────────────────────────────────────────────
+    auto r = checkFloodRate(pkt, flow);
+    if (r != DetectionResult::NORMAL) return r;
+
+    r = checkPortScan(pkt, flow);
+    if (r != DetectionResult::NORMAL) return r;
+
+    r = checkFlagAbuse(pkt, flow);
+    if (r != DetectionResult::NORMAL) return r;
+
+    return checkPayload(pkt, flow);
 }
 
-// ─── checkDstSynRatio ─────────────────────────────────────────────────────────
-//  Track SYN/ACK ratio theo dst_ip
-//  Distributed flood: nhiều src → 1 dst → SYN tăng, ACK không tăng
+// =============================================================================
+//  checkGlobalSyn
+// =============================================================================
+DetectionResult SignatureEngine::checkGlobalSyn(const PacketInfo& pkt) {
+    const bool over = IpTracker::globalSyn().record(
+        global_syn_threshold_, behavior_window_sec_);
+
+    if (over) {
+        LOG_WARN("SignatureEngine: global SYN flood"
+                 " window_syns=" +
+                 std::to_string(IpTracker::globalSyn().getWindowSyns())
+                 + " threshold=" + std::to_string(global_syn_threshold_));
+        return DetectionResult::DDOS_VOLUMETRIC;
+    }
+    return DetectionResult::NORMAL;
+}
+
+// =============================================================================
+//  checkDstSynRatio
+// =============================================================================
 DetectionResult SignatureEngine::checkDstSynRatio(const PacketInfo& pkt) {
-    if (pkt.protocol != IPPROTO_TCP) return DetectionResult::NORMAL;
-
     DetectionResult result = DetectionResult::NORMAL;
 
     dst_tracker_.withStats(pkt.dst_ip, [&](DstStats& dst) {
-        // Reset window nếu hết hạn
-        if (dst.window_start == TimePoint{} ||
-            dst.windowElapsed() > behavior_window_sec_)
+        dst.syn_count++;
+
+        // Reset window nếu hết thời gian
+        if (dst.windowElapsed() > behavior_window_sec_)
             dst.resetWindow();
 
-        // Cập nhật counter
-        if (pkt.hasSYN() && !pkt.hasACK())
-            dst.syn_count++;
-        else if (pkt.hasACK() && !pkt.hasSYN())
-            dst.ack_count++;
+        if (dst.syn_count < dst_syn_ratio_min_pkt_)
+            return;
 
-        // Chỉ check khi đã có đủ sample
-        if (dst.syn_count < dst_syn_ratio_min_pkt_) return;
-
-        const double ratio = dst.synAckRatio();
-        if (ratio >= dst_syn_ack_ratio_) {
-            LOG_WARN("[DstSYN] Distributed SYN Flood"
-                     " dst="       + std::to_string(pkt.dst_ip)
-                   + " syn="       + std::to_string(dst.syn_count)
-                   + " ack="       + std::to_string(dst.ack_count)
-                   + " ratio="     + std::to_string(ratio)
-                   + " window="    + std::to_string(behavior_window_sec_) + "s");
-            dst.resetWindow();   // reset để tránh alert liên tục
+        if (dst.synAckRatio() >= dst_syn_ack_ratio_) {
+            LOG_WARN("SignatureEngine: dst SYN/ACK ratio flood"
+                     " syn="   + std::to_string(dst.syn_count)
+                     + " ack=" + std::to_string(dst.ack_count)
+                     + " ratio=" + std::to_string(dst.synAckRatio()));
             result = DetectionResult::DDOS_VOLUMETRIC;
         }
     });
@@ -155,197 +228,170 @@ DetectionResult SignatureEngine::checkDstSynRatio(const PacketInfo& pkt) {
     return result;
 }
 
-// ─── checkGlobalSynRate ───────────────────────────────────────────────────────
-//  Đếm tổng SYN toàn hệ thống — bắt low-rate distributed flood
-//  mà cả per-IP lẫn per-DST đều không thấy
-DetectionResult SignatureEngine::checkGlobalSynRate(const PacketInfo& pkt) {
-    if (pkt.protocol != IPPROTO_TCP) return DetectionResult::NORMAL;
-    if (!pkt.hasSYN() || pkt.hasACK())  return DetectionResult::NORMAL;
-
-    const bool triggered = IpTracker::globalSyn().record(
-        global_syn_threshold_,
-        behavior_window_sec_);
-
-    if (triggered) {
-        LOG_WARN("[GlobalSYN] Distributed SYN Flood"
-                 " total_window=" +
-                 std::to_string(IpTracker::globalSyn().getWindowSyns())
-               + " threshold="   + std::to_string(global_syn_threshold_)
-               + " window="      + std::to_string(behavior_window_sec_) + "s"
-               + " trigger_pkt=" + pkt.flowKey());
-        IpTracker::globalSyn().reset();   // reset để tránh alert storm
-        return DetectionResult::DDOS_VOLUMETRIC;
-    }
-
-    return DetectionResult::NORMAL;
-}
-
-// ─── analyze ──────────────────────────────────────────────────────────────────
-DetectionResult SignatureEngine::analyze(const PacketInfo& pkt,
-                                          FlowState&        flow) {
-    updateFlowState(pkt, flow);
-
-    if (!flow.is_initiator)
-        return DetectionResult::NORMAL;
-
-    // ── Layer 1: Per-IP detection (giữ nguyên logic cũ) ──────────────────
-    struct Result {
-        DetectionResult detection = DetectionResult::NORMAL;
-        std::string     log_msg;
-    } res;
-
-    const uint32_t ack_count_snap = flow.ack_count;
+// =============================================================================
+//  checkFloodRate
+// =============================================================================
+DetectionResult SignatureEngine::checkFloodRate(const PacketInfo& pkt,
+                                                 FlowState&        flow) {
+    DetectionResult result = DetectionResult::NORMAL;
 
     ip_tracker_.withStats(pkt.src_ip, [&](IpStats& ip) {
-        // Reset window nếu hết hạn
-        if (ip.windowElapsed() > APP_CFG.thresholds.ip_tracker_window_sec)
-            ip.resetWindow();
-
         ip.pkt_count++;
 
-        // ── SYN Flood (per-IP) ────────────────────────────────────────────
-        if (pkt.protocol == IPPROTO_TCP && pkt.hasSYN() && !pkt.hasACK()) {
+        // Reset window mỗi behavior_window_sec_
+        if (ip.windowElapsed() > behavior_window_sec_)
+            ip.resetWindow();
+
+        if (pkt.hasSYN() && !pkt.hasACK()) {
             ip.syn_count++;
+            ip.syn_flood_count++;
 
-            const bool flood_port_new =
-                ip.flood_ports_seen.insert(pkt.dst_port).second;
-            if (!flood_port_new)
-                ip.syn_flood_count++;
-
-            ip.scan_ports_seen.insert(pkt.dst_port);
-
-            if (ip.syn_bucket.consume(1.0)) {
-                if (ip.syn_count >= min_pkt_before_flood_check_) {
-                    const double flood_ratio =
-                        static_cast<double>(ip.syn_flood_count) /
-                        static_cast<double>(ip.syn_count);
-
-                    if (flood_ratio >= flood_ratio_threshold_) {
-                        res.log_msg =
-                            "[DDoS] SYN Flood (per-IP)"
-                            " src="        + pkt.flowKey()
-                          + " ratio="      + std::to_string(flood_ratio)
-                          + " syn="        + std::to_string(ip.syn_count)
-                          + " flood_syn="  + std::to_string(ip.syn_flood_count)
-                          + " bucket="     + std::to_string(ip.syn_bucket.tokens);
-                        res.detection = DetectionResult::DDOS_VOLUMETRIC;
-                        return;
-                    }
+            // Token bucket consume
+            if (ip.syn_bucket.consume()) {
+                if (ip.pkt_count >= min_pkt_before_flood_check_) {
+                    LOG_WARN("SignatureEngine: SYN flood"
+                             " src=" + pkt.flowKey()
+                             + " syn=" + std::to_string(ip.syn_count));
+                    result = DetectionResult::DDOS_VOLUMETRIC;
                 }
             }
-        }
-
-        // ── UDP Flood ─────────────────────────────────────────────────────
-        if (pkt.protocol == IPPROTO_UDP) {
-            const bool is_quic = (pkt.dst_port == 443 || pkt.src_port == 443);
-            if (!is_quic) {
-                ip.udp_count++;
-                if (ip.udp_bucket.consume(1.0)) {
-                    res.log_msg =
-                        "[DDoS] UDP Flood: src=" + pkt.flowKey()
-                      + " udp="    + std::to_string(ip.udp_count)
-                      + " bucket=" + std::to_string(ip.udp_bucket.tokens);
-                    res.detection = DetectionResult::DDOS_VOLUMETRIC;
-                    return;
-                }
-            }
-        }
-
-        // ── ICMP Flood ────────────────────────────────────────────────────
-        if (pkt.protocol == IPPROTO_ICMP) {
-            ip.icmp_count++;
-            if (ip.icmp_bucket.consume(1.0)) {
-                res.log_msg =
-                    "[DDoS] ICMP Flood: src=" + pkt.flowKey()
-                  + " icmp="   + std::to_string(ip.icmp_count)
-                  + " bucket=" + std::to_string(ip.icmp_bucket.tokens);
-                res.detection = DetectionResult::DDOS_VOLUMETRIC;
-                return;
-            }
-        }
-
-        // ── Port Scan ─────────────────────────────────────────────────────
-        if (pkt.protocol == IPPROTO_TCP) {
-            if (!pkt.hasSYN() || pkt.hasACK()) return;
-            if (ack_count_snap == 0)
-                ip.syn_no_ack++;
         } else if (pkt.protocol == IPPROTO_UDP) {
-            ip.scan_ports_seen.insert(pkt.dst_port);
-        } else {
-            return;
+            ip.udp_count++;
+            if (ip.udp_bucket.consume()) {
+                LOG_WARN("SignatureEngine: UDP flood"
+                         " src=" + pkt.flowKey()
+                         + " udp=" + std::to_string(ip.udp_count));
+                result = DetectionResult::DDOS_VOLUMETRIC;
+            }
+        } else if (pkt.protocol == IPPROTO_ICMP) {
+            ip.icmp_count++;
+            if (ip.icmp_bucket.consume()) {
+                LOG_WARN("SignatureEngine: ICMP flood"
+                         " src=" + pkt.flowKey()
+                         + " icmp=" + std::to_string(ip.icmp_count));
+                result = DetectionResult::DDOS_VOLUMETRIC;
+            }
         }
 
-        const bool enough_ports  =
-            (ip.scan_ports_seen.size() >= port_scan_threshold_);
-        const bool enough_no_ack =
-            (ip.syn_no_ack >= port_scan_syn_no_ack_min_);
-
-        if (enough_ports && enough_no_ack) {
-            res.log_msg =
-                "[PortScan] detected: src=" + pkt.flowKey()
-              + " scan_ports="             +
-                std::to_string(ip.scan_ports_seen.size())
-              + " syn_no_ack="             + std::to_string(ip.syn_no_ack);
-            ip.resetScanTracking();
-            res.detection = DetectionResult::PORT_SCAN;
+        // Flood ratio check (SYN vs total)
+        if (ip.pkt_count >= min_pkt_before_flood_check_) {
+            const double ratio = static_cast<double>(ip.syn_count)
+                               / static_cast<double>(ip.pkt_count);
+            if (ratio >= flood_ratio_threshold_) {
+                LOG_WARN("SignatureEngine: flood ratio exceeded"
+                         " ratio=" + std::to_string(ratio)
+                         + " threshold=" + std::to_string(flood_ratio_threshold_)
+                         + " src=" + pkt.flowKey());
+                result = DetectionResult::DDOS_VOLUMETRIC;
+            }
         }
     });
 
-    if (!res.log_msg.empty()) LOG_WARN(res.log_msg);
-    if (res.detection != DetectionResult::NORMAL) return res.detection;
+    return result;
+}
 
-    // ── Layer 2: Per-DST SYN/ACK ratio (distributed flood) ───────────────
+// =============================================================================
+//  checkPortScan
+//  Chỉ track SYN probe từ is_initiator=true để tránh nhiễm RST response
+// =============================================================================
+DetectionResult SignatureEngine::checkPortScan(const PacketInfo& pkt,
+                                                FlowState&        flow) {
+    // Chỉ track SYN không có ACK (probe packet)
+    if (!pkt.hasSYN() || pkt.hasACK())
+        return DetectionResult::NORMAL;
+
+    // Chỉ analyze flow khởi tạo bởi attacker
+    if (!flow.is_initiator)
+        return DetectionResult::NORMAL;
+
+    flow.dst_ports_seen.insert(pkt.dst_port);
+    flow.syn_no_ack++;
+
+    // Đồng bộ vào IpStats để BehavioralEngine cũng thấy
+    ip_tracker_.withStats(pkt.src_ip, [&](IpStats& ip) {
+        ip.scan_ports_seen.insert(pkt.dst_port);
+        ip.syn_no_ack = flow.syn_no_ack;
+    });
+
+    const uint32_t unique_ports =
+        static_cast<uint32_t>(flow.dst_ports_seen.size());
+
+    if (unique_ports  >= port_scan_threshold_ &&
+        flow.syn_no_ack >= port_scan_syn_no_ack_min_)
     {
-        auto r = checkDstSynRatio(pkt);
-        if (r != DetectionResult::NORMAL) return r;
+        LOG_WARN("SignatureEngine: port scan detected"
+                 " src="          + pkt.flowKey()
+                 + " unique_ports=" + std::to_string(unique_ports)
+                 + " syn_no_ack="   + std::to_string(flow.syn_no_ack)
+                 + " threshold="    + std::to_string(port_scan_threshold_));
+        return DetectionResult::PORT_SCAN;
     }
-
-    // ── Layer 3: Global SYN rate (low-rate distributed flood) ─────────────
-    {
-        auto r = checkGlobalSynRate(pkt);
-        if (r != DetectionResult::NORMAL) return r;
-    }
-
-    // ── Layer 4: Flag abuse + payload signatures ───────────────────────────
-    {
-        auto r = checkFlagAbuse(pkt);
-        if (r != DetectionResult::NORMAL) return r;
-    }
-
-    if (pkt.payload_len > 0 && pkt.payload() != nullptr)
-        return checkPayload(pkt);
 
     return DetectionResult::NORMAL;
 }
 
-// ─── checkFlagAbuse ───────────────────────────────────────────────────────────
-DetectionResult SignatureEngine::checkFlagAbuse(const PacketInfo& pkt) {
-    if (pkt.protocol != IPPROTO_TCP) return DetectionResult::NORMAL;
+// =============================================================================
+//  checkFlagAbuse
+//  XMAS scan (FIN+PSH+URG), NULL scan (no flags), FIN scan
+// =============================================================================
+DetectionResult SignatureEngine::checkFlagAbuse(const PacketInfo& pkt,
+                                                 FlowState&        flow) {
+    if (pkt.protocol != IPPROTO_TCP)
+        return DetectionResult::NORMAL;
 
-    constexpr uint8_t XMAS = TCPFlags::FIN | TCPFlags::PSH | TCPFlags::URG;
-    if ((pkt.tcp_flags & XMAS) == XMAS) {
-        LOG_WARN("[FlagAbuse] XMAS Scan: " + pkt.flowKey());
+    const bool fin = pkt.hasFIN();
+    const bool psh = pkt.hasPSH();
+    const bool urg = pkt.hasURG();
+    const bool syn = pkt.hasSYN();
+    const bool ack = pkt.hasACK();
+    const bool rst = pkt.hasRST();
+
+    // XMAS scan: FIN + PSH + URG
+    if (fin && psh && urg) {
+        LOG_WARN("SignatureEngine: XMAS scan from " + pkt.flowKey());
         return DetectionResult::PORT_SCAN;
     }
-    if (pkt.tcp_flags == 0x00) {
-        LOG_WARN("[FlagAbuse] NULL Scan: " + pkt.flowKey());
+
+    // NULL scan: không có flag nào
+    if (!fin && !syn && !rst && !psh && !ack && !urg) {
+        LOG_WARN("SignatureEngine: NULL scan from " + pkt.flowKey());
         return DetectionResult::PORT_SCAN;
     }
-    if ((pkt.tcp_flags & TCPFlags::FIN) && !(pkt.tcp_flags & TCPFlags::ACK)) {
-        LOG_WARN("[FlagAbuse] FIN Scan: " + pkt.flowKey());
+
+    // FIN scan: chỉ có FIN, không có ACK (không phải close bình thường)
+    if (fin && !ack && !syn) {
+        LOG_WARN("SignatureEngine: FIN scan from " + pkt.flowKey());
         return DetectionResult::PORT_SCAN;
     }
+
     return DetectionResult::NORMAL;
 }
 
-// ─── checkPayload ─────────────────────────────────────────────────────────────
-DetectionResult SignatureEngine::checkPayload(const PacketInfo& pkt) {
-    const auto matches = search(pkt.payload(), pkt.payload_len);
-    for (int sid : matches) {
-        if (sid == SIG_SLOWLORIS) {
-            LOG_WARN("[Payload] Slowloris: " + pkt.flowKey());
-            return DetectionResult::SLOW_DDOS;
-        }
-    }
-    return DetectionResult::NORMAL;
+// =============================================================================
+//  checkPayload
+//  Aho-Corasick match payload → Slowloris / Slow POST header pattern
+// =============================================================================
+DetectionResult SignatureEngine::checkPayload(const PacketInfo& pkt,
+                                               FlowState&        flow) {
+    if (pkt.payload_len == 0 || pkt.payload() == nullptr)
+        return DetectionResult::NORMAL;
+
+    const int sig_id = acSearch(pkt.payload(), pkt.payload_len);
+    if (sig_id == SIG_NONE)
+        return DetectionResult::NORMAL;
+
+    // Lấy metadata từ rule_map_ (đọc từ rules.json)
+    const auto it = rule_map_.find(sig_id);
+    const std::string rule_id =
+        (it != rule_map_.end()) ? it->second.id : "UNKNOWN";
+    const std::string action  =
+        (it != rule_map_.end()) ? it->second.action : "ALERT";
+
+    LOG_WARN("SignatureEngine: payload match"
+             " rule="   + rule_id
+             + " sig_id=" + std::to_string(sig_id)
+             + " action=" + action
+             + " from "   + pkt.flowKey());
+
+    return DetectionResult::SLOW_DDOS;
 }

@@ -305,26 +305,9 @@ int main(int argc, char* argv[]) {
     FeatureExtractor extractor;
     std::thread l2_feeder_thread([&]() {
         if (!run_l2) return;
-        while (g_running) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            dispatcher.forEachFlow([&](FlowState& flow) {
-                if (flow.total_packets < 5) return;
-                if (flow.is_malicious)      return;
-
-                MLJob job;
-                job.features  = extractor.extract(flow);
-                job.flow_key  = flow.flow_key;
-                job.src_ip    = flow.src_ip;
-                job.dst_ip    = flow.dst_ip;
-                job.src_port  = flow.src_port;
-                job.dst_port  = flow.dst_port;
-                job.timestamp = std::chrono::duration<double>(
-                    Clock::now().time_since_epoch()).count();
-
-                if (!ml_queue.push(job))
-                    METRICS.queue_drops++;
-            });
-        }
+        // NSL-KDD: jobs được push bởi WorkerThread → chỉ cần wait
+        while (g_running)
+            std::this_thread::sleep_for(std::chrono::seconds(1));
     });
 
     // ── 11. Capture loop ──────────────────────────────────────────────────────

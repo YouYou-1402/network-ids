@@ -186,62 +186,86 @@ void WorkerThread::processPacket(PacketInfo& pkt) {
         return;
     }
 
-    // ── 2b. Update ML features ────────────────────────────────────────────────
+    // ── 2b. Update ALL ML features ────────────────────────────────────────────
     //
-    // Thực hiện TRƯỚC mọi detection engine để features luôn up-to-date
-    // khi pushMLJob() được gọi ở cuối pipeline.
+    // [FIX-1] total_packets và total_bytes phải được increment tại đây.
+    //   Trước đây FlowTable::createFlow() chỉ set total_packets=1 cho packet
+    //   đầu tiên, các packet tiếp theo không được đếm → feature vô nghĩa.
     //
-    // Hai nhóm feature được update tại đây:
-    //   A) Per-direction bytes  : fwd_bytes / bwd_bytes
-    //   B) Inter-Arrival Time   : iat_mean_ms / iat_m2  (Welford's algorithm)
+    // [FIX-2] Tất cả TCP flag counter và fwd/bwd packet counter phải được
+    //   update tại đây — không phải trong SignatureEngine hay chỗ khác.
+    //   Lý do: SignatureEngine có thể return sớm (detect DDOS_VOLUMETRIC),
+    //   nhưng ML cần features đầy đủ bất kể L1 quyết định gì.
+    //
+    // [FIX-3] Welford's IAT: dùng total_packets SAU khi increment.
+    //   n = total_packets (sau increment) = số packet hiện tại (bắt đầu từ 1).
+    //   Welford's yêu cầu n = index của observation hiện tại.
+    //   Trước đây dùng total_packets trước increment → n lệch 1 → mean sai.
+    //
+    // [FIX-4] dst_ports_seen: insert tại đây cho mọi SYN (no-ACK).
+    //   Trước đây chỉ SignatureEngine::checkPortScan() mới insert.
+    //   → unique_dst_ports = 0 với mọi flow không bị L1 detect
+    //   → feature vô nghĩa với ML model
     {
-        // ── A. Per-direction bytes ─────────────────────────────────────────────
-        // is_initiator được set 1 lần trong FlowTable::createFlow()
-        // dựa trên SYN flag của packet đầu tiên:
-        //   SYN (không ACK) → is_initiator = true  → hướng fwd
-        //   Còn lại         → is_initiator = false → hướng bwd
-        //
-        // payload_len = IP total length - IP header - TCP/UDP header
-        // = 0 với SYN/ACK/RST thuần (không có payload)
-        if (flow->is_initiator)
-            flow->fwd_bytes += pkt.payload_len;
-        else
-            flow->bwd_bytes += pkt.payload_len;
+        // [FIX-1] Packet / byte counters
+        flow->total_packets++;
+        flow->total_bytes += pkt.payload_len;
 
-        // ── B. Welford's online algorithm cho Inter-Arrival Time ───────────────
+        if (flow->is_initiator) {
+            flow->fwd_packets++;
+            flow->fwd_bytes += pkt.payload_len;
+        } else {
+            flow->bwd_packets++;
+            flow->bwd_bytes += pkt.payload_len;
+        }
+
+        // [FIX-2] TCP flag counters
+        if (pkt.protocol == IPPROTO_TCP) {
+            const bool has_syn = pkt.hasSYN();
+            const bool has_ack = pkt.hasACK();
+            const bool has_rst = pkt.hasRST();
+            const bool has_fin = pkt.hasFIN();
+
+            if (has_syn) {
+                flow->syn_count++;
+                if (!has_ack) {
+                    // SYN không có ACK = half-open probe
+                    flow->syn_no_ack++;
+
+                    // [FIX-4] dst_ports_seen: track mọi SYN probe
+                    // Không giới hạn chỉ khi SignatureEngine detect
+                    // → unique_dst_ports có giá trị thực với mọi flow
+                    flow->dst_ports_seen.insert(pkt.dst_port);
+                }
+            }
+            if (has_ack) flow->ack_count++;
+            if (has_rst) flow->rst_count++;
+            if (has_fin) flow->fin_count++;
+        }
+
+        // [FIX-3] IAT — Welford's online algorithm
         //
         // Điều kiện update:
-        //   1. total_packets > 1       : cần ít nhất 2 packet để có IAT
-        //   2. pkt.timestamp_d > 0     : timestamp hợp lệ
-        //   3. prev_pkt_timestamp_d > 0: đã có packet trước
+        //   total_packets >= 2  : cần ít nhất 2 packet để có IAT
+        //   timestamp_d > 0     : packet có timestamp hợp lệ
+        //   prev_pkt_timestamp_d > 0 : đã có packet trước
         //
-        // Welford's one-pass (Knuth, TAOCP Vol.2):
-        //   n      = total_packets  (đã được increment bởi getOrCreate)
-        //   iat_ms = (cur_ts - prev_ts) * 1000
-        //   delta  = iat_ms - mean_old
-        //   mean  += delta / n
-        //   delta2 = iat_ms - mean_new        ← dùng mean MỚI
-        //   M2    += delta * delta2
+        // n = total_packets SAU increment (đã fix):
+        //   Packet 2: n=2, delta = iat - 0 = iat, mean = iat/2
+        //   Packet 3: n=3, delta = iat - mean_prev, mean += delta/3
+        //   → Welford's chuẩn: mean_n = mean_{n-1} + (x_n - mean_{n-1}) / n
         //
-        //   Variance = M2 / (n - 1)           ← sample variance
-        //   Std      = sqrt(M2 / (n - 1))
-        //
-        // Lý do dùng Welford's:
-        //   - O(1) memory: không cần lưu toàn bộ IAT history
-        //   - Numerically stable: tránh catastrophic cancellation
-        //     của naive formula Var = E[X²] - E[X]²
-        //     (xảy ra khi mean >> std, ví dụ IAT ~ 100ms ± 0.1ms)
-        if (flow->total_packets > 1
-            && pkt.timestamp_d            > 0.0
-            && flow->prev_pkt_timestamp_d > 0.0)
+        // Guard iat_ms: [0.001, 60000] ms
+        //   < 0.001ms: clock resolution artifact → bỏ qua
+        //   > 60000ms: flow idle / clock jump → bỏ qua
+        if (flow->total_packets >= 2
+            && pkt.timestamp_d             > 0.0
+            && flow->prev_pkt_timestamp_d  > 0.0)
         {
             const double iat_ms = (pkt.timestamp_d
                                    - flow->prev_pkt_timestamp_d) * 1000.0;
-
-            // Chỉ update nếu IAT hợp lệ:
-            //   iat_ms <= 0  : clock skew hoặc out-of-order packet → bỏ qua
-            //   iat_ms > 60s : flow idle quá lâu → bỏ qua để không skew mean
-            if (iat_ms > 0.0 && iat_ms < 60000.0) {
+            if (iat_ms > 0.001 && iat_ms < 60000.0) {
+                // [FIX-3] n = total_packets SAU increment
                 const double n      = static_cast<double>(flow->total_packets);
                 const double delta  = iat_ms - flow->iat_mean_ms;
                 flow->iat_mean_ms  += delta / n;
@@ -250,11 +274,28 @@ void WorkerThread::processPacket(PacketInfo& pkt) {
             }
         }
 
-        // Lưu timestamp hiện tại cho packet tiếp theo
-        // Thực hiện SAU khi tính IAT (không phải trước)
         flow->prev_pkt_timestamp_d = pkt.timestamp_d;
+        flow->last_seen            = Clock::now();
     }
-    // ── end 2b ────────────────────────────────────────────────────────────────
+
+    // ── 2c. Protocol Anomaly pre-hook — TRƯỚC tất cả detection engine ─────────
+    //
+    // Gọi anomaly_engine_.onSyn() tại đây để đảm bảo http_start luôn được
+    // set khi nhận SYN, bất kể sig_engine_ có detect DDOS_VOLUMETRIC hay không.
+    //
+    // Vấn đề nếu không có bước này:
+    //   Slowloris gửi 500 SYN → sig_engine_.checkFloodRate() detect
+    //   DDOS_VOLUMETRIC tại packet thứ 10 → processPacket() return sớm
+    //   → anomaly_engine_.analyze() không được gọi
+    //   → flow.http_start không được set
+    //   → Các packet keep-alive header sau đó:
+    //       flow.http_start == TimePoint{} → checkSlowloris() return NORMAL
+    //   → Slowloris không bao giờ bị detect bởi ProtocolAnomalyEngine
+    //
+    // Fix: tách onSyn() ra khỏi analyze(), gọi unconditionally tại đây
+    // → http_start luôn được set ngay cả khi sig_engine_ return sớm
+    if (pkt.protocol == IPPROTO_TCP)
+        anomaly_engine_.onSyn(pkt, *flow);
 
     // ── 3. Firewall quick check ───────────────────────────────────────────────
     if (firewall_manager_) {
@@ -269,15 +310,12 @@ void WorkerThread::processPacket(PacketInfo& pkt) {
         }
 
         if (check == FirewallManager::QuickCheck::BLACKLIST) {
-            // nftables/iptables đã DROP ở kernel
-            // Packet này chỉ xuất hiện nếu capture trước firewall (mirror port)
             METRICS.packets_dropped.fetch_add(1, std::memory_order_relaxed);
             ring_buf_.updateRecord(pkt.index, [](PacketInfo& slot) {
                 slot.action = "DROP(blacklist)";
             });
             return;
         }
-        // QuickCheck::NONE → tiếp tục detection
     }
 
     // ── 4. Detection guard ────────────────────────────────────────────────────
@@ -286,8 +324,6 @@ void WorkerThread::processPacket(PacketInfo& pkt) {
         ring_buf_.updateRecord(pkt.index, [](PacketInfo& slot) {
             slot.action = "PASS";
         });
-        // Vẫn sample cho ML khi L1 disabled
-        // → ML có thể phát hiện anomaly mà L1 bỏ qua
         if (ml_job_queue_
             && ENGINE_CFG.ml_enabled.load(std::memory_order_relaxed)
             && shouldSampleForML(*flow))
@@ -302,9 +338,34 @@ void WorkerThread::processPacket(PacketInfo& pkt) {
     DetectionSource source = DetectionSource::LAYER1_SIGNATURE;
 
     // ── 6. Layer 1b — Protocol Anomaly (Slow DDoS) ───────────────────────────
-    if (result == DetectionResult::NORMAL) {
-        result = anomaly_engine_.analyze(pkt, *flow);
-        source = DetectionSource::LAYER1_PROTOCOL_ANOMALY;
+    //
+    // Chạy LUÔN LUÔN kể cả khi sig_engine_ detect DDOS_VOLUMETRIC.
+    //
+    // Lý do: Slowloris tạo nhiều connection → sig_engine_ có thể detect
+    // DDOS_VOLUMETRIC (flood) trước khi anomaly_engine_ detect SLOW_DDOS.
+    // Nếu skip anomaly_engine_, threat_type sẽ là DDOS_VOLUMETRIC thay vì
+    // SLOW_DDOS → action sai (DROP thay vì ALERT + rate limit).
+    //
+    // Ưu tiên: SLOW_DDOS > DDOS_VOLUMETRIC khi dst_port là HTTP/HTTPS
+    // vì SLOW_DDOS cần xử lý khác (rate limit per-IP, không block toàn bộ)
+    {
+        const bool is_http = (pkt.dst_port == 80  || pkt.dst_port == 8080
+                           || pkt.dst_port == 443);
+        if (is_http) {
+            const DetectionResult anomaly_r =
+                anomaly_engine_.analyze(pkt, *flow);
+
+            if (anomaly_r != DetectionResult::NORMAL) {
+                result = anomaly_r;
+                source = DetectionSource::LAYER1_PROTOCOL_ANOMALY;
+            }
+            // Nếu anomaly NORMAL nhưng sig detect PORT_SCAN → giữ nguyên
+        } else {
+            if (result == DetectionResult::NORMAL) {
+                result = anomaly_engine_.analyze(pkt, *flow);
+                source = DetectionSource::LAYER1_PROTOCOL_ANOMALY;
+            }
+        }
     }
 
     // ── 7. Layer 1c — Behavioral Engine ──────────────────────────────────────
@@ -325,8 +386,6 @@ void WorkerThread::processPacket(PacketInfo& pkt) {
             slot.action      = action;
         });
 
-        // Vẫn sample cho ML sau khi L1 detect
-        // → ML học được pattern của traffic độc hại (supervised signal)
         if (ml_job_queue_
             && ENGINE_CFG.ml_enabled.load(std::memory_order_relaxed)
             && shouldSampleForML(*flow))
@@ -342,12 +401,7 @@ void WorkerThread::processPacket(PacketInfo& pkt) {
         slot.action = "PASS";
     });
 
-    // ── 10. ML sampling — Layer 2 ─────────────────────────────────────────────
-    // Push flow snapshot vào MLJobQueue để MLEngine phân tích bất đồng bộ
-    // Chỉ push khi:
-    //   a. MLJobQueue tồn tại
-    //   b. ml_enabled = true
-    //   c. Flow đủ "già" để có features ý nghĩa (shouldSampleForML)
+    // ── 10. ML sampling ───────────────────────────────────────────────────────
     if (ml_job_queue_
         && ENGINE_CFG.ml_enabled.load(std::memory_order_relaxed)
         && shouldSampleForML(*flow))
@@ -363,7 +417,6 @@ void WorkerThread::handleDetection(DetectionResult    result,
                                     DetectionSource    source,
                                     const PacketInfo&  pkt,
                                     FlowState&         flow) {
-    // ── Metrics ───────────────────────────────────────────────────────────────
     switch (result) {
         case DetectionResult::DDOS_VOLUMETRIC:
             METRICS.ddos_detected   .fetch_add(1, std::memory_order_relaxed);
@@ -382,7 +435,6 @@ void WorkerThread::handleDetection(DetectionResult    result,
             break;
     }
 
-    // ── Auto-block vào kernel firewall ────────────────────────────────────────
     if (firewall_manager_) {
         struct in_addr addr;
         addr.s_addr = pkt.src_ip;
@@ -391,11 +443,9 @@ void WorkerThread::handleDetection(DetectionResult    result,
         firewall_manager_->autoBlock(src_ip_str, pkt.protocol, 0, reason);
     }
 
-    // ── Flow state ────────────────────────────────────────────────────────────
     flow.is_malicious = true;
     flow.threat_type  = threatToString(result);
 
-    // ── Alert callback → AlertManager / UI ───────────────────────────────────
     const DetectionEvent ev = action_handler_.makeEvent(result, source, pkt);
     if (on_alert_) on_alert_(ev);
 }
@@ -405,107 +455,58 @@ void WorkerThread::handleDetection(DetectionResult    result,
 //
 //  Quyết định có push flow snapshot vào MLJobQueue hay không.
 //
-//  ── Vấn đề với code cũ ────────────────────────────────────────────────────
+//  ── Case [A]: SYN-only flow (n=1) ────────────────────────────────────────
 //
-//  Case [A] cũ:
-//    if (n==1 && syn>0 && ack==0 && fin==0) return true;
+//  Bắt hping3 --rand-source: mỗi flow chỉ có đúng 1 SYN packet.
+//  Nếu không sample tại n=1, flow sẽ expire trước khi đạt n=10 → bỏ sót.
 //
-//  Trigger với CẢ HAI trường hợp:
-//    (a) hping3 --rand-source -p 443
-//        flow: RAND_IP:PORT → 192.168.100.95:443
-//        dst_ip = 192.168.100.95  ← RFC1918 (internal victim)
+//  Guard isPrivateIP(dst_ip):
+//    dst_ip là RFC1918 → scan vào internal host → sample ✓
+//    dst_ip là public  → outbound connection (CDN, API) → KHÔNG sample
 //
-//    (b) Client mở HTTPS đến CDN (YouTube, Microsoft, ...)
-//        flow: 192.168.100.95:PORT → 142.250.197.130:443
-//        dst_ip = 142.250.197.130  ← public IP (external CDN)
+//  Tại sao không dùng is_initiator hay src_port:
+//    hping3 --rand-source: is_initiator=TRUE, src_port>=1024, dst=RFC1918
+//    Client → CDN:443   : is_initiator=TRUE, src_port>=1024, dst=PUBLIC
+//    → Chỉ dst_ip phân biệt được.
 //
-//  Tại n=1, FeatureVector gần như rỗng:
-//    flow_duration ≈ 0  →  pkt_rate = normalize(∞) = max
-//    fwd_bytes = 0 (SYN không có payload)
-//    bwd_bytes = 0
-//    syn=1, ack=0
-//  → XGBoost: {syn=1, ack=0, pkt_rate=max, bytes=0} = PORT_SCAN (score=0.703)
-//    Đây là decision boundary cứng của tree — không phải coincidence.
+//  ── Case [B]: Sampling định kỳ ───────────────────────────────────────────
 //
-//  ── Tại sao không dùng is_initiator hay src_port ──────────────────────────
+//  Tại n=10, flow đã hoàn thành ít nhất 1 RTT → features có nghĩa.
+//  Không cần guard isPrivateIP: CDN flow tại n=10 có ack_count>0, bwd_bytes>0
+//  → XGBoost classify đúng (BENIGN).
 //
-//  Cả hai trường hợp đều có:
-//    is_initiator = TRUE  (cả 2 đều gửi SYN → createFlow() set TRUE)
-//    src_port >= 1024     (ephemeral port)
-//    scan_ports_seen.size() = 1  (hping3 --rand-source: mỗi src_ip random
-//                                 chỉ gửi 1 SYN → size=1, giống CDN client)
-//  → Không phân biệt được qua các field này.
+//  ── Case [C]: SYN flood tích lũy ─────────────────────────────────────────
 //
-//  ── Fix: isPrivateIP(dst_ip) ──────────────────────────────────────────────
+//  Bắt hping3 với IP cố định: 1 flow tích lũy nhiều SYN liên tục.
+//  syn_no_ack > 5: nhiều SYN gửi đi không nhận được ACK phản hồi.
 //
-//  Port scan vào nội bộ : dst_ip là RFC1918 → sample tại n=1 ✓
-//  Client ra CDN        : dst_ip là public  → KHÔNG sample tại n=1
-//                         → Chờ n=10 (case [B]) khi flow đã có đủ features
-//
-//  Tại n=10 với CDN flow:
-//    flow đã hoàn thành ít nhất 1 RTT (SYN→SYN-ACK→ACK→DATA)
-//    flow_duration > 0, fwd_bytes > 0, bwd_bytes > 0, ack_count > 0
-//    → Features có nghĩa → XGBoost classify đúng (BENIGN)
+//  Guard isPrivateIP(dst_ip):
+//    CDN có thể có syn_no_ack tạm thời > 5 trong TLS session resumption
+//    → Chỉ sample khi dst là internal host.
 //
 //  ── Edge cases ────────────────────────────────────────────────────────────
 //
 //  [E1] Attacker trong mạng nội bộ scan ra ngoài:
-//    src_ip = 192.168.x.x (compromised host), dst_ip = 1.2.3.4 (external)
-//    → dst_ip không phải RFC1918 → case [A] không trigger
-//    → NHƯNG: SignatureEngine::checkPortScan() vẫn chạy độc lập (L1)
-//    → Case [B] tại n=10 vẫn sample cho ML
-//    → Chấp nhận được: L1 đã cover, ML là layer bổ sung
+//    dst_ip = public → case [A] không trigger
+//    → L1 SignatureEngine vẫn cover, case [B] tại n=10 vẫn sample
 //
-//  [E2] Scan nội bộ đến nội bộ (lateral movement):
-//    src_ip = 192.168.x.x, dst_ip = 192.168.y.y
-//    → dst_ip là RFC1918 → case [A] trigger → sample tại n=1 ✓
+//  [E2] Lateral movement (internal → internal):
+//    dst_ip = RFC1918 → case [A] trigger ✓
 //
-//  [E3] hping3 --rand-source probe port lạ (không phải 443):
-//    dst_ip = 192.168.100.95 (internal) → case [A] trigger ✓
-//
-//  [E4] CDN dùng IP private (không thực tế nhưng phòng ngừa):
-//    Không tồn tại trong thực tế — CDN luôn dùng public IP.
-//
-//  ── Case [C]: SYN flood tích lũy ─────────────────────────────────────────
-//
-//  Guard isPrivateIP(dst_ip) tương tự case [A]:
-//    CDN server có thể có syn_no_ack tạm thời cao trong TLS session resumption
-//    → Nếu không guard, case [C] trigger với CDN flow → false positive
-//    → Guard: chỉ sample khi dst là internal host
-//
+//  [E3] hping3 --rand-source probe port lạ:
+//    dst_ip = RFC1918 → case [A] trigger ✓
 // =============================================================================
 bool WorkerThread::shouldSampleForML(const FlowState& flow) const {
     const uint64_t n = flow.total_packets;
 
     // ── Case [A]: SYN-only flow ───────────────────────────────────────────────
-    //
-    // Bắt hping3 --rand-source: mỗi flow chỉ có đúng 1 SYN packet.
-    // Nếu không sample tại n=1, flow sẽ expire trước khi đạt n=10
-    // → bỏ sót hoàn toàn.
-    //
-    // Guard isPrivateIP(dst_ip):
-    //   dst_ip là RFC1918 → scan vào internal host → sample ✓
-    //   dst_ip là public  → outbound connection (CDN, API, ...) → skip
-    //
     if (n == 1) {
-        // Chỉ cho phép sample n=1 nếu là quét cổng nội bộ (dst là Private IP)
-        if (isPrivateIP(flow.dst_ip)) {
+        if (isPrivateIP(flow.dst_ip))
             return (flow.syn_count > 0 && flow.ack_count == 0);
-        }
-        // Nếu là YouTube/Facebook (Public IP), tuyệt đối đợi đến n=10 
-        // để các đặc trưng duration, byte_rate ổn định.
-        return false; 
+        return false;
     }
+
     // ── Case [C]: SYN flood tích lũy ─────────────────────────────────────────
-    //
-    // Bắt hping3 với IP cố định: 1 flow tích lũy nhiều SYN liên tục.
-    // syn_no_ack > 5: nhiều SYN gửi đi không nhận được ACK phản hồi.
-    //
-    // Guard isPrivateIP(dst_ip):
-    //   CDN có thể có syn_no_ack tạm thời > 5 trong quá trình
-    //   TLS session resumption / HTTP/2 multiplexing → false positive
-    //   → Chỉ sample khi dst là internal host.
-    //
     if (flow.syn_no_ack   >  5
         && n              %  5 == 0
         && isPrivateIP(flow.dst_ip))
@@ -514,17 +515,9 @@ bool WorkerThread::shouldSampleForML(const FlowState& flow) const {
     }
 
     // ── Case [B]: Sampling định kỳ ───────────────────────────────────────────
-    //
-    // Không cần guard isPrivateIP ở đây:
-    //   - Tại n=10, flow đã có ít nhất 1 RTT hoàn chỉnh
-    //   - flow_duration > 0, fwd_bytes > 0, bwd_bytes > 0, ack_count > 0
-    //   - Features có nghĩa → XGBoost classify đúng cho cả internal và external
-    //   - CDN flow tại n=10: ack_count > 0, bwd_bytes > 0
-    //     → XGBoost không classify là PORT_SCAN
-    //
-    if (n == 10)                   return true;   // snapshot đầu tiên
-    if (n <  200 && n % 50  == 0)  return true;   // mỗi 50 pkts (flow trẻ)
-    if (n >= 200 && n % 200 == 0)  return true;   // mỗi 200 pkts (flow già)
+    if (n == 10)                   return true;
+    if (n <  200 && n % 50  == 0)  return true;
+    if (n >= 200 && n % 200 == 0)  return true;
 
     return false;
 }
@@ -534,9 +527,29 @@ bool WorkerThread::shouldSampleForML(const FlowState& flow) const {
 // =============================================================================
 void WorkerThread::pushMLJob(const PacketInfo&  pkt,
                               const FlowState&   flow,
-                              const std::string& flow_key) {
+                              const std::string& flow_key)
+{
+    // ── 1. Record connection vào window counter ───────────────────────────────
+    // Gọi TRƯỚC query để "current connection" được tính vào window
+    // (NSL-KDD tính "connections including current one")
+    window_counter_.recordConnection(flow.dst_ip, flow.dst_port);
+
+    // ── 2. Query window counters ──────────────────────────────────────────────
+    const uint32_t cnt      = window_counter_.queryCount2s(flow.dst_ip);
+    const uint32_t srv_cnt  = window_counter_.querySrvCount2s(flow.dst_port);
+    const uint32_t dh_cnt   = window_counter_.queryDstHostCount(flow.dst_ip);
+    const uint32_t dhs_cnt  = window_counter_.queryDstHostSrvCount(
+                                  flow.dst_ip, flow.dst_port);
+
+    // ── 3. Build FlowSnapshot ─────────────────────────────────────────────────
     MLJob job;
-    job.features  = feature_extractor_.extract(flow);
+    job.flow_snapshot = FlowSnapshot::from(flow,
+                                           cnt,
+                                           srv_cnt,
+                                           dh_cnt,
+                                           dhs_cnt);
+
+    // ── 4. Fill job metadata ──────────────────────────────────────────────────
     job.flow_key  = flow_key;
     job.src_ip    = pkt.src_ip;
     job.dst_ip    = pkt.dst_ip;
@@ -544,6 +557,7 @@ void WorkerThread::pushMLJob(const PacketInfo&  pkt,
     job.dst_port  = pkt.dst_port;
     job.timestamp = pkt.timestamp_d;
 
+    // ── 5. Push vào queue ─────────────────────────────────────────────────────
     if (!ml_job_queue_->push(std::move(job))) {
         METRICS.queue_drops.fetch_add(1, std::memory_order_relaxed);
         LOG_DEBUG("MLJobQueue full, job dropped for flow: " + flow_key);

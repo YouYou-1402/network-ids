@@ -28,10 +28,10 @@
   },
 
   "thresholds": {
-    "flood_ratio":               0.3,
+    "flood_ratio":               0.8,
     "port_scan_ports":           15,
     "port_scan_syn_no_ack_min":  15,
-    "min_pkt_before_flood":      10,
+    "min_pkt_before_flood":      50,
     "syn_no_complete":           30,
     "http_flood_req_per_window": 100,
     "dist_scan_src_threshold":   5,
@@ -55,26 +55,29 @@
 
   "protocol_anomaly": {
     "http_header_timeout_sec":    30.0,
-    "min_bytes_per_sec":          50.0,
-    "max_concurrent_conn":        50,
-    "slowloris_conn_min":         30,
+    "min_bytes_per_sec":          10.0,
+    "max_concurrent_conn":        20,
+    "slowloris_conn_min":         10,
     "slow_post_duration_min_sec": 60.0,
     "win_zero_count_threshold":   5,
     "http_ports":                 [80, 8080]
   },
 
   "ml": {
-    "xgb_model_path": "/media/linhlinh/learn/nckh/network-ids/models/xgboost_ids_model.onnx",
-    "ae_model_path":  "/media/linhlinh/learn/nckh/network-ids/models/autoencoder_ids_model_v8.onnx",
-    "scaler_path":    "/media/linhlinh/learn/nckh/network-ids/models/scaler.bin",
-    "xgb_threshold":  0.50,
-    "ae_threshold":   0.10,
-    "ae_high_threshold": 0.85,
-    "min_confidence": 0.60,
-    "xgb_weight":     0.65,
-    "ae_weight":      0.35,
-    "alert_cooldown_sec": 10.0
+      "xgb_model_path"     : "",
+      "ae_model_path"      : "/media/linhlinh/learn/nckh/network-ids/models/autoencoder_ids_model.onnx",
+      "ae_meta_path"       : "/media/linhlinh/learn/nckh/network-ids/models/ae_meta.json",
+      "scaler_nslkdd_path" : "/media/linhlinh/learn/nckh/network-ids/models/scaler_nslkdd.bin",
+      "scaler_path"        : "",
+      "ae_threshold"       : 0.099726,
+      "xgb_threshold"      : 0.5,
+      "ae_high_threshold"  : 0.85,
+      "min_confidence"     : 0.6,
+      "xgb_weight"         : 0.65,
+      "ae_weight"          : 0.35,
+      "alert_cooldown_sec" : 1.0
   },
+
 
   "media_ports": {
     "quic": [80, 443, 4433, 4444],
@@ -89,7 +92,7 @@
   "firewall": {
     "rules_file":         "/media/linhlinh/learn/nckh/network-ids/config/firewall_rules.json",
     "use_nftables":       false,
-    "auto_block_enabled": true,
+    "auto_block_enabled": false,
     "block_duration_sec": 300
   },
 
@@ -100,11 +103,15 @@
   },
 
   "whitelist": {
-    "ips": ["127.0.0.1", "127.0.0.0/8", "::1",
-    "31.13.83.54",
-    "157.240.0.0/16",
-    "142.250.0.0/15",
-    "74.125.0.0/16",
-    "172.217.0.0/16"]
+    "ips": [
+      "127.0.0.1",
+      "127.0.0.0/8",
+      "::1",
+      "31.13.83.54",
+      "157.240.0.0/16",
+      "142.250.0.0/15",
+      "74.125.0.0/16",
+      "172.217.0.0/16"
+    ]
   }
 }

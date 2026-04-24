@@ -10,7 +10,7 @@
     {
       "id": "SIG_002",
       "name": "Slow POST",
-      "pattern": "Content-Length:",
+      "pattern": "Content-Length: 9999999",
       "threat": "SLOW_DDOS",
       "action": "ALERT"
     }

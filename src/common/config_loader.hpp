@@ -1,20 +1,13 @@
 #pragma once
 // =============================================================================
 //  src/common/config_loader.hpp
-//
-//  Thay đổi so với phiên bản cũ:
-//    [XÓA] struct MLCfg        — duplicate của MLConfig
-//    [XÓA] struct Layer2Cfg    — dead code, không ai dùng
-//    [XÓA] AppConfig::layer2   — dead code
-//    [ĐỔI] AppConfig::ml       — type MLCfg → MLConfig
-//    [THÊM] #include "../ml/ml_config.hpp"
 // =============================================================================
 
 #include <string>
 #include <vector>
 #include <cstdint>
 #include <stdexcept>
-#include "../ml/ml_config.hpp"   // MLConfig — single source of truth
+#include "../ml/ml_config.hpp"
 
 // ─── TokenBucket ──────────────────────────────────────────────────────────────
 struct BucketCfg {
@@ -29,36 +22,53 @@ struct TokenBucketCfg {
 
 // ─── Thresholds ───────────────────────────────────────────────────────────────
 struct ThresholdCfg {
-    // DDoS / flood
     double   flood_ratio               = 0.5;
     uint64_t min_pkt_before_flood      = 20;
     uint32_t syn_no_complete           = 50;
     uint64_t http_flood_req_per_window = 200;
     double   behavior_window_sec       = 10.0;
-
-    // Port scan
     uint32_t port_scan_ports           = 20;
     uint32_t port_scan_syn_no_ack_min  = 25;
     uint32_t dist_scan_src_threshold   = 10;
-
-    // IP tracker
     double   ip_tracker_window_sec     = 30.0;
     double   ip_tracker_idle_cleanup   = 60.0;
     double   scan_idle_reset_sec       = 300.0;
     size_t   max_tracked_ip            = 65536;
-
-    // Distributed SYN flood
     uint64_t global_syn_threshold      = 2000;
     uint64_t dst_syn_ratio_min_pkt     = 100;
     double   dst_syn_ack_ratio         = 10.0;
 };
 
-// ─── SignatureEngine ──────────────────────────────────────────────────────────
+// ─── SignatureRule — 1 entry trong "signatures" array của rules.json ──────────
+struct SignatureRule {
+    std::string id;
+    std::string name;
+    std::string pattern;   // raw string để Aho-Corasick match
+    std::string threat;    // "SLOW_DDOS" | "DDOS_VOLUMETRIC" | ...
+    std::string action;    // "ALERT" | "DROP"
+};
+
+// ─── BehaviorRule — 1 entry trong "rules" array của rules.json ───────────────
+struct BehaviorRule {
+    std::string id;
+    std::string name;
+    std::string condition; // "syn_no_ack > 100 in 10s" v.v.
+    std::string threat;
+    std::string action;
+};
+
+// ─── SignatureCfg ─────────────────────────────────────────────────────────────
 struct SignatureCfg {
+    // Thresholds — backward compat với code cũ
     double   flood_ratio              = 0.5;
     uint32_t port_scan_ports          = 20;
     uint32_t port_scan_syn_no_ack_min = 25;
     uint64_t min_pkt_before_flood     = 20;
+
+    // Rules load từ rules.json
+    std::string                rules_file;      // path tới rules.json
+    std::vector<SignatureRule> sig_rules;        // "signatures" array
+    std::vector<BehaviorRule>  behavior_rules;   // "rules" array
 };
 
 // ─── ProtocolAnomalyEngine ────────────────────────────────────────────────────
@@ -129,11 +139,10 @@ struct AppConfig {
     CaptureCfg         capture;
     TokenBucketCfg     token_bucket;
     ThresholdCfg       thresholds;
-    SignatureCfg       signatures;
+    SignatureCfg       signatures;   // chứa cả threshold lẫn sig/behavior rules
     ProtocolAnomalyCfg protocol_anomaly;
     MediaPortsCfg      media_ports;
-    MLConfig           ml;       // ← dùng MLConfig trực tiếp (không còn MLCfg)
-                                 // ← Layer2Cfg đã bị xóa (dead code)
+    MLConfig           ml;
     FirewallCfg        firewall;
     LoggingCfg         logging;
 

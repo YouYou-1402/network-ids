@@ -1,3 +1,6 @@
+// =============================================================================
+//  src/detection/signature_engine.hpp
+// =============================================================================
 #pragma once
 #include "../core/packet_info.hpp"
 #include "../core/threat_types.hpp"
@@ -7,18 +10,21 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <cstdint>
 
-struct ACNode {
-    std::unordered_map<uint8_t, int> children;
-    int              fail_link = 0;
-    std::vector<int> outputs;
+// ─── Aho-Corasick node ────────────────────────────────────────────────────────
+struct AcNode {
+    int  children[256];
+    int  fail       = 0;
+    int  output     = -1;   // sig_id nếu là terminal node, -1 nếu không
+    bool is_end     = false;
+    AcNode() { std::fill(children, children + 256, -1); }
 };
 
-enum SignatureID {
-    SIG_SLOWLORIS = 0,
-    SIG_SLOW_POST = 1,
-    SIG_COUNT     = 2
-};
+// ─── Signature IDs ────────────────────────────────────────────────────────────
+constexpr int SIG_NONE      = -1;
+constexpr int SIG_SLOWLORIS =  0;
+constexpr int SIG_SLOW_POST =  1;
 
 class SignatureEngine {
 public:
@@ -28,34 +34,33 @@ public:
 
 private:
     // ── Aho-Corasick ──────────────────────────────────────────────────────
-    void             addPattern    (const std::string& pattern, int sig_id);
-    void             buildFailLinks();
-    std::vector<int> search        (const uint8_t* data, size_t len) const;
+    void addPattern   (const std::string& pattern, int sig_id);
+    void buildFailLinks();
+    int  acSearch     (const uint8_t* data, size_t len) const;
 
-    // ── Detection helpers ─────────────────────────────────────────────────
-    DetectionResult  checkFlagAbuse (const PacketInfo& pkt);
-    DetectionResult  checkPayload   (const PacketInfo& pkt);
-    void             updateFlowState(const PacketInfo& pkt, FlowState& flow);
+    // ── Per-check methods ─────────────────────────────────────────────────
+    DetectionResult checkFloodRate  (const PacketInfo& pkt, FlowState& flow);
+    DetectionResult checkPortScan   (const PacketInfo& pkt, FlowState& flow);
+    DetectionResult checkFlagAbuse  (const PacketInfo& pkt, FlowState& flow);
+    DetectionResult checkPayload    (const PacketInfo& pkt, FlowState& flow);
+    DetectionResult checkGlobalSyn  (const PacketInfo& pkt);
+    DetectionResult checkDstSynRatio(const PacketInfo& pkt);
 
-    // ── Distributed SYN flood helpers (mới) ──────────────────────────────
-    // Trả về DDOS_VOLUMETRIC nếu detect, NORMAL nếu không
-    DetectionResult  checkDstSynRatio  (const PacketInfo& pkt);
-    DetectionResult  checkGlobalSynRate(const PacketInfo& pkt);
+    IpTracker&  ip_tracker_;
+    DstTracker  dst_tracker_;
 
-    static bool isMediaTraffic(const PacketInfo& pkt);
+    // ── Aho-Corasick state ────────────────────────────────────────────────
+    std::vector<AcNode> ac_nodes_;
 
-    // ── Members ───────────────────────────────────────────────────────────
-    IpTracker&          ip_tracker_;
-    DstTracker          dst_tracker_;       // per-destination SYN/ACK tracking
-    std::vector<ACNode> ac_nodes_;
+    // ── Rule metadata: sig_id → SignatureRule (từ rules.json) ─────────────
+    //  Dùng để lấy threat/action khi alert thay vì hardcode
+    std::unordered_map<int, SignatureRule> rule_map_;
 
-    // Thresholds đọc từ config lúc khởi tạo
+    // ── Thresholds (đọc từ config lúc khởi tạo) ──────────────────────────
     double   flood_ratio_threshold_      = 0.5;
-    size_t   port_scan_threshold_        = 20;
+    uint32_t port_scan_threshold_        = 20;
     uint32_t port_scan_syn_no_ack_min_   = 25;
     uint64_t min_pkt_before_flood_check_ = 20;
-
-    // Distributed SYN flood thresholds (mới)
     uint64_t global_syn_threshold_       = 2000;
     uint64_t dst_syn_ratio_min_pkt_      = 100;
     double   dst_syn_ack_ratio_          = 10.0;

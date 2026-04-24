@@ -11,6 +11,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <nlohmann/json.hpp>
+#include <filesystem>
 
 using json = nlohmann::json;
 
@@ -111,15 +112,80 @@ AppConfig ConfigLoader::load(const std::string& path) {
         th.dst_syn_ack_ratio         = jget(t, "dst_syn_ack_ratio",         10.0);
     }
 
-    // ── signatures ────────────────────────────────────────────────────────
-    {
-        const auto& src = root.contains("signatures")
-                          ? root["signatures"]
-                          : root.value("thresholds", json{});
-        c.signatures.flood_ratio              = jget(src, "flood_ratio",              0.5);
-        c.signatures.port_scan_ports          = jget(src, "port_scan_ports",          (uint32_t)20);
-        c.signatures.port_scan_syn_no_ack_min = jget(src, "port_scan_syn_no_ack_min", (uint32_t)25);
-        c.signatures.min_pkt_before_flood     = jget(src, "min_pkt_before_flood",     (uint64_t)20);
+    // ── signatures (thresholds — giữ backward compat) ────────────────────────
+    if (root.contains("thresholds")) {
+        const auto& t = root["thresholds"];
+        c.signatures.flood_ratio              = jget(t, "flood_ratio",              0.5);
+        c.signatures.port_scan_ports          = jget(t, "port_scan_ports",          (uint32_t)20);
+        c.signatures.port_scan_syn_no_ack_min = jget(t, "port_scan_syn_no_ack_min", (uint32_t)25);
+        c.signatures.min_pkt_before_flood     = jget(t, "min_pkt_before_flood",     (uint64_t)20);
+    }
+
+    // ── rules_file → load rules.json ─────────────────────────────────────────
+    if (root.contains("rules_file")) {
+        c.signatures.rules_file = root["rules_file"].get<std::string>();
+    } else {
+        // Default: cùng thư mục với config.json
+        c.signatures.rules_file =
+            std::filesystem::path(path).parent_path() / "rules.json";
+    }
+
+    // Load rules.json nếu tồn tại
+    if (!c.signatures.rules_file.empty()) {
+        std::ifstream rf(c.signatures.rules_file);
+        if (rf.is_open()) {
+            json rules_root;
+            try {
+                rf >> rules_root;
+
+                // ── "signatures" array ────────────────────────────────────────
+                if (rules_root.contains("signatures") &&
+                    rules_root["signatures"].is_array())
+                {
+                    for (const auto& s : rules_root["signatures"]) {
+                        SignatureRule sr;
+                        sr.id      = jget(s, "id",      std::string(""));
+                        sr.name    = jget(s, "name",    std::string(""));
+                        sr.pattern = jget(s, "pattern", std::string(""));
+                        sr.threat  = jget(s, "threat",  std::string("SLOW_DDOS"));
+                        sr.action  = jget(s, "action",  std::string("ALERT"));
+                        if (!sr.pattern.empty())
+                            c.signatures.sig_rules.push_back(std::move(sr));
+                    }
+                    LOG_INFO("ConfigLoader: loaded "
+                            + std::to_string(c.signatures.sig_rules.size())
+                            + " signature rules from "
+                            + c.signatures.rules_file);
+                }
+
+                // ── "rules" array ─────────────────────────────────────────────
+                if (rules_root.contains("rules") &&
+                    rules_root["rules"].is_array())
+                {
+                    for (const auto& r : rules_root["rules"]) {
+                        BehaviorRule br;
+                        br.id        = jget(r, "id",        std::string(""));
+                        br.name      = jget(r, "name",      std::string(""));
+                        br.condition = jget(r, "condition", std::string(""));
+                        br.threat    = jget(r, "threat",    std::string("OTHER_ATTACK"));
+                        br.action    = jget(r, "action",    std::string("ALERT"));
+                        if (!br.condition.empty())
+                            c.signatures.behavior_rules.push_back(std::move(br));
+                    }
+                    LOG_INFO("ConfigLoader: loaded "
+                            + std::to_string(c.signatures.behavior_rules.size())
+                            + " behavior rules from "
+                            + c.signatures.rules_file);
+                }
+
+            } catch (const json::parse_error& e) {
+                LOG_ERROR("ConfigLoader: failed to parse rules file '"
+                        + c.signatures.rules_file + "': " + e.what());
+            }
+        } else {
+            LOG_WARN("ConfigLoader: rules file not found: "
+                    + c.signatures.rules_file);
+        }
     }
 
     // ── protocol_anomaly ──────────────────────────────────────────────────
@@ -164,54 +230,38 @@ AppConfig ConfigLoader::load(const std::string& path) {
     //  KHÔNG còn block "layer2" — đã xóa (dead code).
     if (root.contains("ml")) {
         const auto& m = root["ml"];
+
+        // Models
         c.ml.xgb_model_path = jget(m, "xgb_model_path", std::string(""));
         c.ml.ae_model_path  = jget(m, "ae_model_path",  std::string(""));
-        c.ml.scaler_path    = jget(m, "scaler_path",    std::string(""));
-        c.ml.xgb_threshold  = jget(m, "xgb_threshold",  0.50f);
-        c.ml.ae_threshold   = jget(m, "ae_threshold",   0.10f);
-        c.ml.min_confidence = jget(m, "min_confidence", 0.60f);
-        c.ml.xgb_weight     = jget(m, "xgb_weight",     1.00f);
-        c.ml.ae_weight      = jget(m, "ae_weight",      0.00f);
-        c.ml.ae_high_threshold  = jget(m, "ae_high_threshold",  0.85f);
-        c.ml.alert_cooldown_sec = jget(m, "alert_cooldown_sec", 10.0f);
+
+        // Scalers
+        c.ml.scaler_path        = jget(m, "scaler_path",        std::string(""));
+        c.ml.scaler_nslkdd_path = jget(m, "scaler_nslkdd_path", std::string(""));
+
+        // Meta
+        c.ml.ae_meta_path = jget(m, "ae_meta_path", std::string(""));
+
+        // Thresholds — ae_threshold default 0.099726 (khớp Python)
+        c.ml.xgb_threshold     = jget(m, "xgb_threshold",     0.50f);
+        c.ml.ae_threshold      = jget(m, "ae_threshold",      0.099726f);
+        c.ml.ae_high_threshold = jget(m, "ae_high_threshold", 0.85f);
+        c.ml.min_confidence    = jget(m, "min_confidence",    0.60f);
+
+        // Weights
+        c.ml.xgb_weight = jget(m, "xgb_weight", 0.65f);
+        c.ml.ae_weight  = jget(m, "ae_weight",   0.35f);
+
+        // Misc
+        c.ml.alert_cooldown_sec = jget(m, "alert_cooldown_sec", 1.0f);
     }
 
-    // ── firewall ──────────────────────────────────────────────────────────
-    if (root.contains("firewall")) {
-        const auto& fw = root["firewall"];
-        c.firewall.rules_file         = jget(fw, "rules_file",
-                                             std::string("config/firewall_rules.json"));
-        c.firewall.use_nftables       = jget(fw, "use_nftables",       false);
-        c.firewall.auto_block_enabled = jget(fw, "auto_block_enabled", true);
-        c.firewall.block_duration_sec = jget(fw, "block_duration_sec", (uint32_t)300);
-    }
-
-    // ── logging ───────────────────────────────────────────────────────────
-    if (root.contains("logging")) {
-        const auto& lg = root["logging"];
-        c.logging.level  = jget(lg, "level",  std::string("INFO"));
-        c.logging.max_mb = jget(lg, "max_mb", (uint32_t)100);
-        c.logging.rotate = jget(lg, "rotate", (uint32_t)5);
-    }
-
-    // ── whitelist ─────────────────────────────────────────────────────────
-    if (root.contains("whitelist") && root["whitelist"].contains("ips"))
-        for (auto& ip : root["whitelist"]["ips"])
-            c.whitelist_ips.push_back(ip.get<std::string>());
-
-    cfg_    = c;
+    cfg_    = c;        // ← lưu vào static member
     loaded_ = true;
-
-    LOG_INFO("ConfigLoader: loaded '" + path + "'"
-             + " workers="    + std::to_string(c.system.num_workers)
-             + " detection="  + (c.detection_enabled ? "ON" : "OFF")
-             + " ml="         + (c.ml_enabled ? "ON" : "OFF")
-             + " iface="      + c.capture.interface
-             + " global_syn=" + std::to_string(c.thresholds.global_syn_threshold)
-             + " dst_ratio="  + std::to_string(c.thresholds.dst_syn_ack_ratio));
     return c;
 }
 
+// ─── get() ────────────────────────────────────────────────────────────────────
 const AppConfig& ConfigLoader::get() {
     if (!loaded_)
         throw std::runtime_error("ConfigLoader::get() called before load()");

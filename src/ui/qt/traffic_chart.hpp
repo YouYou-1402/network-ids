@@ -24,6 +24,7 @@ public:
 
 public slots:
     void onTrafficUpdated(TrafficPoint point);
+    void reset();
 
 private:
     void setupUI();
