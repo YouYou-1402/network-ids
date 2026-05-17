@@ -7,12 +7,7 @@
 using Clock     = std::chrono::steady_clock;
 using TimePoint = std::chrono::time_point<Clock>;
 
-// =============================================================================
-//  FlowState
-// =============================================================================
 struct FlowState {
-
-    // ── Identity ──────────────────────────────────────────────────────────────
     std::string flow_key;
     uint32_t    src_ip   = 0;
     uint32_t    dst_ip   = 0;
@@ -21,34 +16,26 @@ struct FlowState {
     uint8_t     protocol = 0;
     uint32_t    win_zero_count = 0;
 
-    // ── Flow Direction ────────────────────────────────────────────────────────
     bool        is_initiator = false;
 
-    // ── Timing ────────────────────────────────────────────────────────────────
     TimePoint   first_seen;
     TimePoint   last_seen;
 
-    // ── Volume ────────────────────────────────────────────────────────────────
     uint64_t    total_packets = 0;
     uint64_t    total_bytes   = 0;
     uint64_t    fwd_packets   = 0;
     uint64_t    bwd_packets   = 0;
-
-    // ── ML: Per-direction bytes ───────────────────────────────────────────────
     uint64_t    fwd_bytes = 0;
     uint64_t    bwd_bytes = 0;
 
-    // ── TCP Flags (cumulative) ────────────────────────────────────────────────
     uint32_t    syn_count = 0;
     uint32_t    ack_count = 0;
     uint32_t    rst_count = 0;
     uint32_t    fin_count = 0;
 
-    // ── DDoS Detection ───────────────────────────────────────────────────────
     uint64_t    pkt_rate_window = 0;
     TimePoint   window_start;
 
-    // ── Slow DDoS Detection ───────────────────────────────────────────────────
     bool        http_header_complete = false;
     TimePoint   http_start;
     uint64_t    http_bytes_received  = 0;
@@ -57,20 +44,16 @@ struct FlowState {
     bool        slowloris_alerted = false;
     bool        slow_post_alerted = false;
 
-    // ── Port Scan Detection ───────────────────────────────────────────────────
     std::set<uint16_t> dst_ports_seen;
     uint32_t           syn_no_ack = 0;
 
-    // ── ML: Inter-Arrival Time ────────────────────────────────────────────────
     double      iat_mean_ms = 0.0;
     double      iat_m2      = 0.0;
     double      prev_pkt_timestamp_d = 0.0;
 
-    // ── State ─────────────────────────────────────────────────────────────────
     bool        is_malicious = false;
     std::string threat_type;
 
-    // ── Helper methods ────────────────────────────────────────────────────────
     double durationSeconds() const {
         return std::chrono::duration<double>(last_seen - first_seen).count();
     }

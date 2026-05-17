@@ -18,7 +18,6 @@ static std::string ipStr(uint32_t ip) {
 FeedbackLoop::FeedbackLoop(ProposalCallback on_proposal)
     : on_proposal_(std::move(on_proposal)) {}
 
-// --- onMLResult --------------------------------------------------------------
 void FeedbackLoop::onMLResult(const MLResult& result) {
     if (result.confidence < min_confidence_)   return;
     if (result.final_result == DetectionResult::NORMAL) return;
@@ -47,7 +46,6 @@ void FeedbackLoop::onMLResult(const MLResult& result) {
     recordSeen(result.src_ip);
 }
 
-// --- buildProposal -----------------------------------------------------------
 RuleProposal FeedbackLoop::buildProposal(const MLResult& result) const {
     RuleProposal p;
     p.src_ip     = result.src_ip;
@@ -106,7 +104,6 @@ RuleProposal FeedbackLoop::buildProposal(const MLResult& result) const {
     return p;
 }
 
-// --- Dedup helpers -----------------------------------------------------------
 bool FeedbackLoop::isDuplicate(uint32_t src_ip) const {
     auto it = recent_proposals_.find(src_ip);
     if (it == recent_proposals_.end()) return false;
@@ -117,7 +114,6 @@ void FeedbackLoop::recordSeen(uint32_t src_ip) {
     recent_proposals_[src_ip] = nowSec();
 }
 
-// --- Manage proposals --------------------------------------------------------
 std::vector<RuleProposal> FeedbackLoop::getPendingProposals() {
     std::lock_guard<std::mutex> lock(mutex_);
     return pending_proposals_;

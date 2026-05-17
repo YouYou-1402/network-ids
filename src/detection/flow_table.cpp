@@ -80,27 +80,6 @@ void FlowTable::forEach(std::function<void(FlowState&)> callback) {
         callback(*state);
 }
 
-// ─── createFlow ───────────────────────────────────────────────────────────────
-//
-//  Xác định is_initiator ngay khi tạo flow:
-//
-//  TCP:
-//    SYN && !ACK → packet khởi tạo kết nối → attacker/client
-//                  is_initiator = true
-//    RST / SYN-ACK / ACK → response từ server
-//                  is_initiator = false
-//    Lưu ý: XMAS (FIN+PSH+URG) và NULL (0x00) cũng là probe
-//           → is_initiator = true để checkFlagAbuse() vẫn chạy
-//
-//  UDP / ICMP:
-//    Không có handshake → coi packet đầu tiên là initiator
-//    is_initiator = true
-//
-//  Ý nghĩa:
-//    SignatureEngine::analyze() bỏ qua flow có is_initiator = false
-//    → RST response, SYN-ACK không bao giờ được đưa vào checkPortScan/checkDDoS
-//    → Loại bỏ hoàn toàn false positive do response packet
-// ─────────────────────────────────────────────────────────────────────────────
 std::unique_ptr<FlowState> FlowTable::createFlow(const std::string& key,
                                                   const PacketInfo&  pkt) {
     auto state          = std::make_unique<FlowState>();

@@ -1,0 +1,39 @@
+[23:09:10] [TCP  ] example.com:80 → 256 bytes received
+[23:09:10] [UDP  ] DNS query → 8.8.8.8:53 | resp 44 bytes
+[23:09:11] [HTTP ] GET http://example.com → 200 | 528 bytes
+[23:09:12] [HTTP ] GET http://httpbin.org/get → 200 | 267 bytes
+[23:09:12] [TCP  ] example.com:80 → 256 bytes received
+[23:09:13] [ICMP ] ping 8.8.8.8 → OK
+[23:09:13] [UDP  ] DNS query → 8.8.8.8:53 | resp 44 bytes
+[23:09:14] [TCP  ] github.com:443 → 0 bytes received
+[23:09:14] [HTTP ] GET http://example.com → 200 | 528 bytes
+[23:09:15] [TCP  ] google.com:80 → 256 bytes received
+[23:09:16] [DNS  ] example.com → 104.20.23.154
+[23:09:16] [UDP  ] DNS query → 8.8.8.8:53 | resp 44 bytes
+[23:09:17] [DNS  ] github.com → 20.205.243.166
+[23:09:18] [HTTP ] GET http://httpbin.org/get → 200 | 267 bytes
+[23:09:18] [TCP  ] github.com:443 → 0 bytes received
+[23:09:18] [UDP  ] DNS query → 8.8.8.8:53 | resp 44 bytes
+[23:09:19] [HTTP ] GET http://httpbin.org/get → 200 | 267 bytes
+[23:09:20] [TCP  ] google.com:80 → 256 bytes received
+[23:09:20] [HTTP ] http://neverssl.com → ERR: <urlopen error [Errno 101] Network is unreachable>
+[23:09:20] [DNS  ] github.com → 20.205.243.166
+[23:09:21] [TCP  ] example.com:80 → 256 bytes received
+[23:09:21] [UDP  ] DNS query → 8.8.8.8:53 | resp 44 bytes
+[23:09:22] [TCP  ] example.com:80 → 256 bytes received
+[23:09:22] [DNS  ] example.com → 172.66.147.243
+[23:09:23] [ICMP ] ping example.com → OK
+[23:09:24] [UDP  ] DNS query → 8.8.8.8:53 | resp 44 bytes
+[23:09:25] [DNS  ] google.com → 142.250.197.78
+[23:09:26] [HTTP ] GET http://httpbin.org/get → 200 | 267 bytes
+[23:09:27] [TCP  ] github.com:443 → 0 bytes received
+[23:09:27] [HTTP ] GET http://httpbin.org/get → 200 | 267 bytes
+[23:09:28] [HTTP ] GET http://httpbin.org/get → 200 | 267 bytes
+[23:09:28] [ICMP ] ping 1.1.1.1 → OK
+[23:09:29] [TCP  ] github.com:443 → 0 bytes received
+[23:09:29] [HTTP ] http://neverssl.com → ERR: <urlopen error [Errno 101] Network is unreachable>
+[23:09:29] [TCP  ] github.com:443 → 0 bytes received
+[23:09:30] [HTTP ] GET http://neverssl.com → 200 | 3961 bytes
+[23:09:30] [TCP  ] example.com:80 → 256 bytes received
+[23:09:31] [DNS  ] google.com → 142.250.197.78
+[23:09:31] [ICMP ] ping 8.8.8.8 → OK

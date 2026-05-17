@@ -25,15 +25,6 @@ struct RuleProposal {
 
 using ProposalCallback = std::function<void(const RuleProposal&)>;
 
-// =============================================================================
-//  FeedbackLoop
-//
-//  Thay đổi so với mock:
-//    - AUTO_APPROVED khi confidence >= 0.85 → block ngay không cần admin
-//    - PENDING khi 0.60 <= confidence < 0.85 → chờ admin duyệt
-//    - Dedup: không tạo proposal trùng IP trong DEDUP_WINDOW_SEC = 60s
-//    - UNKNOWN_ANOMALY → ADD_SIGNATURE (không block ngay, cần điều tra)
-// =============================================================================
 class FeedbackLoop {
 public:
     explicit FeedbackLoop(ProposalCallback on_proposal);
@@ -57,7 +48,6 @@ private:
     std::vector<RuleProposal> pending_proposals_;
     mutable std::mutex        mutex_;
 
-    // Dedup: IP → timestamp lần cuối tạo proposal
     std::unordered_map<uint32_t, double> recent_proposals_;
 
     float min_confidence_         = 0.60f;
