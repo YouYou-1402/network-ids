@@ -20,3 +20,4 @@ Makefile
 *.log
 
 .onnxruntime-linux-x64-1.17.3/
+.playwright-mcp
