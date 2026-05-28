@@ -1,0 +1,231 @@
+- generic [ref=e1]:
+  - main [ref=e3]:
+    - generic [ref=e4]:
+      - heading "TryHackMe SIEM" [level=1] [ref=e5]
+      - button "Restart" [ref=e7] [cursor=pointer]:
+        - img [ref=e8]
+        - text: Restart
+    - generic [ref=e16]:
+      - generic [ref=e17]: 
+      - textbox "Search for an alert" [ref=e18]
+    - generic [ref=e19]:
+      - table [ref=e21]:
+        - rowgroup [ref=e22]:
+          - row "Time Name Severity Status Verdict Assignee Actions" [ref=e23]:
+            - columnheader "Time" [ref=e24] [cursor=pointer]:
+              - generic [ref=e25]:
+                - generic [ref=e26]: Time
+                - img [ref=e28]
+            - columnheader "Name" [ref=e30] [cursor=pointer]:
+              - generic [ref=e31]:
+                - generic [ref=e32]: Name
+                - img [ref=e34]
+            - columnheader "Severity" [ref=e39] [cursor=pointer]:
+              - generic [ref=e40]:
+                - generic [ref=e41]: Severity
+                - img [ref=e43]
+            - columnheader "Status" [ref=e48] [cursor=pointer]:
+              - generic [ref=e49]:
+                - generic [ref=e50]: Status
+                - img [ref=e52]
+            - columnheader "Verdict" [ref=e57] [cursor=pointer]:
+              - generic [ref=e58]:
+                - generic [ref=e59]: Verdict
+                - img [ref=e61]
+            - columnheader "Assignee" [ref=e66]:
+              - generic [ref=e68]: Assignee
+            - columnheader "Actions" [ref=e69]:
+              - generic [ref=e71]: Actions
+        - rowgroup [ref=e72]:
+          - row "Mar 21st 2025 at 13:58 Double-Extension File Creation High Awaiting action None None  " [ref=e376]:
+            - cell "Mar 21st 2025 at 13:58" [ref=e74]
+            - cell "Double-Extension File Creation" [ref=e75]
+            - cell "High" [ref=e76]
+            - cell "Awaiting action" [ref=e77]:
+              - generic [ref=e78]:
+                - img [ref=e79]
+                - generic [ref=e81]: Awaiting action
+            - cell "None" [ref=e82]:
+              - generic [ref=e83]: None
+            - cell "None" [ref=e84]
+            - cell " " [ref=e377]:
+              - generic [ref=e86]:
+                - generic [ref=e87] [cursor=pointer]: 
+                - generic [ref=e88] [cursor=pointer]: 
+          - 'row "Description: This rule detects a creation of a double-extension file like ''*.pdf.exe'' or ''*.gif.lnk'', often used by hackers in phishing attacks to trick users into opening the malicious executable. Host: LPT-HR-009 Process Name: chrome.exe Process User: S.Conway Target File: C:\\Users\\S.Conway\\Downloads\\cats2025.mp4.exe File MotW: https://freecatvideoshd.monster/cats2025.mp4.exe File MD5: 14d8486f3f63875ef93cfd240c5dc10b" [ref=e378]':
+            - 'cell "Description: This rule detects a creation of a double-extension file like ''*.pdf.exe'' or ''*.gif.lnk'', often used by hackers in phishing attacks to trick users into opening the malicious executable. Host: LPT-HR-009 Process Name: chrome.exe Process User: S.Conway Target File: C:\\Users\\S.Conway\\Downloads\\cats2025.mp4.exe File MotW: https://freecatvideoshd.monster/cats2025.mp4.exe File MD5: 14d8486f3f63875ef93cfd240c5dc10b" [ref=e379]':
+              - generic [ref=e381]:
+                - paragraph [ref=e382]: "Description:"
+                - paragraph [ref=e383]: This rule detects a creation of a double-extension file like '*.pdf.exe' or '*.gif.lnk', often used by hackers in phishing attacks to trick users into opening the malicious executable.
+                - paragraph [ref=e384]: "Host:"
+                - paragraph [ref=e385]: LPT-HR-009
+                - paragraph [ref=e386]: "Process Name:"
+                - paragraph [ref=e387]: chrome.exe
+                - paragraph [ref=e388]: "Process User:"
+                - paragraph [ref=e389]: S.Conway
+                - paragraph [ref=e390]: "Target File:"
+                - paragraph [ref=e391]: C:\Users\S.Conway\Downloads\cats2025.mp4.exe
+                - paragraph [ref=e392]: "File MotW:"
+                - paragraph [ref=e393]: https://freecatvideoshd.monster/cats2025.mp4.exe
+                - paragraph [ref=e394]: "File MD5:"
+                - paragraph [ref=e395]: 14d8486f3f63875ef93cfd240c5dc10b
+          - row "Mar 21st 2025 at 13:30 Potential Data Exfiltration Critical Closed  False Positive You (L1)  " [ref=e350]:
+            - cell "Mar 21st 2025 at 13:30" [ref=e90]
+            - cell "Potential Data Exfiltration" [ref=e91]
+            - cell "Critical" [ref=e92]
+            - cell "Closed" [ref=e351]:
+              - generic [ref=e94]:
+                - img [ref=e352]
+                - generic [ref=e97]: Closed
+            - cell " False Positive" [ref=e355]:
+              - generic [ref=e99]:
+                - generic [ref=e356]: 
+                - text: False Positive
+            - cell "You (L1)" [ref=e258]
+            - cell " " [ref=e260]:
+              - generic [ref=e102]:
+                - generic [ref=e103] [cursor=pointer]: 
+                - generic [ref=e104] [cursor=pointer]: 
+          - 'row "Description: This rule detects 5 or more gigabytes of data sent from a single device to a single destination within a day, which may indicate data exfiltration to untrusted location. Destination: *.zoom.us Source IP: 192.168.45.66 Source Network: UK04/MEETINGROOM Sent Data: 5.8 GB Received Data: 5.2 GB Comment: Traffic to *.zoom.us from UK04/MEETINGROOM network. Destination is a legitimate video conferencing service (Zoom). High data volume (5.8 GB sent, 5.2 GB received) is consistent with a video conference session. Not a real threat." [ref=e357]':
+            - 'cell "Description: This rule detects 5 or more gigabytes of data sent from a single device to a single destination within a day, which may indicate data exfiltration to untrusted location. Destination: *.zoom.us Source IP: 192.168.45.66 Source Network: UK04/MEETINGROOM Sent Data: 5.8 GB Received Data: 5.2 GB Comment: Traffic to *.zoom.us from UK04/MEETINGROOM network. Destination is a legitimate video conferencing service (Zoom). High data volume (5.8 GB sent, 5.2 GB received) is consistent with a video conference session. Not a real threat." [ref=e358]':
+              - generic [ref=e264]:
+                - paragraph [ref=e265]: "Description:"
+                - paragraph [ref=e266]: This rule detects 5 or more gigabytes of data sent from a single device to a single destination within a day, which may indicate data exfiltration to untrusted location.
+                - paragraph [ref=e267]: "Destination:"
+                - paragraph [ref=e268]: "*.zoom.us"
+                - paragraph [ref=e269]: "Source IP:"
+                - paragraph [ref=e270]: 192.168.45.66
+                - paragraph [ref=e271]: "Source Network:"
+                - paragraph [ref=e272]: UK04/MEETINGROOM
+                - paragraph [ref=e273]: "Sent Data:"
+                - paragraph [ref=e274]: 5.8 GB
+                - paragraph [ref=e275]: "Received Data:"
+                - paragraph [ref=e276]: 5.2 GB
+                - paragraph [ref=e359]: "Comment:"
+                - paragraph [ref=e360]: Traffic to *.zoom.us from UK04/MEETINGROOM network. Destination is a legitimate video conferencing service (Zoom). High data volume (5.8 GB sent, 5.2 GB received) is consistent with a video conference session. Not a real threat.
+          - row "Mar 21st 2025 at 13:02 Download from GitHub Repository Low Awaiting action None None  " [ref=e105]:
+            - cell "Mar 21st 2025 at 13:02" [ref=e106]
+            - cell "Download from GitHub Repository" [ref=e107]
+            - cell "Low" [ref=e108]
+            - cell "Awaiting action" [ref=e109]:
+              - generic [ref=e110]:
+                - img [ref=e111]
+                - generic [ref=e113]: Awaiting action
+            - cell "None" [ref=e114]:
+              - generic [ref=e115]: None
+            - cell "None" [ref=e116]
+            - cell " " [ref=e117]:
+              - generic [ref=e118]:
+                - generic [ref=e119] [cursor=pointer]: 
+                - generic [ref=e120] [cursor=pointer]: 
+          - row "Mar 21st 2025 at 12:40 Unusual VPN Login Location Medium Closed  False Positive T.Ross (L1)  " [ref=e160]:
+            - cell "Mar 21st 2025 at 12:40" [ref=e122]
+            - cell "Unusual VPN Login Location" [ref=e123]
+            - cell "Medium" [ref=e124]
+            - cell "Closed" [ref=e125]:
+              - generic [ref=e126]:
+                - img [ref=e127]
+                - generic [ref=e130]: Closed
+            - cell " False Positive" [ref=e131]:
+              - generic [ref=e132]:
+                - generic [ref=e133]: 
+                - text: False Positive
+            - cell "T.Ross (L1)" [ref=e134]
+            - cell " " [ref=e161]:
+              - generic [ref=e136]:
+                - generic [ref=e137] [cursor=pointer]: 
+                - generic [ref=e138] [cursor=pointer]: 
+          - 'row "Description: The user accessed corporate VPN from a first-seen location. This login may indicate that the user''s account is compromised and threat actors are breaking in. Source IP: 45.8.112.7 Source User: M.Clark Login Country: Japan Expected Country: United States Comment: M.Clark, corporate CFO, confirmed that she is currently on vacation in Japan but had to access VPN from her laptop exactly at that time to resolve an urgent issue. Not a threat" [ref=e162]':
+            - 'cell "Description: The user accessed corporate VPN from a first-seen location. This login may indicate that the user''s account is compromised and threat actors are breaking in. Source IP: 45.8.112.7 Source User: M.Clark Login Country: Japan Expected Country: United States Comment: M.Clark, corporate CFO, confirmed that she is currently on vacation in Japan but had to access VPN from her laptop exactly at that time to resolve an urgent issue. Not a threat" [ref=e163]':
+              - generic [ref=e165]:
+                - paragraph [ref=e166]: "Description:"
+                - paragraph [ref=e167]: The user accessed corporate VPN from a first-seen location. This login may indicate that the user's account is compromised and threat actors are breaking in.
+                - paragraph [ref=e168]: "Source IP:"
+                - paragraph [ref=e169]: 45.8.112.7
+                - paragraph [ref=e170]: "Source User:"
+                - paragraph [ref=e171]: M.Clark
+                - paragraph [ref=e172]: "Login Country:"
+                - paragraph [ref=e173]: Japan
+                - paragraph [ref=e174]: "Expected Country:"
+                - paragraph [ref=e175]: United States
+                - paragraph [ref=e176]: "Comment:"
+                - paragraph [ref=e177]: M.Clark, corporate CFO, confirmed that she is currently on vacation in Japan but had to access VPN from her laptop exactly at that time to resolve an urgent issue. Not a threat
+          - row "Mar 21st 2025 at 11:53 Bruteforce Attack from External Medium Closed  True Positive J.Adams (L2)  " [ref=e139]:
+            - cell "Mar 21st 2025 at 11:53" [ref=e140]
+            - cell "Bruteforce Attack from External" [ref=e141]
+            - cell "Medium" [ref=e142]
+            - cell "Closed" [ref=e143]:
+              - generic [ref=e144]:
+                - img [ref=e145]
+                - generic [ref=e148]: Closed
+            - cell " True Positive" [ref=e149]:
+              - generic [ref=e150]:
+                - generic [ref=e151]: 
+                - text: True Positive
+            - cell "J.Adams (L2)" [ref=e152]
+            - cell " " [ref=e153]:
+              - generic [ref=e154]:
+                - generic [ref=e155] [cursor=pointer]: 
+                - generic [ref=e156] [cursor=pointer]: 
+      - paragraph [ref=e158]:
+        - text: Displaying
+        - strong [ref=e159]: 1 - 5
+        - text: of 5 records
+  - dialog "Edit Alert" [ref=e397]:
+    - generic [ref=e398]:
+      - generic [ref=e399]: Edit Alert
+      - button "Close" [ref=e401] [cursor=pointer]:
+        - img [ref=e402]
+    - generic [ref=e405]:
+      - paragraph [ref=e406]: Double-Extension File Creation
+      - generic [ref=e407]:
+        - generic [ref=e408]:
+          - generic [ref=e409]: Status
+          - generic [ref=e410] [cursor=pointer]:
+            - generic:
+              - textbox [active]: Closed
+            - generic:
+              - combobox:
+                - option "Closed" [selected]
+            - generic [ref=e411]: Closed
+            - button [ref=e412]:
+              - img [ref=e454]
+        - generic [ref=e415]:
+          - generic [ref=e416]: Verdict
+          - generic [ref=e417] [cursor=pointer]:
+            - generic:
+              - textbox: None
+            - generic:
+              - combobox:
+                - option "None" [selected]
+            - generic [ref=e418]: None
+            - button [ref=e419]:
+              - img [ref=e420]
+        - generic [ref=e422]:
+          - generic [ref=e423]: Severity
+          - generic [ref=e424] [cursor=pointer]:
+            - generic:
+              - textbox: High
+            - generic:
+              - combobox:
+                - option "High" [selected]
+            - generic [ref=e425]: High
+            - button [ref=e426]:
+              - img [ref=e427]
+        - generic [ref=e429]:
+          - generic [ref=e430]: Assignee
+          - generic [ref=e431] [cursor=pointer]:
+            - generic:
+              - textbox: None
+            - generic:
+              - combobox:
+                - option "None" [selected]
+            - generic [ref=e432]: None
+            - button [ref=e433]:
+              - img [ref=e434]
+      - generic [ref=e436]:
+        - generic [ref=e437]: Analyst Comment *
+        - textbox [ref=e438]
+      - generic [ref=e439]:
+        - button "Save" [disabled]:
+          - generic: Save

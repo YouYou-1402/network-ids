@@ -1,0 +1,139 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - heading "TryHackMe SIEM" [level=1] [ref=e5]
+    - button "Restart" [ref=e7] [cursor=pointer]:
+      - img [ref=e8]
+      - text: Restart
+  - generic [ref=e10]:
+    - heading "Assigned alert" [level=2] [ref=e12]
+    - generic [ref=e14]: You haven't picked up any alerts! Assign yourself to an alert, move it to "In Progress", and start the triage!
+  - generic [ref=e16]:
+    - generic [ref=e17]: 
+    - textbox "Search for an alert" [ref=e18]
+  - generic [ref=e19]:
+    - table [ref=e21]:
+      - rowgroup [ref=e22]:
+        - row "Time Name Severity Status Verdict Assignee Actions" [ref=e23]:
+          - columnheader "Time" [ref=e24] [cursor=pointer]:
+            - generic [ref=e25]:
+              - generic [ref=e26]: Time
+              - img [ref=e28]
+          - columnheader "Name" [ref=e30] [cursor=pointer]:
+            - generic [ref=e31]:
+              - generic [ref=e32]: Name
+              - img [ref=e34]
+          - columnheader "Severity" [ref=e39] [cursor=pointer]:
+            - generic [ref=e40]:
+              - generic [ref=e41]: Severity
+              - img [ref=e43]
+          - columnheader "Status" [ref=e48] [cursor=pointer]:
+            - generic [ref=e49]:
+              - generic [ref=e50]: Status
+              - img [ref=e52]
+          - columnheader "Verdict" [ref=e57] [cursor=pointer]:
+            - generic [ref=e58]:
+              - generic [ref=e59]: Verdict
+              - img [ref=e61]
+          - columnheader "Assignee" [ref=e66]:
+            - generic [ref=e68]: Assignee
+          - columnheader "Actions" [ref=e69]:
+            - generic [ref=e71]: Actions
+      - rowgroup [ref=e72]:
+        - row "Mar 21st 2025 at 13:58 Double-Extension File Creation High Awaiting action None None  " [ref=e73]:
+          - cell "Mar 21st 2025 at 13:58" [ref=e74]
+          - cell "Double-Extension File Creation" [ref=e75]
+          - cell "High" [ref=e76]
+          - cell "Awaiting action" [ref=e77]:
+            - generic [ref=e78]:
+              - img [ref=e79]
+              - generic [ref=e81]: Awaiting action
+          - cell "None" [ref=e82]:
+            - generic [ref=e83]: None
+          - cell "None" [ref=e84]
+          - cell " " [ref=e85]:
+            - generic [ref=e86]:
+              - generic [ref=e87] [cursor=pointer]: 
+              - generic [ref=e88] [cursor=pointer]: 
+        - row "Mar 21st 2025 at 13:30 Potential Data Exfiltration Critical Awaiting action None None  " [ref=e89]:
+          - cell "Mar 21st 2025 at 13:30" [ref=e90]
+          - cell "Potential Data Exfiltration" [ref=e91]
+          - cell "Critical" [ref=e92]
+          - cell "Awaiting action" [ref=e93]:
+            - generic [ref=e94]:
+              - img [ref=e95]
+              - generic [ref=e97]: Awaiting action
+          - cell "None" [ref=e98]:
+            - generic [ref=e99]: None
+          - cell "None" [ref=e100]
+          - cell " " [ref=e101]:
+            - generic [ref=e102]:
+              - generic [ref=e103] [cursor=pointer]: 
+              - generic [ref=e104] [cursor=pointer]: 
+        - row "Mar 21st 2025 at 13:02 Download from GitHub Repository Low Awaiting action None None  " [ref=e105]:
+          - cell "Mar 21st 2025 at 13:02" [ref=e106]
+          - cell "Download from GitHub Repository" [ref=e107]
+          - cell "Low" [ref=e108]
+          - cell "Awaiting action" [ref=e109]:
+            - generic [ref=e110]:
+              - img [ref=e111]
+              - generic [ref=e113]: Awaiting action
+          - cell "None" [ref=e114]:
+            - generic [ref=e115]: None
+          - cell "None" [ref=e116]
+          - cell " " [ref=e117]:
+            - generic [ref=e118]:
+              - generic [ref=e119] [cursor=pointer]: 
+              - generic [ref=e120] [cursor=pointer]: 
+        - row "Mar 21st 2025 at 12:40 Unusual VPN Login Location Medium Closed  False Positive T.Ross (L1)  " [ref=e160]:
+          - cell "Mar 21st 2025 at 12:40" [ref=e122]
+          - cell "Unusual VPN Login Location" [ref=e123]
+          - cell "Medium" [ref=e124]
+          - cell "Closed" [ref=e125]:
+            - generic [ref=e126]:
+              - img [ref=e127]
+              - generic [ref=e130]: Closed
+          - cell " False Positive" [ref=e131]:
+            - generic [ref=e132]:
+              - generic [ref=e133]: 
+              - text: False Positive
+          - cell "T.Ross (L1)" [ref=e134]
+          - cell " " [ref=e161]:
+            - generic [ref=e136]:
+              - generic [ref=e137] [cursor=pointer]: 
+              - generic [ref=e138] [cursor=pointer]: 
+        - 'row "Description: The user accessed corporate VPN from a first-seen location. This login may indicate that the user''s account is compromised and threat actors are breaking in. Source IP: 45.8.112.7 Source User: M.Clark Login Country: Japan Expected Country: United States Comment: M.Clark, corporate CFO, confirmed that she is currently on vacation in Japan but had to access VPN from her laptop exactly at that time to resolve an urgent issue. Not a threat" [ref=e162]':
+          - 'cell "Description: The user accessed corporate VPN from a first-seen location. This login may indicate that the user''s account is compromised and threat actors are breaking in. Source IP: 45.8.112.7 Source User: M.Clark Login Country: Japan Expected Country: United States Comment: M.Clark, corporate CFO, confirmed that she is currently on vacation in Japan but had to access VPN from her laptop exactly at that time to resolve an urgent issue. Not a threat" [ref=e163]':
+            - generic [ref=e165]:
+              - paragraph [ref=e166]: "Description:"
+              - paragraph [ref=e167]: The user accessed corporate VPN from a first-seen location. This login may indicate that the user's account is compromised and threat actors are breaking in.
+              - paragraph [ref=e168]: "Source IP:"
+              - paragraph [ref=e169]: 45.8.112.7
+              - paragraph [ref=e170]: "Source User:"
+              - paragraph [ref=e171]: M.Clark
+              - paragraph [ref=e172]: "Login Country:"
+              - paragraph [ref=e173]: Japan
+              - paragraph [ref=e174]: "Expected Country:"
+              - paragraph [ref=e175]: United States
+              - paragraph [ref=e176]: "Comment:"
+              - paragraph [ref=e177]: M.Clark, corporate CFO, confirmed that she is currently on vacation in Japan but had to access VPN from her laptop exactly at that time to resolve an urgent issue. Not a threat
+        - row "Mar 21st 2025 at 11:53 Bruteforce Attack from External Medium Closed  True Positive J.Adams (L2)  " [ref=e139]:
+          - cell "Mar 21st 2025 at 11:53" [ref=e140]
+          - cell "Bruteforce Attack from External" [ref=e141]
+          - cell "Medium" [ref=e142]
+          - cell "Closed" [ref=e143]:
+            - generic [ref=e144]:
+              - img [ref=e145]
+              - generic [ref=e148]: Closed
+          - cell " True Positive" [ref=e149]:
+            - generic [ref=e150]:
+              - generic [ref=e151]: 
+              - text: True Positive
+          - cell "J.Adams (L2)" [ref=e152]
+          - cell " " [ref=e153]:
+            - generic [ref=e154]:
+              - generic [ref=e155] [cursor=pointer]: 
+              - generic [ref=e156] [cursor=pointer]: 
+    - paragraph [ref=e158]:
+      - text: Displaying
+      - strong [ref=e159]: 1 - 5
+      - text: of 5 records

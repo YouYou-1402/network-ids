@@ -2,6 +2,7 @@
 #include "ui_bridge.hpp"
 #include "../../common/engine_config.hpp"
 #include "../../common/logger.hpp"
+#include "../../common/metrics.hpp"
 #include <algorithm>
 
 UiBridge::UiBridge(AlertManager&     alert_manager,
@@ -91,6 +92,26 @@ MetricsSnapshot UiBridge::buildMetricsSnapshot() const {
     s.active_flows     = dispatcher_.activeFlows();
     s.ml_jobs          = ml_engine_.jobsProcessed();
     s.ml_anomalies     = ml_engine_.anomaliesFound();
+
+    // ── Inference timing ──────────────────────────────────────────────────────
+    const auto& is = INFER_STATS;
+    s.infer_xgb_avg_us   = is.xgbAvgUs();
+    s.infer_xgb_min_us   = is.xgb_min_us.load(std::memory_order_relaxed);
+    s.infer_xgb_max_us   = is.xgb_max_us.load(std::memory_order_relaxed);
+    s.infer_ae_avg_us    = is.aeAvgUs();
+    s.infer_ae_min_us    = is.ae_min_us.load(std::memory_order_relaxed);
+    s.infer_ae_max_us    = is.ae_max_us.load(std::memory_order_relaxed);
+    s.infer_job_avg_us   = is.jobAvgUs();
+    s.infer_job_min_us   = is.job_min_us.load(std::memory_order_relaxed);
+    s.infer_job_max_us   = is.job_max_us.load(std::memory_order_relaxed);
+    s.infer_jobs_per_sec = is.jobsPerSec();
+    s.infer_job_count    = is.job_count.load(std::memory_order_relaxed);
+
+    // Nếu chưa có sample nào, min sẽ là UINT64_MAX — normalize về 0
+    if (s.infer_xgb_min_us == UINT64_MAX) s.infer_xgb_min_us = 0;
+    if (s.infer_ae_min_us  == UINT64_MAX) s.infer_ae_min_us  = 0;
+    if (s.infer_job_min_us == UINT64_MAX) s.infer_job_min_us = 0;
+
     return s;
 }
 

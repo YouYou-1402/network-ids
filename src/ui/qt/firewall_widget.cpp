@@ -206,21 +206,28 @@ void FirewallWidget::buildHeaderBar(QVBoxLayout* root) {
     lay->setContentsMargins(0, 0, 0, 0);
     lay->setSpacing(8);
 
+    // RESPONSIVE: tính kích thước theo font metrics
+    const int em = fontMetrics().height();
+
     lbl_stats_ = new QLabel("🔴 Blacklist: 0   🟢 Whitelist: 0", this);
     lbl_stats_->setAlignment(Qt::AlignCenter);
-    lbl_stats_->setFixedHeight(30);
+    // RESPONSIVE: bỏ setFixedHeight(30) → dùng setMinimumHeight theo em
+    lbl_stats_->setMinimumHeight(em * 2);
+    lbl_stats_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     lbl_stats_->setStyleSheet(
         "background:#eef0f7; color:#1a1a3e;"
-        "font-size:12px; font-weight:bold;"
+        "font-weight:bold;"
         "border:1px solid #d0d4e8; border-radius:5px;"
         "padding:2px 16px;");
 
     lbl_backend_ = new QLabel("  🔧 Backend: —  ", this);
-    lbl_backend_->setFixedHeight(30);
+    // RESPONSIVE: bỏ setFixedHeight(30)
+    lbl_backend_->setMinimumHeight(em * 2);
+    lbl_backend_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     lbl_backend_->setStyleSheet(
         "color:#555577; background:#eef0f7;"
         "border:1px solid #c0c8e8; border-radius:5px;"
-        "padding:2px 8px; font-size:11px;");
+        "padding:2px 8px;");
 
     lay->addWidget(lbl_stats_, 1);
     lay->addWidget(lbl_backend_);
@@ -234,10 +241,15 @@ void FirewallWidget::buildBlacklistTab(QWidget* p) {
     lay->setSpacing(6);
     lay->setContentsMargins(8, 8, 8, 8);
 
+    // RESPONSIVE: tính kích thước theo font metrics
+    const int em = fontMetrics().height();
+
     // Search bar
     bl_search_ = new QLineEdit(p);
     bl_search_->setPlaceholderText("🔍  Search IP / comment…");
-    bl_search_->setFixedHeight(30);
+    // RESPONSIVE: bỏ setFixedHeight(30) → dùng setMinimumHeight theo em
+    bl_search_->setMinimumHeight(em * 2);
+    bl_search_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     bl_search_->setStyleSheet(kInputStyle);
     bl_search_->setClearButtonEnabled(true);
     connect(bl_search_, &QLineEdit::textChanged,
@@ -279,7 +291,9 @@ void FirewallWidget::buildBlacklistTab(QWidget* p) {
 
     bl_ip_ = new QLineEdit(form);
     bl_ip_->setPlaceholderText("IP / CIDR  (e.g. 192.168.1.1  or  10.0.0.0/8)");
-    bl_ip_->setFixedHeight(30);
+    // RESPONSIVE: bỏ setFixedHeight(30)
+    bl_ip_->setMinimumHeight(em * 2);
+    bl_ip_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     bl_ip_->setStyleSheet(kInputStyle);
     connect(bl_ip_, &QLineEdit::returnPressed,
             this, &FirewallWidget::onBlockClicked);
@@ -289,12 +303,16 @@ void FirewallWidget::buildBlacklistTab(QWidget* p) {
     bl_proto_->addItem("TCP",  6);
     bl_proto_->addItem("UDP",  17);
     bl_proto_->addItem("ICMP", 1);
-    bl_proto_->setFixedSize(72, 30);
+    // RESPONSIVE: bỏ setFixedSize(72, 30)
+    bl_proto_->setMinimumHeight(em * 2);
+    bl_proto_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     bl_proto_->setStyleSheet(kComboStyle);
 
     bl_cmt_ = new QLineEdit(form);
     bl_cmt_->setPlaceholderText("Comment (optional)");
-    bl_cmt_->setFixedHeight(30);
+    // RESPONSIVE: bỏ setFixedHeight(30)
+    bl_cmt_->setMinimumHeight(em * 2);
+    bl_cmt_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     bl_cmt_->setStyleSheet(kInputStyle);
 
     auto* lbl_ip  = new QLabel("IP:",      form);
@@ -325,7 +343,9 @@ void FirewallWidget::buildBlacklistTab(QWidget* p) {
     bl_ttl_->setRange(1, 10080);
     bl_ttl_->setValue(10);
     bl_ttl_->setSuffix(" min");
-    bl_ttl_->setFixedSize(100, 30);
+    // RESPONSIVE: bỏ setFixedSize(100, 30)
+    bl_ttl_->setMinimumHeight(em * 2);
+    bl_ttl_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     bl_ttl_->setStyleSheet(kSpinStyle);
 
     connect(bl_perm_, &QCheckBox::toggled, this, [=](bool checked) {
@@ -334,8 +354,9 @@ void FirewallWidget::buildBlacklistTab(QWidget* p) {
     });
 
     btn_block_ = new QPushButton("⛔  Block IP", form);
-    btn_block_->setFixedHeight(32);
-    btn_block_->setMinimumWidth(110);
+    // RESPONSIVE: bỏ setFixedHeight(32) + setMinimumWidth(110)
+    btn_block_->setMinimumHeight(em * 2);
+    btn_block_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     btn_block_->setStyleSheet(
         btnStyle("#fff0f0", "#cc2222", "#f0b8b8", "#ffe0e0"));
     connect(btn_block_, &QPushButton::clicked,
@@ -358,10 +379,15 @@ void FirewallWidget::buildWhitelistTab(QWidget* p) {
     lay->setSpacing(6);
     lay->setContentsMargins(8, 8, 8, 8);
 
+    // RESPONSIVE: tính kích thước theo font metrics
+    const int em = fontMetrics().height();
+
     // Search bar
     wl_search_ = new QLineEdit(p);
     wl_search_->setPlaceholderText("🔍  Search IP / comment…");
-    wl_search_->setFixedHeight(30);
+    // RESPONSIVE: bỏ setFixedHeight(30)
+    wl_search_->setMinimumHeight(em * 2);
+    wl_search_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     wl_search_->setStyleSheet(kInputStyle);
     wl_search_->setClearButtonEnabled(true);
     connect(wl_search_, &QLineEdit::textChanged,
@@ -395,20 +421,24 @@ void FirewallWidget::buildWhitelistTab(QWidget* p) {
 
     wl_ip_ = new QLineEdit(form);
     wl_ip_->setPlaceholderText("IP / CIDR  (e.g. 10.0.0.1  or  192.168.0.0/16)");
-    wl_ip_->setFixedHeight(30);
+    // RESPONSIVE: bỏ setFixedHeight(30)
+    wl_ip_->setMinimumHeight(em * 2);
+    wl_ip_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     wl_ip_->setStyleSheet(kInputStyle);
     connect(wl_ip_, &QLineEdit::returnPressed,
             this, &FirewallWidget::onAllowClicked);
 
     wl_cmt_ = new QLineEdit(form);
     wl_cmt_->setPlaceholderText("Comment (optional)");
-    wl_cmt_->setFixedHeight(30);
+    // RESPONSIVE: bỏ setFixedHeight(30) + setFixedWidth(200)
+    wl_cmt_->setMinimumHeight(em * 2);
+    wl_cmt_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     wl_cmt_->setStyleSheet(kInputStyle);
-    wl_cmt_->setFixedWidth(200);
 
     btn_allow_ = new QPushButton("✅  Allow IP", form);
-    btn_allow_->setFixedHeight(32);
-    btn_allow_->setMinimumWidth(110);
+    // RESPONSIVE: bỏ setFixedHeight(32) + setMinimumWidth(110)
+    btn_allow_->setMinimumHeight(em * 2);
+    btn_allow_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     btn_allow_->setStyleSheet(
         btnStyle("#f0fff4", "#227744", "#a5d6a7", "#c8e6c9"));
     connect(btn_allow_, &QPushButton::clicked,
@@ -454,8 +484,9 @@ void FirewallWidget::buildQuickBar(QVBoxLayout* root) {
     btn_load_   ->setStyleSheet(sNormal);
     btn_save_   ->setStyleSheet(sNormal);
 
+    // RESPONSIVE: bỏ setFixedHeight(30) → tự co dãn theo nội dung
     for (auto* b : {btn_refresh_, btn_flush_, btn_load_, btn_save_})
-        b->setFixedHeight(30);
+        b->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 
     connect(btn_refresh_, &QPushButton::clicked,
             this, &FirewallWidget::refresh);

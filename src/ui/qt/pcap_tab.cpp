@@ -144,6 +144,23 @@ void PcapTab::setupPacketTable() {
     packet_table_->setColumnWidth(6, 200);   // Info
     // col 7 (Threat) → stretch
 
+    // RESPONSIVE: dùng ResizeToContents + Interactive thay vì hardcode pixel
+    // để cột tự điều chỉnh theo nội dung và DPI màn hình
+    auto* hdr = packet_table_->horizontalHeader();
+    hdr->setSectionResizeMode(0, QHeaderView::ResizeToContents); // No.
+    hdr->setSectionResizeMode(1, QHeaderView::ResizeToContents); // Time
+    hdr->setSectionResizeMode(2, QHeaderView::Interactive);      // Source
+    hdr->setSectionResizeMode(3, QHeaderView::Interactive);      // Destination
+    hdr->setSectionResizeMode(4, QHeaderView::ResizeToContents); // Protocol
+    hdr->setSectionResizeMode(5, QHeaderView::ResizeToContents); // Length
+    hdr->setSectionResizeMode(6, QHeaderView::Interactive);      // Info
+    hdr->setSectionResizeMode(7, QHeaderView::Stretch);          // Threat
+    // Đặt kích thước mặc định tương đối theo font
+    const int em = packet_table_->fontMetrics().averageCharWidth();
+    hdr->resizeSection(2, em * 16);   // Source ~16 chars
+    hdr->resizeSection(3, em * 16);   // Destination ~16 chars
+    hdr->resizeSection(6, em * 24);   // Info ~24 chars
+
     packet_table_->setStyleSheet(
         // ── Table body ──────────────────────────────────────────────────────
         "QTableView {"
@@ -217,8 +234,11 @@ void PcapTab::setupLiveLayout() {
     auto* sidebar_lay = new QVBoxLayout(sidebar_w);
     sidebar_lay->setSpacing(0);
     sidebar_lay->setContentsMargins(0, 0, 0, 0);
-    sidebar_w->setMinimumWidth(180);
-    sidebar_w->setMaximumWidth(240);
+    // RESPONSIVE: bỏ hardcode 180/240px → dùng tỷ lệ font
+    const int em_px = fontMetrics().averageCharWidth();
+    sidebar_w->setMinimumWidth(em_px * 22);   // ~22 chars wide
+    sidebar_w->setMaximumWidth(em_px * 36);   // ~36 chars wide
+    sidebar_w->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     sidebar_w->setStyleSheet(
         "QWidget { background: #ffffff;"
         "          border-right: 1px solid #d0d4e8; }");
@@ -260,7 +280,9 @@ void PcapTab::setupLiveLayout() {
     hex_view_    = new HexView(dh_split);
     dh_split->addWidget(detail_tree_);
     dh_split->addWidget(hex_view_);
-    dh_split->setSizes({320, 280});
+    // RESPONSIVE: dùng tỷ lệ 55/45 thay vì hardcode 320/280
+    dh_split->setStretchFactor(0, 55);
+    dh_split->setStretchFactor(1, 45);
     bot_split->addWidget(dh_split);
 
     // Traffic chart — wrap trong QGroupBox để có title
@@ -271,7 +293,7 @@ void PcapTab::setupLiveLayout() {
         "  border: 1px solid #d0d4e8;"
         "  border-radius: 4px;"
         "  margin-top: 6px;"
-        "  font-size: 10px; font-weight: bold; color: #3355cc; }"
+        "  font-weight: bold; color: #3355cc; }"
         "QGroupBox::title {"
         "  subcontrol-origin: margin; subcontrol-position: top left;"
         "  padding: 0 6px; left: 8px; }");
@@ -283,19 +305,19 @@ void PcapTab::setupLiveLayout() {
     chart_lay->addWidget(traffic_chart_);
     bot_split->addWidget(chart_box);
 
-    bot_split->setSizes({580, 280});
-    bot_split->setStretchFactor(0, 1);
-    bot_split->setStretchFactor(1, 0);
+    // RESPONSIVE: dùng stretch factor thay vì hardcode 580/280
+    bot_split->setStretchFactor(0, 2);
+    bot_split->setStretchFactor(1, 1);
 
     v_split->addWidget(bot_split);
-    v_split->setSizes({420, 220});
+    // RESPONSIVE: dùng stretch factor thay vì hardcode 420/220
     v_split->setStretchFactor(0, 3);
     v_split->setStretchFactor(1, 2);
 
     right_lay->addWidget(v_split);
     main_split->addWidget(right_w);
 
-    main_split->setSizes({200, 1000});
+    // RESPONSIVE: dùng stretch factor thay vì hardcode 200/1000
     main_split->setStretchFactor(0, 0);
     main_split->setStretchFactor(1, 1);
 
@@ -372,10 +394,14 @@ void PcapTab::setupOfflineLayout() {
     hex_view_    = new HexView(dh_split);
     dh_split->addWidget(detail_tree_);
     dh_split->addWidget(hex_view_);
-    dh_split->setSizes({420, 420});
+    // RESPONSIVE: dùng stretch factor thay vì hardcode 420/420
+    dh_split->setStretchFactor(0, 1);
+    dh_split->setStretchFactor(1, 1);
 
     v_split->addWidget(dh_split);
-    v_split->setSizes({520, 280});
+    // RESPONSIVE: dùng stretch factor thay vì hardcode 520/280
+    v_split->setStretchFactor(0, 2);
+    v_split->setStretchFactor(1, 1);
     root->addWidget(v_split);
 
     // ── Connections ───────────────────────────────────────────────────────────

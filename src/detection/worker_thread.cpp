@@ -12,16 +12,19 @@
 // =============================================================================
 
 PacketQueue::PacketQueue(size_t max_size)
-    : max_size_(max_size), mask_(max_size - 1)
 {
-    if (max_size == 0 || (max_size & (max_size - 1)) != 0) {
-        size_t p = 1;
-        while (p < max_size) p <<= 1;
-        max_size_ = p;
-        mask_     = p - 1;
-        LOG_WARN("PacketQueue: round up → " + std::to_string(p));
-    }
-    buf_.resize(max_size_);
+    // FIX #2: Tính mask SAU khi round-up lên power-of-2.
+    // Trước đây: max_size_ và mask_ được khởi tạo từ tham số gốc,
+    // sau đó chỉ được cập nhật nếu không phải power-of-2.
+    // Nếu max_size đã là power-of-2, mask_ = max_size - 1 đúng.
+    // Nhưng nếu không, mask_ ban đầu sai và buf_.resize() dùng max_size_ mới
+    // → mask_ và buf_.size() không khớp → out-of-bounds access.
+    // Fix: luôn tính mask_ từ giá trị đã round-up.
+    size_t p = 1;
+    while (p < std::max(max_size, size_t(2))) p <<= 1;
+    max_size_ = p;
+    mask_     = p - 1;
+    buf_.resize(p);
 }
 
 bool PacketQueue::push(PacketInfo pkt) {
@@ -53,11 +56,6 @@ bool PacketQueue::empty() const {
     return head_.load(std::memory_order_acquire)
         == tail_.load(std::memory_order_acquire);
 }
-
-// =============================================================================
-//  WorkerThread
-// =============================================================================
-
 WorkerThread::WorkerThread(int               id,
                             FlowTable&        flow_table,
                             IpTracker&        ip_tracker,
@@ -68,7 +66,7 @@ WorkerThread::WorkerThread(int               id,
     , flow_table_       (flow_table)
     , on_alert_         (std::move(on_alert))
     , ring_buf_         (ring_buf)
-    , queue_            (65536)
+    , queue_            (4096*2)
     , sig_engine_       (ip_tracker)
     , anomaly_engine_   (ip_tracker)
     , behavioral_engine_(ip_tracker)
@@ -498,6 +496,12 @@ void WorkerThread::handleDetection(DetectionResult    result,
 // =============================================================================
 bool WorkerThread::shouldSampleForML(const FlowState& flow) const {
     const uint64_t n = flow.total_packets;
+
+    // ── Case [D]: Flow kết thúc (FIN hoặc RST) ───────────────────────────────
+    // Sample ngay khi flow đóng để không bỏ sót flow ngắn.
+    // Guard: ít nhất 2 packet để có feature có nghĩa.
+    if (n >= 2 && (flow.fin_count > 0 || flow.rst_count > 0))
+        return true;
 
     // ── Case [A]: SYN-only flow ───────────────────────────────────────────────
     if (n == 1) {

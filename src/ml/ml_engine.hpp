@@ -69,7 +69,9 @@ private:
     MLResult processJob(const MLJob& job);
 
     EngineOutput combineVoting(const ModelOutput& xgb_out,
-                               const ModelOutput& ae_out) const;
+                               const ModelOutput& ae_out,
+                               const std::shared_ptr<OnnxXGBoost>&     xgb,
+                               const std::shared_ptr<OnnxAutoencoder>& ae) const;
 
     static DetectionResult labelToThreat(int label);
 
@@ -78,8 +80,10 @@ private:
 
     NslKddExtractor   nslkdd_extractor_;  
 
-    std::unique_ptr<OnnxXGBoost>     xgb_model_;
-    std::unique_ptr<OnnxAutoencoder> ae_model_;
+    // FIX #8: Dùng shared_ptr thay unique_ptr để hỗ trợ atomic swap
+    // khi reloadModels() được gọi trong khi run() đang inference.
+    std::shared_ptr<OnnxXGBoost>     xgb_model_;
+    std::shared_ptr<OnnxAutoencoder> ae_model_;
 
     MLConfig              cfg_;
     std::thread           thread_;

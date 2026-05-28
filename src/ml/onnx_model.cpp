@@ -3,6 +3,7 @@
 
 #include "onnx_model.hpp"
 #include "../common/logger.hpp"
+#include "../common/metrics.hpp"
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
@@ -143,8 +144,10 @@ ModelOutput OnnxAutoencoder::infer(const std::vector<float>& input) {
         const char* in_names[]  = { impl_->input_name.c_str()  };
         const char* out_names[] = { impl_->output_name.c_str() };
 
+        const auto t_ae = InferenceStats::now();
         auto outputs = impl_->session.Run(
             Ort::RunOptions{nullptr}, in_names, &in_tensor, 1, out_names, 1);
+        INFER_STATS.recordAe(InferenceStats::elapsedUs(t_ae));
 
         const float* recon = outputs[0].GetTensorData<float>();
         float mse = 0.f;
@@ -253,15 +256,19 @@ ModelOutput OnnxXGBoost::infer(const std::vector<float>& input) {
             const char* in_names[]  = { impl_->input_name.c_str()        };
             const char* out_names[] = { impl_->output_label_name.c_str(),
                                         impl_->output_prob_name.c_str()   };
+            const auto t_xgb = InferenceStats::now();
             auto outputs = impl_->session.Run(
                 Ort::RunOptions{nullptr}, in_names, &in_tensor, 1, out_names, 2);
+            INFER_STATS.recordXgb(InferenceStats::elapsedUs(t_xgb));
             label    = static_cast<int>(outputs[0].GetTensorData<int64_t>()[0]);
             p_benign = outputs[1].GetTensorData<float>()[MODEL_LABEL_BENIGN];
         } else {
             const char* in_names[]  = { impl_->input_name.c_str()       };
             const char* out_names[] = { impl_->output_prob_name.c_str() };
+            const auto t_xgb = InferenceStats::now();
             auto outputs = impl_->session.Run(
                 Ort::RunOptions{nullptr}, in_names, &in_tensor, 1, out_names, 1);
+            INFER_STATS.recordXgb(InferenceStats::elapsedUs(t_xgb));
             const float* probs = outputs[0].GetTensorData<float>();
             label    = argmaxN(probs, MODEL_NUM_CLASSES);
             p_benign = probs[MODEL_LABEL_BENIGN];

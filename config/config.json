@@ -2,7 +2,7 @@
   "system": {
     "num_workers": 4,
     "max_flows": 100000,
-    "flow_idle_timeout_sec": 300,
+    "flow_idle_timeout_sec": 10,
     "log_level": "INFO",
     "log_file": "logs/system.log",
     "alert_log_file": "logs/alert.log"

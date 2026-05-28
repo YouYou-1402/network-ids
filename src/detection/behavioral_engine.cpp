@@ -155,16 +155,19 @@ DetectionResult BehavioralEngine::checkHttpFlood(const PacketInfo& pkt,
     DetectionResult result = DetectionResult::NORMAL;
 
     ip_tracker_.withStats(pkt.src_ip, [&](IpStats& ip) {
-        // Reset window nếu hết thời gian
+        // FIX #4: Reset window TRƯỚC khi increment
         if (ip.windowElapsed() > behavior_window_sec_)
             ip.resetWindow();
 
-        ip.pkt_count++;
+        // FIX #3: Dùng http_req_count thay pkt_count.
+        // pkt_count là tổng packet mọi protocol — dùng nó để đếm HTTP request
+        // sẽ bị nhiễm bởi SYN/ACK/RST packets không phải HTTP.
+        ip.http_req_count++;
 
-        if (ip.pkt_count >= http_flood_threshold_) {
+        if (ip.http_req_count >= http_flood_threshold_) {
             LOG_WARN("BehavioralEngine: HTTP flood"
                      " src="        + pkt.flowKey()
-                     + " req_count=" + std::to_string(ip.pkt_count)
+                     + " req_count=" + std::to_string(ip.http_req_count)
                      + " threshold=" + std::to_string(http_flood_threshold_)
                      + " window="    + std::to_string(behavior_window_sec_) + "s");
             result = DetectionResult::DDOS_VOLUMETRIC;

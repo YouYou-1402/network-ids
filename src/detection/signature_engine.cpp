@@ -144,16 +144,30 @@ void SignatureEngine::buildFailLinks() {
 
 // =============================================================================
 //  Aho-Corasick — acSearch
-//  Trả về sig_id đầu tiên match, hoặc SIG_NONE nếu không match
+//  FIX #7: Collect tất cả matches thay vì return ngay match đầu tiên.
+//  Aho-Corasick được thiết kế để tìm tất cả pattern trong một lần scan.
+//  Return sớm bỏ sót các pattern tiếp theo trong cùng payload.
+//  Trả về sig_id đầu tiên theo thứ tự ưu tiên, hoặc SIG_NONE nếu không match.
 // =============================================================================
 int SignatureEngine::acSearch(const uint8_t* data, size_t len) const {
-    int cur = 0;
+    int cur        = 0;
+    int first_match = SIG_NONE;
     for (size_t i = 0; i < len; ++i) {
         cur = ac_nodes_[cur].children[static_cast<unsigned char>(data[i])];
-        if (ac_nodes_[cur].output != -1)
-            return ac_nodes_[cur].output;
+        // FIX #7: Walk toàn bộ output chain tại node hiện tại.
+        // Một node có thể match nhiều pattern qua fail links.
+        // output chain: node → fail → fail → ... cho đến root
+        for (int tmp = cur;
+             tmp != 0 && ac_nodes_[tmp].output != -1;
+             tmp = ac_nodes_[tmp].fail)
+        {
+            if (first_match == SIG_NONE)
+                first_match = ac_nodes_[tmp].output;
+            // Tiếp tục walk để log tất cả matches nếu cần debug,
+            // nhưng chỉ lưu match đầu tiên để return.
+        }
     }
-    return SIG_NONE;
+    return first_match;
 }
 
 // =============================================================================
@@ -207,11 +221,11 @@ DetectionResult SignatureEngine::checkDstSynRatio(const PacketInfo& pkt) {
     DetectionResult result = DetectionResult::NORMAL;
 
     dst_tracker_.withStats(pkt.dst_ip, [&](DstStats& dst) {
-        dst.syn_count++;
-
-        // Reset window nếu hết thời gian
+        // FIX #4: Reset window TRƯỚC khi increment
         if (dst.windowElapsed() > behavior_window_sec_)
             dst.resetWindow();
+
+        dst.syn_count++;
 
         if (dst.syn_count < dst_syn_ratio_min_pkt_)
             return;
@@ -236,11 +250,12 @@ DetectionResult SignatureEngine::checkFloodRate(const PacketInfo& pkt,
     DetectionResult result = DetectionResult::NORMAL;
 
     ip_tracker_.withStats(pkt.src_ip, [&](IpStats& ip) {
-        ip.pkt_count++;
-
-        // Reset window mỗi behavior_window_sec_
+        // FIX #4: Reset window TRƯỚC khi increment để packet hiện tại
+        // được tính vào window mới, không bị mất khi reset.
         if (ip.windowElapsed() > behavior_window_sec_)
             ip.resetWindow();
+
+        ip.pkt_count++;
 
         if (pkt.hasSYN() && !pkt.hasACK()) {
             ip.syn_count++;

@@ -110,7 +110,10 @@ void TrafficChart::setupUI() {
     chart_view_ = new QChartView(chart_, this);
     chart_view_->setRenderHint(QPainter::Antialiasing);
     chart_view_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    chart_view_->setMinimumSize(400, 300);
+    // RESPONSIVE: bỏ setMinimumSize(400, 300) hardcode
+    // Dùng tỷ lệ font để minimum size scale theo DPI
+    const int em = fontMetrics().height();
+    chart_view_->setMinimumSize(em * 25, em * 15);
     chart_view_->setObjectName("trafficChartView");
     chart_view_->setStyleSheet(
         "#trafficChartView {"

@@ -2,6 +2,7 @@
 #include "ml_engine.hpp"
 #include "onnx_model.hpp"
 #include "../common/logger.hpp"
+#include "../common/metrics.hpp"
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
@@ -41,14 +42,17 @@ void MLEngine::start(const MLConfig& cfg) {
         LOG_WARN("MLEngine: scaler_nslkdd_path rỗng"
                  " — NslKddExtractor không sẵn sàng, ML inference sẽ không chạy");
     }
-    xgb_model_ = std::make_unique<OnnxXGBoost>(cfg_.xgb_threshold);
+    // FIX #8: Dùng shared_ptr + std::atomic_store để an toàn khi reloadModels()
+    // được gọi trong khi run() đang chạy inference trên thread khác.
+    auto new_xgb = std::make_shared<OnnxXGBoost>(cfg_.xgb_threshold);
     if (!cfg_.xgb_model_path.empty()) {
-        if (xgb_model_->load(cfg_.xgb_model_path))
+        if (new_xgb->load(cfg_.xgb_model_path))
             LOG_INFO("MLEngine: XGBoost loaded"
-                     " input_dim=" + std::to_string(xgb_model_->inputDim()));
+                     " input_dim=" + std::to_string(new_xgb->inputDim()));
         else
             LOG_ERROR("MLEngine: XGBoost FAILED — " + cfg_.xgb_model_path);
     }
+    std::atomic_store(&xgb_model_, new_xgb);
 
     float ae_thresh = cfg_.ae_threshold;
     if (ae_thresh <= 0.f && extractor_ok)
@@ -56,28 +60,33 @@ void MLEngine::start(const MLConfig& cfg) {
     if (ae_thresh <= 0.f)
         ae_thresh = 0.099726f;
 
-    ae_model_ = std::make_unique<OnnxAutoencoder>(ae_thresh);
+    auto new_ae = std::make_shared<OnnxAutoencoder>(ae_thresh);
     if (!cfg_.ae_model_path.empty()) {
-        if (ae_model_->load(cfg_.ae_model_path))
+        if (new_ae->load(cfg_.ae_model_path))
             LOG_INFO("MLEngine: Autoencoder loaded"
-                     " input_dim=" + std::to_string(ae_model_->inputDim())
+                     " input_dim=" + std::to_string(new_ae->inputDim())
                      + " threshold=" + std::to_string(ae_thresh));
         else
             LOG_ERROR("MLEngine: Autoencoder FAILED — " + cfg_.ae_model_path);
     }
+    std::atomic_store(&ae_model_, new_ae);
 
-    if (extractor_ok && ae_model_->isReady()) {
-        if (nslkdd_extractor_.inputDim() != ae_model_->inputDim()) {
-            LOG_WARN("MLEngine: input_dim mismatch!"
-                     " extractor=" + std::to_string(nslkdd_extractor_.inputDim())
-                     + " ae_model=" + std::to_string(ae_model_->inputDim()));
+    {
+        auto xgb = std::atomic_load(&xgb_model_);
+        auto ae  = std::atomic_load(&ae_model_);
+        if (extractor_ok && ae && ae->isReady()) {
+            if (nslkdd_extractor_.inputDim() != ae->inputDim()) {
+                LOG_WARN("MLEngine: input_dim mismatch!"
+                         " extractor=" + std::to_string(nslkdd_extractor_.inputDim())
+                         + " ae_model=" + std::to_string(ae->inputDim()));
+            }
         }
-    }
-    if (extractor_ok && xgb_model_->isReady()) {
-        if (nslkdd_extractor_.inputDim() != xgb_model_->inputDim()) {
-            LOG_WARN("MLEngine: input_dim mismatch!"
-                     " extractor=" + std::to_string(nslkdd_extractor_.inputDim())
-                     + " xgb_model=" + std::to_string(xgb_model_->inputDim()));
+        if (extractor_ok && xgb && xgb->isReady()) {
+            if (nslkdd_extractor_.inputDim() != xgb->inputDim()) {
+                LOG_WARN("MLEngine: input_dim mismatch!"
+                         " extractor=" + std::to_string(nslkdd_extractor_.inputDim())
+                         + " xgb_model=" + std::to_string(xgb->inputDim()));
+            }
         }
     }
 
@@ -127,8 +136,9 @@ bool MLEngine::reloadModels(const MLConfig& cfg) {
     if (ae_thresh <= 0.f)
         ae_thresh = 0.099726f;
 
-    auto new_xgb = std::make_unique<OnnxXGBoost>    (cfg.xgb_threshold);
-    auto new_ae  = std::make_unique<OnnxAutoencoder> (ae_thresh);
+    // FIX #8: Dùng shared_ptr để atomic_store an toàn với run() thread
+    auto new_xgb = std::make_shared<OnnxXGBoost>    (cfg.xgb_threshold);
+    auto new_ae  = std::make_shared<OnnxAutoencoder> (ae_thresh);
 
     bool xgb_ok = !cfg.xgb_model_path.empty() && new_xgb->load(cfg.xgb_model_path);
     bool ae_ok  = !cfg.ae_model_path.empty()  && new_ae ->load(cfg.ae_model_path);
@@ -138,9 +148,11 @@ bool MLEngine::reloadModels(const MLConfig& cfg) {
         return false;
     }
 
+    // Atomic swap — run() thread đang giữ snapshot cũ qua local shared_ptr,
+    // sẽ tiếp tục dùng model cũ cho job hiện tại, job tiếp theo dùng model mới.
     nslkdd_extractor_ = std::move(new_extractor);
-    xgb_model_        = std::move(new_xgb);
-    ae_model_         = std::move(new_ae);
+    std::atomic_store(&xgb_model_, new_xgb);
+    std::atomic_store(&ae_model_,  new_ae);
     cfg_              = cfg;
 
     LOG_INFO("MLEngine: models reloaded.\n" + status());
@@ -160,7 +172,9 @@ void MLEngine::run() {
         std::optional<MLJob> opt = job_queue_.pop(200);
         if (!opt.has_value()) continue;
 
+        const auto t_job = InferenceStats::now();
         MLResult result = processJob(*opt);
+        INFER_STATS.recordJob(InferenceStats::elapsedUs(t_job));
         ++jobs_processed_;
 
         if (result.final_result == DetectionResult::NORMAL) continue;
@@ -225,12 +239,18 @@ MLResult MLEngine::processJob(const MLJob& job) {
     const std::vector<float> vec39 =
         nslkdd_extractor_.extractAndScale(job.flow_snapshot);
 
-    if (xgb_model_ && xgb_model_->isReady())
-        result.xgb_result = xgb_model_->infer(vec39);
+    // FIX #8: Lấy snapshot local của shared_ptr trước khi dùng.
+    // reloadModels() có thể atomic_store model mới bất kỳ lúc nào,
+    // nhưng snapshot local giữ ref-count → model cũ không bị destroy
+    // trong khi đang infer.
+    auto xgb = std::atomic_load(&xgb_model_);
+    auto ae  = std::atomic_load(&ae_model_);
 
-    if (ae_model_ && ae_model_->isReady())
-        result.ae_result = ae_model_->infer(vec39);
+    if (xgb && xgb->isReady())
+        result.xgb_result = xgb->infer(vec39);
 
+    if (ae && ae->isReady())
+        result.ae_result = ae->infer(vec39);
 
     const bool is_tls = isTlsPort(job.dst_port) || isTlsPort(job.src_port);
     if (is_tls && result.xgb_result.label == MODEL_LABEL_BENIGN) {
@@ -239,7 +259,7 @@ MLResult MLEngine::processJob(const MLJob& job) {
                   + job.flow_key + "]");
     }
 
-    const EngineOutput ev = combineVoting(result.xgb_result, result.ae_result);
+    const EngineOutput ev = combineVoting(result.xgb_result, result.ae_result, xgb, ae);
     result.confidence   = ev.score;
     result.final_result = labelToThreat(ev.label);
     result.detail       = ev.detail;
@@ -261,12 +281,15 @@ MLResult MLEngine::processJob(const MLJob& job) {
 
 
 EngineOutput MLEngine::combineVoting(const ModelOutput& xgb_out,
-                                     const ModelOutput& ae_out) const
+                                     const ModelOutput& ae_out,
+                                     const std::shared_ptr<OnnxXGBoost>&     xgb,
+                                     const std::shared_ptr<OnnxAutoencoder>& ae) const
 {
     EngineOutput ev;
 
-    const bool xgb_ready = xgb_model_ && xgb_model_->isReady();
-    const bool ae_ready  = ae_model_  && ae_model_->isReady();
+    // FIX #8: Dùng snapshot shared_ptr thay vì member trực tiếp
+    const bool xgb_ready = xgb && xgb->isReady();
+    const bool ae_ready  = ae  && ae->isReady();
 
     if (!xgb_ready && !ae_ready) {
         ev.label  = MODEL_LABEL_BENIGN;
@@ -353,16 +376,18 @@ DetectionResult MLEngine::labelToThreat(int label) {
 }
 
 std::string MLEngine::status() const {
+    auto xgb = std::atomic_load(&xgb_model_);
+    auto ae  = std::atomic_load(&ae_model_);
     std::ostringstream oss;
     oss << "MLEngine:"
         << "\n  XGBoost        : "
-        << (xgb_model_ && xgb_model_->isReady()
-            ? "READY (input_dim=" + std::to_string(xgb_model_->inputDim()) + ")"
+        << (xgb && xgb->isReady()
+            ? "READY (input_dim=" + std::to_string(xgb->inputDim()) + ")"
             : "NOT LOADED")
         << "\n  Autoencoder    : "
-        << (ae_model_ && ae_model_->isReady()
-            ? "READY (input_dim=" + std::to_string(ae_model_->inputDim())
-              + " threshold=" + std::to_string(ae_model_->threshold()) + ")"
+        << (ae && ae->isReady()
+            ? "READY (input_dim=" + std::to_string(ae->inputDim())
+              + " threshold=" + std::to_string(ae->threshold()) + ")"
             : "NOT LOADED")
         << "\n  NslKddExtractor: "
         << (nslkdd_extractor_.isReady()

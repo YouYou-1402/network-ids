@@ -39,6 +39,13 @@ private:
     QLabel* lbl_ml_jobs_;
     QLabel* lbl_ml_anomalies_;
 
+    // Inference timing
+    QLabel* lbl_infer_xgb_;      // "avg (min–max) µs"
+    QLabel* lbl_infer_ae_;
+    QLabel* lbl_infer_job_;
+    QLabel* lbl_infer_tput_;     // jobs/s
+    QLabel* lbl_infer_count_;    // total jobs measured
+
     // Để tính pps
     uint64_t last_captured_ = 0;
 };

@@ -33,6 +33,16 @@ void signalHandler(int) {
 }
 
 int main(int argc, char* argv[]) {
+    // RESPONSIVE: bật HiDPI scaling trước khi tạo QApplication
+    // AA_EnableHighDpiScaling: Qt tự scale UI theo device pixel ratio (DPI màn hình)
+    // AA_UseHighDpiPixmaps:    icon/pixmap cũng được scale theo DPI
+    // Hai attribute này phải được set TRƯỚC khi QApplication được khởi tạo.
+    // Trên Qt6, HiDPI mặc định bật — hai dòng này không gây hại.
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+#endif
+
     QApplication app(argc, argv);
     g_app = &app;
 
@@ -94,7 +104,7 @@ int main(int argc, char* argv[]) {
     alert_manager.setAlertLogFile(cfg.system.alert_log_file);
 
     // ── 7. ML Job Queue ───────────────────────────────────────────────────────
-    MLJobQueue ml_job_queue;
+    MLJobQueue ml_job_queue(16384);  // heap-allocated, ~2.7MB
 
     // ── 8. Firewall Manager ───────────────────────────────────────────────────
     std::unique_ptr<FirewallManager> firewall_manager;

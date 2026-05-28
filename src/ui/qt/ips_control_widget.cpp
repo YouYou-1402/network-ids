@@ -37,14 +37,19 @@ void IpsControlWidget::setupUI() {
     root->setSpacing(8);
     root->setContentsMargins(8, 8, 8, 8);
 
+    // RESPONSIVE: tính kích thước theo font metrics
+    const int em = fontMetrics().height();
+
     // ── Mode badge ────────────────────────────────────────────────────────────
     lbl_mode_badge_ = new QLabel("🛡️  IPS — Full Protection", this);
     lbl_mode_badge_->setAlignment(Qt::AlignCenter);
-    lbl_mode_badge_->setFixedHeight(32);
+    // RESPONSIVE: bỏ setFixedHeight(32) → dùng setMinimumHeight theo em
+    lbl_mode_badge_->setMinimumHeight(em * 2);
+    lbl_mode_badge_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     lbl_mode_badge_->setStyleSheet(
         "QLabel {"
         "  background: #f0fff4; color: #227744;"
-        "  font-size: 12px; font-weight: bold;"
+        "  font-weight: bold;"
         "  border: 1px solid #a5d6a7; border-radius: 6px;"
         "  padding: 2px 8px; }");
     root->addWidget(lbl_mode_badge_);
@@ -83,15 +88,17 @@ void IpsControlWidget::setupUI() {
         status_lbl = new QLabel("● ACTIVE", row);
         status_lbl->setStyleSheet(
             "QLabel { background: transparent;"
-            "         color: #227744; font-weight: bold; font-size: 11px; }");
+            "         color: #227744; font-weight: bold; }");
 
         toggle_btn = new QPushButton("Disable", row);
-        toggle_btn->setFixedSize(68, 24);
+        // RESPONSIVE: bỏ setFixedSize(68, 24) → tự co dãn theo nội dung
+        toggle_btn->setMinimumWidth(em * 5);
+        toggle_btn->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
         toggle_btn->setStyleSheet(
             "QPushButton {"
             "  background: #fff0f0; color: #cc2222;"
             "  border: 1px solid #f0b8b8; border-radius: 4px;"
-            "  font-size: 10px; font-weight: bold; }"
+            "  padding: 2px 8px; font-weight: bold; }"
             "QPushButton:hover { background: #ffe0e0; border-color: #cc2222; }"
             "QPushButton:pressed { background: #ffd0d0; }");
 
@@ -133,22 +140,24 @@ void IpsControlWidget::setupUI() {
     qa_layout->setContentsMargins(10, 12, 10, 10);
 
     auto* btn_enable_all = new QPushButton("Enable All", qa_group);
-    btn_enable_all->setFixedHeight(26);
+    // RESPONSIVE: bỏ setFixedHeight(26) → tự co dãn
+    btn_enable_all->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     btn_enable_all->setStyleSheet(
         "QPushButton {"
         "  background: #f0fff4; color: #227744;"
         "  border: 1px solid #a5d6a7; border-radius: 4px;"
-        "  font-size: 10px; font-weight: bold; }"
+        "  padding: 3px 8px; font-weight: bold; }"
         "QPushButton:hover   { background: #c8e6c9; border-color: #388e3c; }"
         "QPushButton:pressed { background: #b2dfdb; }");
 
     auto* btn_disable_all = new QPushButton("Disable All", qa_group);
-    btn_disable_all->setFixedHeight(26);
+    // RESPONSIVE: bỏ setFixedHeight(26) → tự co dãn
+    btn_disable_all->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     btn_disable_all->setStyleSheet(
         "QPushButton {"
         "  background: #fff0f0; color: #cc2222;"
         "  border: 1px solid #f0b8b8; border-radius: 4px;"
-        "  font-size: 10px; font-weight: bold; }"
+        "  padding: 3px 8px; font-weight: bold; }"
         "QPushButton:hover   { background: #ffe0e0; border-color: #cc2222; }"
         "QPushButton:pressed { background: #ffd0d0; }");
 

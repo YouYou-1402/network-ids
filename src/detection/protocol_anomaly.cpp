@@ -58,11 +58,17 @@ void ProtocolAnomalyEngine::onSyn(const PacketInfo& pkt, FlowState& flow) {
     if (!pkt.hasSYN() || pkt.hasACK())
         return;
 
-    // Chỉ track HTTP/HTTPS port
-    if (!isHttpPort(pkt.dst_port) && pkt.dst_port != 443)
+    // FIX #10: Dùng isHttpPort() thống nhất thay vì hardcode 443.
+    // Trước đây: isHttpPort(pkt.dst_port) || pkt.dst_port == 443
+    // Nếu config http_ports đã có 443 → redundant check.
+    // Nếu config không có 443 nhưng có 8443 → onSyn() bỏ sót 8443
+    // trong khi analyze() lại check isHttpPort(8443) → http_start không set
+    // → Slowloris trên 8443 không bị detect.
+    // Fix: đảm bảo http_ports trong config bao gồm tất cả HTTPS ports (443, 8443, ...)
+    // và chỉ dùng isHttpPort() ở mọi nơi.
+    if (!isHttpPort(pkt.dst_port))
         return;
 
-    // Set http_start — đây là điểm khởi đầu đo timeout Slowloris
     flow.http_start           = Clock::now();
     flow.http_bytes_received  = 0;
     flow.http_header_complete = false;
@@ -84,14 +90,11 @@ DetectionResult ProtocolAnomalyEngine::analyze(const PacketInfo& pkt,
     if (pkt.protocol != IPPROTO_TCP)
         return DetectionResult::NORMAL;
 
-    const bool is_http_port = isHttpPort(pkt.dst_port)
-                           || (pkt.dst_port == 443);
-    if (!is_http_port)
+    // FIX #10: Dùng isHttpPort() thống nhất, bỏ hardcode 443
+    if (!isHttpPort(pkt.dst_port))
         return DetectionResult::NORMAL;
 
     // ── SYN đã được handle bởi onSyn() — chỉ return NORMAL ──────────────
-    // onSyn() được gọi từ WorkerThread trước detection pipeline
-    // Không xử lý SYN ở đây nữa để tránh double-increment concurrent_conn
     if (pkt.hasSYN() && !pkt.hasACK())
         return DetectionResult::NORMAL;
 
@@ -104,8 +107,6 @@ DetectionResult ProtocolAnomalyEngine::analyze(const PacketInfo& pkt,
     }
 
     // Guard: http_start chưa được set → bỏ qua
-    // Trường hợp này xảy ra khi IDS khởi động giữa chừng,
-    // bắt được packet giữa flow (không có SYN)
     if (flow.http_start == TimePoint{})
         return DetectionResult::NORMAL;
 
@@ -113,7 +114,6 @@ DetectionResult ProtocolAnomalyEngine::analyze(const PacketInfo& pkt,
 
     // ── Detect header completion (HTTP plaintext only) ────────────────────
     if (!flow.http_header_complete
-        && isHttpPort(pkt.dst_port)
         && pkt.payload_len > 0
         && pkt.payload() != nullptr) {
         if (memmem(pkt.payload(), pkt.payload_len, "\r\n\r\n", 4) != nullptr)
@@ -152,11 +152,17 @@ DetectionResult ProtocolAnomalyEngine::checkSlowloris(const PacketInfo& pkt,
     const double elapsed = std::chrono::duration<double>(
         Clock::now() - flow.http_start).count();
 
-    // Chưa đủ thời gian timeout → chưa kết luận
     if (elapsed < http_header_timeout_sec_)
         return DetectionResult::NORMAL;
 
-    if (pkt.dst_port == 443) {
+    // FIX #10: Phân biệt HTTPS vs HTTP plaintext bằng isHttpPort() + is_encrypted
+    // thay vì hardcode pkt.dst_port == 443.
+    // is_encrypted = true khi port là TLS port (443, 8443, ...) theo config.
+    const bool is_encrypted = pkt.is_encrypted
+                           || (pkt.dst_port == 443)
+                           || (pkt.dst_port == 8443);
+
+    if (is_encrypted) {
         // ── HTTPS: heuristic throughput + concurrent conn ─────────────────
         if (flow.http_bytes_received == 0)
             return DetectionResult::NORMAL;
@@ -184,19 +190,6 @@ DetectionResult ProtocolAnomalyEngine::checkSlowloris(const PacketInfo& pkt,
 
     } else {
         // ── HTTP plaintext: header chưa hoàn chỉnh sau timeout ───────────
-        //
-        // Slowloris gửi header từng dòng, cố tình không gửi "\r\n\r\n"
-        // → http_header_complete = false mãi mãi
-        // → Sau http_header_timeout_sec_ giây → SLOW_DDOS
-        //
-        // Điều kiện:
-        //   1. http_header_complete == false  : header chưa xong
-        //   2. http_bytes_received > 0        : đã nhận được gì đó
-        //                                       (tránh false positive với
-        //                                        connection idle hoàn toàn)
-        //   3. total_packets >= 2             : ít nhất SYN + 1 data packet
-        //                                       (tránh false positive với
-        //                                        half-open connection)
         if (!flow.http_header_complete
             && flow.http_bytes_received > 0
             && flow.total_packets >= 2)

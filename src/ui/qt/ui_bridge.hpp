@@ -26,6 +26,19 @@ struct MetricsSnapshot {
     uint64_t active_flows     = 0;
     uint64_t ml_jobs          = 0;
     uint64_t ml_anomalies     = 0;
+
+    // ── Inference timing (microseconds) ──────────────────────────────────────
+    uint64_t infer_xgb_avg_us  = 0;   // avg latency XGBoost session.Run()
+    uint64_t infer_xgb_min_us  = 0;
+    uint64_t infer_xgb_max_us  = 0;
+    uint64_t infer_ae_avg_us   = 0;   // avg latency Autoencoder session.Run()
+    uint64_t infer_ae_min_us   = 0;
+    uint64_t infer_ae_max_us   = 0;
+    uint64_t infer_job_avg_us  = 0;   // avg latency toàn bộ processJob()
+    uint64_t infer_job_min_us  = 0;
+    uint64_t infer_job_max_us  = 0;
+    double   infer_jobs_per_sec = 0.0; // throughput: jobs/s
+    uint64_t infer_job_count   = 0;   // tổng số jobs đã đo
 };
 
 struct TrafficPoint {

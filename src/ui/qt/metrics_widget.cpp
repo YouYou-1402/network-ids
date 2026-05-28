@@ -2,6 +2,9 @@
 #include "metrics_widget.hpp"
 #include <QFont>
 #include <QPalette>
+#include <QGridLayout>
+#include <QHBoxLayout>
+#include <QFrame>
 #include <algorithm>
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -31,14 +34,17 @@ MetricsWidget::MetricsWidget(QWidget* parent)
 
 void MetricsWidget::setupUI() {
     auto* root_layout = new QVBoxLayout(this);
-    root_layout->setSpacing(8);
-    root_layout->setContentsMargins(8, 8, 8, 8);
+    root_layout->setSpacing(6);
+    root_layout->setContentsMargins(6, 6, 6, 6);
+
+    // RESPONSIVE: tính kích thước theo font metrics
+    const int em = fontMetrics().height();
 
     // ── Header ────────────────────────────────────────────────────────────────
     auto* header = new QLabel("Stats", this);
     header->setStyleSheet(
         "QLabel { background: transparent;"
-        "  color: #1a1a3e; font-weight: bold; font-size: 12px;"
+        "  color: #1a1a3e; font-weight: bold;"
         "  padding: 2px 0 4px 0; }");
     root_layout->addWidget(header);
 
@@ -75,12 +81,14 @@ void MetricsWidget::setupUI() {
         lbl->setAlignment(Qt::AlignCenter);
         lbl->setStyleSheet(
             "QLabel { background: transparent;"
-            "         color: #888899; font-size: 9px; }");
+            "         color: #888899; }");
 
         lcd = new QLCDNumber(cell);
         lcd->setDigitCount(8);
         lcd->setSegmentStyle(QLCDNumber::Flat);
-        lcd->setFixedHeight(30);
+        // RESPONSIVE: bỏ setFixedHeight(30) → dùng setMinimumHeight theo em
+        lcd->setMinimumHeight(em * 2);
+        lcd->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         lcd->setStyleSheet(
             "QLCDNumber {"
             "  background: #eef0f7; color: " + color + ";"
@@ -117,16 +125,20 @@ void MetricsWidget::setupUI() {
         layout->setSpacing(6);
 
         auto* name_lbl = new QLabel(name, row);
-        name_lbl->setFixedWidth(74);
+        // RESPONSIVE: bỏ setFixedWidth(74) → dùng setMinimumWidth theo em
+        name_lbl->setMinimumWidth(em * 5);
+        name_lbl->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
         name_lbl->setStyleSheet(
             "QLabel { background: transparent;"
             "         color: " + color + ";"
-            "         font-size: 10px; font-weight: bold; }");
+            "         font-weight: bold; }");
 
         bar = new QProgressBar(row);
         bar->setRange(0, 100);
         bar->setValue(0);
-        bar->setFixedHeight(12);
+        // RESPONSIVE: bỏ setFixedHeight(12) → dùng setMaximumHeight theo em
+        bar->setMaximumHeight(em);
+        bar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         bar->setTextVisible(false);
         bar->setStyleSheet(
             "QProgressBar {"
@@ -138,12 +150,13 @@ void MetricsWidget::setupUI() {
             "  border-radius: 2px; }");
 
         count_lbl = new QLabel("0", row);
-        count_lbl->setFixedWidth(38);
+        // RESPONSIVE: bỏ setFixedWidth(38) → dùng setMinimumWidth theo em
+        count_lbl->setMinimumWidth(em * 3);
         count_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         count_lbl->setStyleSheet(
             "QLabel { background: transparent;"
             "         color: " + color + ";"
-            "         font-size: 10px; font-weight: bold; }");
+            "         font-weight: bold; }");
 
         layout->addWidget(name_lbl);
         layout->addWidget(bar, 1);
@@ -197,6 +210,48 @@ void MetricsWidget::setupUI() {
     makeSysRow("L2 Anomalies", lbl_ml_anomalies_, 2);
 
     root_layout->addWidget(sys_group);
+
+    // ── Inference timing ──────────────────────────────────────────────────────
+    auto* infer_group  = new QGroupBox("Inference Timing", this);
+    infer_group->setStyleSheet(group_style);
+    auto* infer_layout = new QGridLayout(infer_group);
+    infer_layout->setSpacing(4);
+    infer_layout->setContentsMargins(8, 12, 8, 8);
+
+    auto makeInferRow = [&](const QString& label,
+                             QLabel*&       value_lbl,
+                             int row)
+    {
+        auto* lbl = new QLabel(label, infer_group);
+        lbl->setStyleSheet(
+            "QLabel { background: transparent;"
+            "         color: #666688; font-size: 10px; }");
+
+        value_lbl = new QLabel("—", infer_group);
+        value_lbl->setAlignment(Qt::AlignRight);
+        value_lbl->setStyleSheet(
+            "QLabel { background: transparent;"
+            "         color: #226688;"
+            "         font-size: 10px; font-weight: bold; }");
+
+        if (row > 0) {
+            auto* sep = new QFrame(infer_group);
+            sep->setFrameShape(QFrame::HLine);
+            sep->setStyleSheet("QFrame { color: #e8eaf4; }");
+            infer_layout->addWidget(sep, row * 2 - 1, 0, 1, 2);
+        }
+
+        infer_layout->addWidget(lbl,       row * 2, 0);
+        infer_layout->addWidget(value_lbl, row * 2, 1);
+    };
+
+    makeInferRow("XGB avg(min–max)",  lbl_infer_xgb_,   0);
+    makeInferRow("AE  avg(min–max)",  lbl_infer_ae_,    1);
+    makeInferRow("Job avg(min–max)",  lbl_infer_job_,   2);
+    makeInferRow("Throughput",        lbl_infer_tput_,  3);
+    makeInferRow("Jobs measured",     lbl_infer_count_, 4);
+
+    root_layout->addWidget(infer_group);
     root_layout->addStretch();
 }
 
@@ -224,4 +279,32 @@ void MetricsWidget::onMetricsUpdated(MetricsSnapshot s) {
     lbl_active_flows_->setText(QString::number(s.active_flows));
     lbl_ml_jobs_     ->setText(QString::number(s.ml_jobs));
     lbl_ml_anomalies_->setText(QString::number(s.ml_anomalies));
+
+    // ── Inference timing ──────────────────────────────────────────────────────
+    auto fmtLatency = [](uint64_t avg_us, uint64_t min_us, uint64_t max_us) -> QString {
+        if (avg_us == 0 && max_us == 0)
+            return QString("—");
+        return QString("%1 (%2–%3) µs")
+            .arg(avg_us)
+            .arg(min_us)
+            .arg(max_us);
+    };
+
+    lbl_infer_xgb_->setText(
+        fmtLatency(s.infer_xgb_avg_us, s.infer_xgb_min_us, s.infer_xgb_max_us));
+    lbl_infer_ae_->setText(
+        fmtLatency(s.infer_ae_avg_us,  s.infer_ae_min_us,  s.infer_ae_max_us));
+    lbl_infer_job_->setText(
+        fmtLatency(s.infer_job_avg_us, s.infer_job_min_us, s.infer_job_max_us));
+
+    if (s.infer_jobs_per_sec > 0.0)
+        lbl_infer_tput_->setText(
+            QString("%1 jobs/s").arg(s.infer_jobs_per_sec, 0, 'f', 1));
+    else
+        lbl_infer_tput_->setText("—");
+
+    lbl_infer_count_->setText(
+        s.infer_job_count > 0
+            ? QString::number(s.infer_job_count)
+            : QString("—"));
 }

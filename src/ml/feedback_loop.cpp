@@ -22,28 +22,36 @@ void FeedbackLoop::onMLResult(const MLResult& result) {
     if (result.confidence < min_confidence_)   return;
     if (result.final_result == DetectionResult::NORMAL) return;
 
-    std::lock_guard<std::mutex> lock(mutex_);
+    RuleProposal p;
+    bool should_callback = false;
 
-    if (isDuplicate(result.src_ip)) {
-        LOG_DEBUG("FeedbackLoop: dedup skip " + ipStr(result.src_ip));
-        return;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (isDuplicate(result.src_ip)) {
+            LOG_DEBUG("FeedbackLoop: dedup skip " + ipStr(result.src_ip));
+            return;
+        }
+
+        p = buildProposal(result);
+
+        if (result.confidence >= auto_approve_threshold_) {
+            p.status = RuleProposal::Status::AUTO_APPROVED;
+            LOG_INFO("FeedbackLoop: AUTO-APPROVE [" + p.detail
+                     + "] conf=" + std::to_string(result.confidence));
+            should_callback = true;
+        } else {
+            p.status = RuleProposal::Status::PENDING;
+            pending_proposals_.push_back(p);
+            LOG_INFO("FeedbackLoop: PENDING [" + p.detail
+                     + "] conf=" + std::to_string(result.confidence));
+        }
+
+        recordSeen(result.src_ip);
     }
-
-    RuleProposal p = buildProposal(result);
-
-    if (result.confidence >= auto_approve_threshold_) {
-        p.status = RuleProposal::Status::AUTO_APPROVED;
-        LOG_INFO("FeedbackLoop: AUTO-APPROVE [" + p.detail
-                 + "] conf=" + std::to_string(result.confidence));
-        if (on_proposal_) on_proposal_(p);
-    } else {
-        p.status = RuleProposal::Status::PENDING;
-        pending_proposals_.push_back(p);
-        LOG_INFO("FeedbackLoop: PENDING [" + p.detail
-                 + "] conf=" + std::to_string(result.confidence));
-    }
-
-    recordSeen(result.src_ip);
+    // FIX #9: Gọi callback NGOÀI lock để tránh deadlock nếu callback
+    // cố gọi lại bất kỳ method nào của FeedbackLoop.
+    if (should_callback && on_proposal_) on_proposal_(p);
 }
 
 RuleProposal FeedbackLoop::buildProposal(const MLResult& result) const {
@@ -120,13 +128,20 @@ std::vector<RuleProposal> FeedbackLoop::getPendingProposals() {
 }
 
 void FeedbackLoop::approveProposal(size_t index) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (index >= pending_proposals_.size()) return;
-    RuleProposal& p = pending_proposals_[index];
-    p.status = RuleProposal::Status::APPROVED;
-    LOG_INFO("FeedbackLoop: APPROVED — " + p.detail);
+    RuleProposal p;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (index >= pending_proposals_.size()) return;
+        p = pending_proposals_[index];
+        p.status = RuleProposal::Status::APPROVED;
+        // FIX #9: Erase trước khi gọi callback để tránh double-approve
+        // nếu callback throw exception.
+        pending_proposals_.erase(pending_proposals_.begin() + index);
+        LOG_INFO("FeedbackLoop: APPROVED — " + p.detail);
+    }
+    // FIX #9: Gọi callback NGOÀI lock — tránh deadlock nếu callback
+    // gọi lại getPendingProposals() hay method khác của FeedbackLoop.
     if (on_proposal_) on_proposal_(p);
-    pending_proposals_.erase(pending_proposals_.begin() + index);
 }
 
 void FeedbackLoop::rejectProposal(size_t index) {

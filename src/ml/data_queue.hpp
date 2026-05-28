@@ -6,7 +6,7 @@
 #include <condition_variable>
 #include <optional>
 #include <string>
-#include <array>
+#include <vector>
 #include <cstdint>
 #include <algorithm>
 #include <chrono>
@@ -35,14 +35,33 @@ inline TcpState inferTcpState(uint32_t syn,  uint32_t ack,
     const bool has_rst = (rst > 0);
     const bool has_fin = (fin > 0);
 
+    // SF: SYN + ACK + FIN, không RST → normal close
     if (has_syn && has_ack && has_fin && !has_rst) return TcpState::SF;
+    // SH: SYN + FIN, không ACK → half-open close
     if (has_syn && has_fin && !has_ack)            return TcpState::SH;
+    // RSTOS0: SYN + RST, không ACK → reset trước khi handshake
     if (has_syn && has_rst && !has_ack)            return TcpState::RSTOS0;
+    // S0: chỉ SYN → half-open, chưa có ACK
     if (has_syn && !has_ack && !has_rst && !has_fin) return TcpState::S0;
+    // REJ: RST từ server (không phải initiator) → connection rejected
     if (!has_syn && has_rst && !is_initiator)      return TcpState::REJ;
+    // RSTO: RST từ initiator → reset bởi client
     if (has_rst && is_initiator)                   return TcpState::RSTO;
+    // RSTR: RST từ server → reset bởi server
     if (has_rst && !is_initiator)                  return TcpState::RSTR;
+    // S1: SYN + ACK, không FIN, không RST → handshake hoàn thành, chưa data
     if (has_syn && has_ack && !has_fin && !has_rst) return TcpState::S1;
+    // FIX #5: Thêm S2 và S3 — hai state quan trọng trong NSL-KDD
+    // bị thiếu trước đây, khiến nhiều flow bình thường rơi vào OTH.
+    //
+    // S2: ACK + FIN từ initiator, không SYN, không RST
+    //     → data đang truyền, initiator bắt đầu đóng kết nối
+    if (!has_syn && has_ack && has_fin && !has_rst && is_initiator)
+        return TcpState::S2;
+    // S3: ACK + FIN từ server (không phải initiator), không SYN, không RST
+    //     → server bắt đầu đóng kết nối (half-close từ server)
+    if (!has_syn && has_ack && has_fin && !has_rst && !is_initiator)
+        return TcpState::S3;
     return TcpState::OTH;
 }
 
@@ -137,16 +156,24 @@ struct MLJob {
     double       timestamp = 0.0;
 };
 
-template<typename T, size_t Capacity>
+template<typename T>
 class RingBuffer {
 public:
+    explicit RingBuffer(size_t capacity = 4096)
+        : capacity_(capacity), buffer_(capacity)
+    {}
+
     bool push(T item) {
+        // FIX #1: Thêm mutex vào push() để an toàn với MPSC
+        // Nhiều WorkerThread gọi push() đồng thời → cần lock để tránh
+        // hai thread ghi vào cùng slot khi đọc head_ cùng lúc.
+        std::lock_guard<std::mutex> lock(mutex_);
         size_t head = head_.load(std::memory_order_relaxed);
-        size_t next = (head + 1) % Capacity;
-        if (next == tail_.load(std::memory_order_acquire))
+        size_t next = (head + 1) % capacity_;
+        if (next == tail_.load(std::memory_order_relaxed))
             return false;
         buffer_[head] = std::move(item);
-        head_.store(next, std::memory_order_release);
+        head_.store(next, std::memory_order_relaxed);
         cv_.notify_one();
         return true;
     }
@@ -164,25 +191,26 @@ public:
         if (!ready) return std::nullopt;
         size_t tail = tail_.load(std::memory_order_relaxed);
         T item      = std::move(buffer_[tail]);
-        tail_.store((tail + 1) % Capacity, std::memory_order_release);
+        tail_.store((tail + 1) % capacity_, std::memory_order_release);
         return item;
     }
 
     size_t size() const {
         size_t h = head_.load(std::memory_order_acquire);
         size_t t = tail_.load(std::memory_order_acquire);
-        return (h >= t) ? (h - t) : (Capacity - t + h);
+        return (h >= t) ? (h - t) : (capacity_ - t + h);
     }
 
-    bool empty() const { return size() == 0;            }
-    bool full()  const { return size() == Capacity - 1; }
+    bool empty() const { return size() == 0;             }
+    bool full()  const { return size() == capacity_ - 1; }
 
 private:
-    std::array<T, Capacity>  buffer_;
-    std::atomic<size_t>      head_{0};
-    std::atomic<size_t>      tail_{0};
-    std::mutex               mutex_;
-    std::condition_variable  cv_;
+    size_t                  capacity_;
+    std::vector<T>          buffer_;
+    std::atomic<size_t>     head_{0};
+    std::atomic<size_t>     tail_{0};
+    std::mutex              mutex_;
+    std::condition_variable cv_;
 };
 
-using MLJobQueue = RingBuffer<MLJob, 4096>;
+using MLJobQueue = RingBuffer<MLJob>;

@@ -25,6 +25,8 @@
 #include <QDateTime>
 #include <QDir>
 #include <QLineEdit>
+#include <QScreen>
+#include <QGuiApplication>
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Constructor
@@ -45,8 +47,20 @@ MainWindow::MainWindow(AlertManager&     alert_manager,
     , start_time_      (QTime::currentTime())
 {
     setWindowTitle("Network IDS/IPS — HVKTQS 2025");
-    setMinimumSize(1280, 760);
-    resize(1440, 900);
+
+    // RESPONSIVE: tính kích thước cửa sổ theo màn hình thực tế
+    // thay vì hardcode 1280x760 / 1440x900
+    const QScreen* screen = QGuiApplication::primaryScreen();
+    const QRect    avail  = screen ? screen->availableGeometry()
+                                   : QRect(0, 0, 1920, 1080);
+    // Minimum: 70% chiều rộng và 70% chiều cao màn hình, tối thiểu 800x600
+    const int min_w = std::max(800,  static_cast<int>(avail.width()  * 0.70));
+    const int min_h = std::max(600,  static_cast<int>(avail.height() * 0.70));
+    // Default: 85% màn hình
+    const int def_w = static_cast<int>(avail.width()  * 0.85);
+    const int def_h = static_cast<int>(avail.height() * 0.85);
+    setMinimumSize(min_w, min_h);
+    resize(def_w, def_h);
 
     applyTheme();
     setupUI();
@@ -263,16 +277,24 @@ void MainWindow::setupUI() {
 QWidget* MainWindow::buildCaptureToolbar() {
     auto* bar    = new QWidget(this);
     auto* layout = new QHBoxLayout(bar);
-    layout->setContentsMargins(10, 5, 10, 5);
-    layout->setSpacing(8);
-    bar->setFixedHeight(46);
+
+    // RESPONSIVE: dùng font metrics thay vì hardcode pixel
+    // em = chiều cao 1 dòng chữ theo font hiện tại → scale theo DPI tự động
+    const int em = bar->fontMetrics().height();
+    layout->setContentsMargins(em, em / 3, em, em / 3);
+    layout->setSpacing(em / 2);
+
+    // RESPONSIVE: bỏ setFixedHeight → dùng setMinimumHeight để toolbar
+    // tự co dãn theo nội dung trên màn hình HiDPI / font lớn
+    bar->setMinimumHeight(em * 2 + em / 2);
+    bar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     bar->setStyleSheet(
         "QWidget { background: #1e2a4a; border-bottom: 2px solid #3355cc; }"
-        "QLabel  { color: #ddeeff; font-size: 12px; background: transparent; }"
+        "QLabel  { color: #ddeeff; background: transparent; }"
         "QPushButton {"
         "  background: #2a3a6a; color: #ddeeff;"
         "  border: 1px solid #4466aa; border-radius: 4px;"
-        "  padding: 5px 16px; font-size: 12px; font-weight: bold;"
+        "  padding: 0.3em 1.2em; font-weight: bold;"
         "}"
         "QPushButton:hover    { background: #3a4a8a; }"
         "QPushButton:disabled { background: #1a1a2a; color: #445566;"
@@ -302,14 +324,14 @@ QWidget* MainWindow::buildCaptureToolbar() {
     btn_clear_packets_->setStyleSheet(
     "QPushButton { background: #2a3a6a; color: #ddeeff;"
     "  border: 1px solid #4466aa; border-radius: 4px;"
-    "  padding: 5px 16px; font-size: 12px; font-weight: bold; }"
+    "  padding: 0.3em 1.2em; font-weight: bold; }"
     "QPushButton:hover   { background: #3a4a8a; }"
     "QPushButton:disabled { background: #1a1a2a; color: #445566;"
     "                       border-color: #2a2a3a; }");
     btn_stop_cap_->setStyleSheet(
         "QPushButton { background: #4a1a1a; color: #ffaaaa;"
         "  border: 1px solid #882222; border-radius: 4px;"
-        "  padding: 5px 16px; font-size: 12px; font-weight: bold; }"
+        "  padding: 0.3em 1.2em; font-weight: bold; }"
         "QPushButton:hover    { background: #6a2a2a; }"
         "QPushButton:disabled { background: #1a1a2a; color: #445566;"
         "                       border-color: #2a2a3a; }");
@@ -487,8 +509,12 @@ QWidget* MainWindow::buildTab_IPS() {
 
     // ── Left: IPS controls ────────────────────────────────────────────────────
     ips_widget_ = new IpsControlWidget(container);
-    ips_widget_->setFixedWidth(320);
-    layout->addWidget(ips_widget_);
+    // RESPONSIVE: bỏ setFixedWidth(320) → dùng setMinimumWidth + stretch factor
+    // để widget co dãn theo màn hình thay vì bị cứng 320px
+    ips_widget_->setMinimumWidth(240);
+    ips_widget_->setMaximumWidth(420);
+    ips_widget_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    layout->addWidget(ips_widget_, 1);
 
     // ── Separator ─────────────────────────────────────────────────────────────
     auto* sep = new QFrame(container);

@@ -5,6 +5,7 @@
 #include <set>
 #include <unordered_map>
 #include <mutex>
+#include <atomic>
 #include <algorithm>
 #include <functional>
 
@@ -45,11 +46,16 @@ struct IpStats {
     TokenBucket udp_bucket;
     TokenBucket icmp_bucket;
 
-    uint64_t  pkt_count       = 0;
+    uint64_t  pkt_count       = 0;   // tổng packet từ IP này (mọi protocol)
     uint64_t  syn_count       = 0;
     uint64_t  syn_flood_count = 0;
     uint64_t  udp_count       = 0;
     uint64_t  icmp_count      = 0;
+    // FIX #3: Tách http_req_count riêng — pkt_count và http_req_count
+    // có ngữ nghĩa khác nhau, không được dùng chung một counter.
+    // SignatureEngine dùng pkt_count (tổng packet) để tính flood ratio.
+    // BehavioralEngine dùng http_req_count (chỉ HTTP GET/POST/HEAD).
+    uint64_t  http_req_count  = 0;
     TimePoint window_start;
 
     std::set<uint16_t> flood_ports_seen;
@@ -65,6 +71,7 @@ struct IpStats {
         syn_flood_count = 0;
         udp_count       = 0;
         icmp_count      = 0;
+        http_req_count  = 0;   // FIX #3: reset cùng với window
         flood_ports_seen.clear();
         window_start    = Clock::now();
     }
@@ -117,8 +124,10 @@ struct DstStats {
 //  (vd: rate thấp mỗi dst nhưng tổng hệ thống rất cao)
 // ═══════════════════════════════════════════════════════════════════════════
 struct GlobalSynStats {
-    uint64_t  window_syns = 0;
-    uint64_t  total_syns  = 0;
+    // FIX #13: Dùng atomic<uint64_t> thay uint64_t thường để
+    // getWindowSyns() có thể đọc an toàn không cần lock.
+    std::atomic<uint64_t> window_syns{0};
+    std::atomic<uint64_t> total_syns {0};
     TimePoint window_start;
     std::mutex mu;
 
@@ -135,22 +144,23 @@ struct GlobalSynStats {
             now - window_start).count();
 
         if (elapsed > window_sec) {
-            window_syns  = 0;
+            window_syns.store(0, std::memory_order_relaxed);
             window_start = now;
         }
 
-        ++window_syns;
-        ++total_syns;
-        return (window_syns >= threshold);
+        const uint64_t cur = window_syns.fetch_add(1, std::memory_order_relaxed) + 1;
+        total_syns.fetch_add(1, std::memory_order_relaxed);
+        return (cur >= threshold);
     }
 
+    // FIX #13: Đọc an toàn không cần lock nhờ atomic
     uint64_t getWindowSyns() const {
-        return window_syns;   // đọc không lock — chỉ dùng cho logging
+        return window_syns.load(std::memory_order_relaxed);
     }
 
     void reset() {
         std::lock_guard<std::mutex> lk(mu);
-        window_syns  = 0;
+        window_syns.store(0, std::memory_order_relaxed);
         window_start = Clock::now();
     }
 };

@@ -66,7 +66,8 @@ void AlertPanel::setupUI() {
         "         color: #888899; font-size: 11px; }");
 
     clear_btn_ = new QPushButton("🗑  Clear", toolbar);
-    clear_btn_->setFixedWidth(80);
+    // RESPONSIVE: bỏ setFixedWidth(80) → tự co dãn theo nội dung
+    clear_btn_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     clear_btn_->setStyleSheet(
         "QPushButton {"
         "  background: #fff0f0; color: #cc2222;"
@@ -89,13 +90,20 @@ void AlertPanel::setupUI() {
         "Source IP", "Port", "Detail"
     });
 
-    table_->setColumnWidth(0,  85);   // Time
-    table_->setColumnWidth(1,  45);   // Layer
-    table_->setColumnWidth(2, 130);   // Type
-    table_->setColumnWidth(3,  65);   // Action
-    table_->setColumnWidth(4, 120);   // Source IP
-    table_->setColumnWidth(5,  50);   // Port
-    table_->horizontalHeader()->setStretchLastSection(true);  // Detail
+    // RESPONSIVE: bỏ setColumnWidth hardcode pixel
+    // Dùng ResizeToContents cho các cột ngắn, Stretch cho cột dài
+    auto* hdr = table_->horizontalHeader();
+    hdr->setSectionResizeMode(0, QHeaderView::ResizeToContents); // Time
+    hdr->setSectionResizeMode(1, QHeaderView::ResizeToContents); // Layer
+    hdr->setSectionResizeMode(2, QHeaderView::Interactive);      // Type
+    hdr->setSectionResizeMode(3, QHeaderView::ResizeToContents); // Action
+    hdr->setSectionResizeMode(4, QHeaderView::Interactive);      // Source IP
+    hdr->setSectionResizeMode(5, QHeaderView::ResizeToContents); // Port
+    hdr->setSectionResizeMode(6, QHeaderView::Stretch);          // Detail
+    // Đặt kích thước mặc định tương đối theo font
+    const int em = fontMetrics().averageCharWidth();
+    hdr->resizeSection(2, em * 16);   // Type ~16 chars
+    hdr->resizeSection(4, em * 14);   // Source IP ~14 chars
 
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);

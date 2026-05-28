@@ -231,7 +231,7 @@ int main(int argc, char* argv[]) {
              " workers=" + std::to_string(cfg.system.num_workers));
 
     // ── 5. Shared components ──────────────────────────────────────────────────
-    MLJobQueue   ml_queue;
+    MLJobQueue   ml_queue(16384);  // heap-allocated, ~2.7MB
     AlertManager alert_manager(1000);
     alert_manager.setAlertLogFile(cfg.system.alert_log_file);
 
